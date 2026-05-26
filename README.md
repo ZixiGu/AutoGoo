@@ -34,26 +34,18 @@ AutoGoo 是一个 Claude Code 插件，用于把开放式任务转成可追踪�
 /plugin marketplace add ZixiGu/AutoGoo
 ```
 
+如果已经添加过 marketplace，可以先更新本地缓存：
+
+```text
+/plugin marketplace update
+```
+
 然后安装插件：
 
 ```text
 /plugin install auto-goo@auto-goo
 ```
 
-如果要固定到特定分支或标签，把 ref 追加到 GitHub 简写后：
-
-```text
-/plugin marketplace add ZixiGu/AutoGoo@v0.2.0
-```
-
-本地开发或发布前测试时，可以直接添加本地 checkout：
-
-```text
-/plugin marketplace add /path/to/AutoGoo
-/plugin install auto-goo@auto-goo
-```
-
-注意：GitHub marketplace 安装依赖仓库中的 `.claude-plugin/marketplace.json`。本地新增或修改 marketplace 文件后，需要先提交并推送，远端用户才能通过 `ZixiGu/AutoGoo` 安装到最新版本。
 
 ### 直接加载插件
 
