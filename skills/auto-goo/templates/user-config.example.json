@@ -12,7 +12,8 @@
   "archive": {
     "enabled": true,
     "fallback_dir": ".goo/obsidian",
-    "plan_history_dir": ".goo/plans/history"
+    "plan_history_dir": ".goo/plans/history",
+    "brainstorm_history_dir": ".goo/brainstorms/history"
   },
   "execution": {
     "max_concurrent": 6,

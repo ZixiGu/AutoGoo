@@ -25,6 +25,8 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
 
 **内容输出归档铁律**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令都必须归档到 Goo-wiki。包括 `/auto-goo:goo-brainstorm` 的候选 goals、`/auto-goo:goo-usage-analyse` 的降本报告、`/auto-goo:goo-daily-report` 的日报/周报、`/auto-goo:goo-improve` 的改进建议、benchmark/plan/start/continue 的计划与执行经验。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。
 
+**同一任务归档根**：同一条任务链路的 brainstorm、plan 和 execution 知识归档默认放在同一个 `task_archive_root` 下，用子目录区分阶段：`brainstorm/` 保存候选目标、推荐顺序和选择依据；`plan/` 保存正式 DAG、上下文摘要和计划取舍；`execution/` 保存步骤证据、验证结果和最终经验。`task_archive_root` 优先位于 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-task-slug>/`；Goo-wiki 不可用时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/`。`.goo/brainstorm.json.archive.task_archive_root` 与 `.goo/plan.json.archive.task_archive_root` 必须保持一致，除非用户明确要求分开归档。注意：这不同于本地 JSON 历史快照；旧 `.goo/plan.json` 仍保存到 `.goo/plans/history/`，旧 `.goo/brainstorm.json` 保存到 `.goo/brainstorms/history/`。
+
 ## Phase -1: 项目初始化
 
 首次使用 AutoGoo 时，建议先运行 `/auto-goo:goo-init --user` 写入用户级默认配置；进入具体项目后，可运行 `/auto-goo:goo-init --project` 写入项目级覆盖配置。
@@ -74,8 +76,8 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
 3. 提取未完成事项、反复问题、风险、近期计划、指标缺口、文档缺口、测试缺口、发布阻塞和可复用经验。
 4. 提炼共同前置条件 `global_prerequisites`，例如数据路径、账号权限、远程资源、评价指标、用户取舍和安全确认。
 5. 生成 3-7 个候选 goals，每个包含 `id`、`name`、`why`、`expected_output`、`acceptance_criteria`、`evidence`、`risk`、`prerequisites`、`readiness_checklist`、`first_step`、`priority_hint`。
-6. 写入 `.goo/brainstorm.json`，状态为 `pending_decision`。
-7. 将候选 goals、共同前置条件、推荐顺序和关键证据归档到 Goo-wiki 项目路径；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。
+6. 写入 `.goo/brainstorm.json`，状态为 `pending_decision`。如果旧 `.goo/brainstorm.json` 已存在，先原样复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。
+7. 将候选 goals、共同前置条件、推荐顺序和关键证据归档到同一任务归档根的 `brainstorm/` 子目录；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/` fallback，并在 `.goo/brainstorm.json.archive` 记录 `task_archive_root` 和 `brainstorm_dir`。
 8. 向用户展示推荐顺序、共同前置条件和每个候选 goal 的 ready checklist，等待用户选择、合并、改写或要求继续 brainstorm。
 
 边界：
@@ -90,12 +92,25 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
 
 **必须先解析为 DAG，不得跳过规划直接动手编码。**
 
+### 规划前现有 plan 检查
+
+每次进入 `/auto-goo:goo-plan`、`/auto-goo:goo-start` 中的自动规划阶段，或任何会写入新 `.goo/plan.json` 的流程前，必须先检查当前 `.goo/plan.json`：
+
+1. 如果 `.goo/plan.json` 不存在，正常生成新 plan。
+2. 如果存在旧 plan，读取 `steps[]` 和顶层 `status`，判断是否全部完成。只有所有 step 的 `status` 都是 `completed`，且顶层 `status` 为 `completed` 或可由 steps 推断为完成时，才允许直接归档旧 plan 并生成新 plan。
+3. 如果存在未完成 step，或顶层 `status` 是 `pending` / `running` / `paused` / `failed`，必须暂停规划，向用户展示未完成 step 数量和关键摘要，并询问用户选择：
+   - 修改当前 plan：把新需求合并进现有 `.goo/plan.json`，保留已完成步骤、日志、产物和执行证据。
+   - 新建 plan：先把旧 `.goo/plan.json` 原样归档到 `.goo/plans/history/`，再写新的当前 plan。
+4. 用户未明确选择“修改当前 plan”或“新建 plan”前，不得覆盖、归档或重写 `.goo/plan.json`。
+
 解析步骤：
 1. 识别输入形态 — 普通一句话、Markdown 任务包、已有 plan、issue/PR 描述、日志片段等要区别处理。
 2. 如果输入是 Markdown 文件或片段，先解析标题层级、checkbox、编号列表、表格、代码块、路径、命令、约束和验收标准；不得简单视为"文本处理/整理 Markdown"任务。
 3. 确认目标已明确 — 目标可以来自用户直接描述，也可以来自用户明确选择的 `.goo/brainstorm.json` candidate goal；如果用户还不知道要做什么、要求 brainstorm、探索方向或基于 wiki 找下一步，停止 plan 流程并切换到 `/auto-goo:goo-brainstorm`。
 4. 识别交付目标 — 抽取一个或多个 `goals[]`，每个 goal 都要有交付物、验收标准和优先级；不能把多个目标压成一句含糊的总目标。
 5. 如果用户选择了 brainstorm candidate goal，读取 `.goo/brainstorm.json`，把选中的 `candidate_goals[]` 转成正式 `goals[]`，并把 `prerequisites` / `readiness_checklist` 转成前置检查 step、`validation` 或 `requires_user_confirm`。
+   - 如果 `.goo/brainstorm.json.archive.task_archive_root` 存在，plan 归档必须复用该目录，把正式 DAG 和计划摘要写到 `plan/` 子目录，并在 `.goo/plan.json.archive.task_archive_root` 记录同一个路径。
+   - 如果 brainstorm 尚无 `task_archive_root`，先创建同一任务归档根并补写 `.goo/brainstorm.json.archive.task_archive_root` / `brainstorm_dir`，再写 plan 归档。
 6. 判断 goal 关系 — 独立 goal 优先拆成多个 plan；共享前置步骤则保留一个 DAG 并分支；强依赖 goal 按依赖链串联；冲突或优先级不清时先问用户。
 7. 合并 wiki_context — 把既有项目经验转成约束、默认命令、风险提醒和可复用产物路径。
 8. 固化对话方案 — 把当前对话里已经形成的方案、备选路线、取舍原因、用户偏好、验收标准和仍未解决的问题写入 `context_digest`；大段材料优先写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md` 并在 `context_artifacts` 引用，Goo-wiki 不可用时降级到 `.goo/obsidian/<project-slug>/context/`。
@@ -103,7 +118,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
 10. 标注依赖关系 — 识别前置条件，推导拓扑顺序。原始数据准备 → 处理 → 输出，每一步依赖前一步的输出；每个非归档 step 必须绑定 `goal_id` 或 `goal_ids`。
 11. 识别优化标记 — 含"性能、速度、延迟、吞吐、效率、内存、GPU、耗时"关键词 → 标记 `type: "optimize"`
 12. 追加默认归档步骤 — DAG 最后必须有 `归档到 Goo-wiki`，依赖所有非归档叶子步骤；除非用户明确禁止归档或配置 `archive.enabled=false`
-13. 归档历史 plan — 如果 `.goo/plan.json` 已存在，必须先复制到 `.goo/plans/history/plan-<timestamp>.json`，不得直接覆盖。
+13. 归档历史 plan — 仅当旧 plan 已完成，或用户明确选择“新建 plan”时，才把 `.goo/plan.json` 复制到 `.goo/plans/history/plan-<timestamp>.json`；不得静默覆盖未完成 plan。
 14. 输出 `.goo/plan.json`
 
 ### 步骤粒度原则
@@ -219,11 +234,14 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 - 多 goal plan 中，非归档 step 必须包含 `goal_id` 或 `goal_ids`；归档 step 用 `goal_ids` 覆盖所有被归档目标。
 - step 应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths`、`validation`、`risk_level` 和 `requires_user_confirm`，让执行阶段不用猜读写范围、验收方式和是否需要用户确认。
 - `goo-start` / `goo-continue` 执行前默认执行 context sync：检查 plan 生成后当前对话是否新增方案、取舍、约束、验收标准、用户偏好或 open question。短内容写入 `context_digest.post_plan_updates`；长内容写入 Goo-wiki 项目路径 `context/` 并追加到 `context_artifacts`，Goo-wiki 不可用时写 `.goo/obsidian/<project-slug>/context/`。同步前必须先归档旧 plan；只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才问用户确认。
+- `goo-start` / `goo-continue` 一旦准备把 plan 从待执行状态推进到执行状态，必须先检查 `.goo/brainstorm.json`。如果该文件存在，且 `archive` 缺失、`archive.status` 不是 `completed`、或归档路径不可验证，先派发 `recorder` 执行 brainstorm 归档：把候选 goals、用户选择/合并依据、共同前置条件、ready checklist、wiki 证据和生成的 plan 关联写入同一任务归档根的 `brainstorm/` 子目录；Goo-wiki 不可用时写 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/` fallback，并回写 `.goo/brainstorm.json.archive`。该归档完成前，不启动业务 step 调度。
 - Subagent prompt 只允许使用当前 step、`context_digest`、相关 `wiki_context`、`context_artifacts` 路径和上游产物摘要；不传完整聊天记录。
 
 ## Phase 2: 执行（槽位调度）
 
 **当前 `.goo/plan.json` 是唯一状态源**。派发、完成、失败均实时回写当前 plan。历史 plan 只归档在 `.goo/plans/history/`，不得作为恢复来源，除非用户明确指定。执行时不得依赖主会话隐含上下文；所有执行必需信息必须在当前 plan、引用的 Markdown/context artifact、wiki 摘要或上游产物中。
+
+**Brainstorm 归档闸门**：执行调度开始前必须完成 brainstorm 归档检查。只要 `.goo/brainstorm.json` 存在且未能证明已归档，就先归档 brainstorm，再开始执行 plan steps。归档内容至少包括候选 goals、推荐顺序、用户最终选择、未选原因或合并依据、前置条件、ready checklist、关键 wiki 证据，以及该 brainstorm 如何转成当前 `.goo/plan.json`；归档完成后回写 `archive.status="completed"`、`archive.task_archive_root`、`archive.brainstorm_dir`、fallback 状态和 `log.md` 更新状态。若当前 plan 已有 `archive.task_archive_root`，brainstorm 必须补写到同一个 root 的 `brainstorm/` 子目录；若没有，则创建 root 并同步写回 plan 与 brainstorm。
 
 **槽位调度模型**：固定 6 个并发槽位 + 动态就绪队列 + 连续下发。agent 完成即释放槽位，其下游立即入队，不用等同层其他 agent。
 

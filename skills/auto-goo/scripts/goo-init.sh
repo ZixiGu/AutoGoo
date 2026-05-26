@@ -512,6 +512,7 @@ config = {
         "enabled": True,
         "fallback_dir": fallback_dir,
         "plan_history_dir": ".goo/plans/history",
+        "brainstorm_history_dir": ".goo/brainstorms/history",
     },
     "execution": {
         "max_concurrent": 6,

@@ -9,17 +9,29 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 
 ## 行为
 
-1. **Wiki 经验召回** — 检索 Goo-wiki 中相关项目页、概念页、周报和 `log.md`
-2. **输入形态识别** — 判断输入是普通任务、Markdown 任务包、已有 plan、issue/PR 描述还是日志片段
-3. **目标明确性检查** — 判断输入是否已有明确 goal，或是否引用了 `.goo/brainstorm.json` 中的候选 goal；否则停止 plan 流程并改用 `/auto-goo:goo-brainstorm`
-4. **Goal 识别** — 目标明确时抽取一个或多个 `goals[]`，每个 goal 写清交付物、验收标准、优先级和依赖关系
-5. **任务解析** — 将任务拆解为 DAG 步骤；每个非归档步骤绑定 `goal_id` 或 `goal_ids`
-6. **对话方案固化** — 抽取当前对话中已经形成的方案、取舍、约束、验收标准和用户明确偏好，写入 `context_digest`；内容过长时写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md` 并在 plan 中引用
-7. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
-8. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
-9. **历史计划归档** — 如果 `.goo/plan.json` 已存在，先复制到 `.goo/plans/history/plan-<timestamp>.json`
-10. **计划落盘** — 输出或更新 `.goo/plan.json`
-11. **等待确认** — 不派发 Subagent，不修改业务文件，不运行实现命令；允许写入 `.goo/plan.json` 和必要的 `context_artifacts`
+1. **现有计划完成检查** — 如果 `.goo/plan.json` 已存在，先读取 `steps[]` 和顶层 `status`；只要存在非 `completed` 的 step，或顶层状态不是 `completed`，就暂停新建 plan，提醒用户当前 plan 未完成，并询问是“修改当前 plan”还是“新建 plan 并归档旧 plan”。用户未明确选择前，不得覆盖 `.goo/plan.json`
+2. **Wiki 经验召回** — 检索 Goo-wiki 中相关项目页、概念页、周报和 `log.md`
+3. **输入形态识别** — 判断输入是普通任务、Markdown 任务包、已有 plan、issue/PR 描述还是日志片段
+4. **目标明确性检查** — 判断输入是否已有明确 goal，或是否引用了 `.goo/brainstorm.json` 中的候选 goal；否则停止 plan 流程并改用 `/auto-goo:goo-brainstorm`
+5. **Goal 识别** — 目标明确时抽取一个或多个 `goals[]`，每个 goal 写清交付物、验收标准、优先级和依赖关系
+6. **任务解析** — 将任务拆解为 DAG 步骤；每个非归档步骤绑定 `goal_id` 或 `goal_ids`
+7. **对话方案固化** — 抽取当前对话中已经形成的方案、取舍、约束、验收标准和用户明确偏好，写入 `context_digest`；内容过长时写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md` 并在 plan 中引用
+8. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
+9. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
+10. **历史计划归档** — 如果 `.goo/plan.json` 已存在且用户选择新建 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`
+11. **计划落盘** — 输出或更新 `.goo/plan.json`
+12. **等待确认** — 不派发 Subagent，不修改业务文件，不运行实现命令；允许写入 `.goo/plan.json` 和必要的 `context_artifacts`
+
+## 现有 plan 冲突处理
+
+每次进入 `/auto-goo:goo-plan` 时，必须先检查当前项目的 `.goo/plan.json`：
+
+- 如果文件不存在，正常生成新 plan。
+- 如果所有 `steps[]` 的 `status` 都是 `completed`，且顶层 `status` 为 `completed` 或缺失但可由 steps 推断为完成，允许归档旧 plan 后生成新 plan。
+- 如果任一 step 的 `status` 不是 `completed`，或顶层 `status` 是 `pending` / `running` / `paused` / `failed`，必须暂停并提醒用户未完成项数量、当前运行/失败/待执行 step 摘要，然后询问：
+  - 修改当前 plan：把新需求合并到现有 `.goo/plan.json`，保留已完成步骤和执行证据。
+  - 新建 plan：先把旧 `.goo/plan.json` 原样归档到 `.goo/plans/history/`，再写入新的 `.goo/plan.json`。
+- 用户未明确选择“修改当前 plan”或“新建 plan”前，不得覆盖、归档或重写 `.goo/plan.json`。
 
 ## Markdown 任务输入
 
@@ -79,6 +91,20 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - 长方案、会议纪要或 prompt 草案优先写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md`，并在 `.goo/plan.json.context_artifacts` 中引用；Goo-wiki 不可用时才降级写入 `.goo/obsidian/<project-slug>/context/`。
 - 每个 step 的 `description` 必须自包含，不使用"按上面方案"、"参考前文"、"照刚才说的"这类隐含引用。
 - 如果需要沉淀为长期项目经验，同时在归档步骤中要求写入 Goo-wiki；执行前不能只靠聊天记录理解任务。
+
+## Brainstorm 与 Plan 归档同根
+
+这里的“同根”指 Goo-wiki/fallback 知识归档，不改变本地 JSON 历史快照路径。旧 plan 快照仍归档到 `.goo/plans/history/`；旧 brainstorm 快照归档到 `.goo/brainstorms/history/`。
+
+如果 `.goo/brainstorm.json` 已存在并被本次 `goo-plan` 采用，plan 的 Goo-wiki/fallback 归档路径必须复用 brainstorm 的 `archive.task_archive_root`：
+
+- brainstorm 内容放在 `<task_archive_root>/brainstorm/`。
+- plan 摘要、正式 DAG、`context_digest`、`wiki_context` 和计划取舍放在 `<task_archive_root>/plan/`。
+- `.goo/plan.json.archive.task_archive_root` 必须等于 `.goo/brainstorm.json.archive.task_archive_root`。
+- `.goo/plan.json.archive.plan_dir` 记录 `plan/` 子目录路径；`.goo/brainstorm.json.archive.brainstorm_dir` 记录 `brainstorm/` 子目录路径。
+- 如果旧 brainstorm 没有 `task_archive_root`，先为当前任务创建同一任务归档根，再回写 `.goo/brainstorm.json.archive.task_archive_root` 和 `brainstorm_dir`，然后写 plan 归档。
+
+没有 brainstorm 来源的 plan 也应创建自己的 `task_archive_root`，后续执行归档写入同一根下的 `execution/` 子目录。
 
 ## 适用场景
 

@@ -1,22 +1,22 @@
 #!/bin/bash
 # AutoGoo: 初始化 plan.json 模板
-# Usage: ./scripts/init-plan.sh "<task_description>" [step_count]
+# Usage: ./scripts/init-plan.sh "<task_description>" [step_count] [--force-new-plan]
 #   step_count: 非归档步骤数量，默认 1；脚本会自动追加最后的 Wiki 归档步骤
+#   --force-new-plan: 当前 plan 未完成时仍归档旧 plan 并新建
 
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-  echo "Usage: $0 \"<task_description>\" [step_count]"
+  echo "Usage: $0 \"<task_description>\" [step_count] [--force-new-plan]"
   echo "  step_count: number of non-archive steps (default: 1)"
+  echo "  --force-new-plan: archive an unfinished current plan and create a new one"
   exit 1
 fi
 
-TASK="$1"
-COUNT="${2:-1}"
-
-python3 - "$TASK" "$COUNT" <<'PY'
+python3 - "$@" <<'PY'
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import subprocess
@@ -60,6 +60,61 @@ def archive_existing_plan(plan_file: Path, history_dir: Path) -> Path | None:
     return archive_file
 
 
+def status_of(step: dict[str, Any]) -> str:
+    return str(step.get("status", "pending") or "pending")
+
+
+def is_completed_plan(data: dict[str, Any]) -> bool:
+    steps = data.get("steps", [])
+    if not isinstance(steps, list) or not steps:
+        return data.get("status") == "completed"
+    steps_completed = all(isinstance(step, dict) and status_of(step) == "completed" for step in steps)
+    plan_status = data.get("status")
+    return steps_completed and (plan_status in (None, "", "completed"))
+
+
+def summarize_unfinished_plan(data: dict[str, Any]) -> str:
+    steps = [step for step in data.get("steps", []) if isinstance(step, dict)]
+    unfinished = [step for step in steps if status_of(step) != "completed"]
+    running = [step for step in unfinished if status_of(step) == "running"]
+    failed = [step for step in unfinished if status_of(step) == "failed"]
+    pending = [step for step in unfinished if status_of(step) == "pending"]
+    paused = [step for step in unfinished if status_of(step) == "paused"]
+
+    def names(items: list[dict[str, Any]]) -> str:
+        return ", ".join(f"{step.get('id', '?')} {step.get('name', '(unnamed)')}" for step in items[:3])
+
+    parts = [
+        f"current plan status={data.get('status', 'unknown')}",
+        f"unfinished_steps={len(unfinished)}/{len(steps)}",
+    ]
+    for label, items in (("running", running), ("failed", failed), ("paused", paused), ("pending", pending)):
+        if items:
+            parts.append(f"{label}: {names(items)}")
+    return "; ".join(parts)
+
+
+def guard_existing_plan(plan_file: Path, force_new_plan: bool) -> None:
+    if not plan_file.exists():
+        return
+    try:
+        data = json.loads(plan_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"current plan is not valid JSON: {plan_file}: {exc}") from exc
+    if is_completed_plan(data):
+        return
+    if force_new_plan:
+        print(f"! current plan is unfinished; --force-new-plan selected. {summarize_unfinished_plan(data)}")
+        return
+    raise SystemExit(
+        "current .goo/plan.json is unfinished; refusing to overwrite it.\n"
+        f"{summarize_unfinished_plan(data)}\n"
+        "Choose one action first:\n"
+        "  1. modify current plan: edit .goo/plan.json and keep existing evidence\n"
+        "  2. create new plan: rerun this script with --force-new-plan to archive the old plan first"
+    )
+
+
 def make_step(step_id: int) -> dict[str, Any]:
     output = f".goo/artifacts/step-{step_id}-output.md"
     return {
@@ -92,11 +147,21 @@ def make_step(step_id: int) -> dict[str, Any]:
 
 
 def main() -> int:
-    task = sys.argv[1]
+    parser = argparse.ArgumentParser(description="Create an AutoGoo .goo/plan.json template")
+    parser.add_argument("task", help="task description")
+    parser.add_argument("step_count", nargs="?", default="1", help="number of non-archive steps")
+    parser.add_argument(
+        "--force-new-plan",
+        action="store_true",
+        help="archive an unfinished current plan and create a new one",
+    )
+    args = parser.parse_args(sys.argv[1:])
+
+    task = args.task
     try:
-        count = int(sys.argv[2])
+        count = int(args.step_count)
     except ValueError as exc:
-        raise SystemExit(f"step_count must be an integer: {sys.argv[2]}") from exc
+        raise SystemExit(f"step_count must be an integer: {args.step_count}") from exc
     if count < 1:
         raise SystemExit("step_count must be >= 1")
 
@@ -106,6 +171,7 @@ def main() -> int:
     history_dir = goo_dir / "plans" / "history"
     goo_dir.mkdir(parents=True, exist_ok=True)
 
+    guard_existing_plan(plan_file, args.force_new_plan)
     archived = archive_existing_plan(plan_file, history_dir)
     if archived:
         print(f"✓ previous plan archived at {archived}")

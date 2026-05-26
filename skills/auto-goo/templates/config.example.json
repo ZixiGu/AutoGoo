@@ -13,6 +13,7 @@
     "enabled": true,
     "fallback_dir": ".goo/obsidian",
     "plan_history_dir": ".goo/plans/history",
+    "brainstorm_history_dir": ".goo/brainstorms/history",
     "project_slug": "<project-slug>",
     "project_dir": "wiki/projects/<project-slug>",
     "fallback_project_dir": ".goo/obsidian/<project-slug>",

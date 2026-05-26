@@ -22,6 +22,8 @@ description: 基于 Goo-wiki 和当前项目上下文 brainstorm 候选 goals，
 7. **Wiki 归档** — 将候选 goals、共同前置条件、推荐顺序和关键 wiki 证据归档到 Goo-wiki 项目路径，并更新项目入口或 `log.md`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。
 8. **等待用户选择** — 让用户选择、合并、改写或要求继续 brainstorm。
 
+如果 `.goo/brainstorm.json` 已存在，写入新的 brainstorm 前，先把旧文件原样复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。该目录是本地 JSON 历史快照，和 Goo-wiki/fallback 知识归档不同；知识归档仍写入同一任务归档根的 `brainstorm/` 子目录。
+
 ## 输出要求
 
 `.goo/brainstorm.json` 必须包含：
@@ -45,7 +47,11 @@ description: 基于 Goo-wiki 和当前项目上下文 brainstorm 候选 goals，
 - `recommended_goal_ids`
 - `decision_needed: true`
 - `next_action`：用户明确一个或多个 goals 后，调用 `/auto-goo:goo-plan <明确目标>`
-- `archive`：归档目标、任务页路径或 fallback 路径、是否更新 `log.md`。
+- `archive`：归档目标、任务页路径或 fallback 路径、是否更新 `log.md`，以及 `status`。归档成功时写 `{"status": "completed", ...}`；如果暂时无法归档，写明 `status: "pending"` 或 `status: "failed"` 和原因，后续 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 在执行 plan 前必须先补归档。
+  - 默认归档到同一任务归档根的 `brainstorm/` 子目录，例如 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-task-slug>/brainstorm/`。
+  - `archive.task_archive_root` 记录任务归档根；后续由该 brainstorm 生成的 `.goo/plan.json.archive.task_archive_root` 必须复用同一目录，并把正式计划写入 `plan/` 子目录。
+  - fallback 时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/`，并同样保留 `task_archive_root`。
+  - 本地历史快照另存到 `.goo/brainstorms/history/`，不要和 Goo-wiki/fallback 归档路径混用。
 
 ### checklist 规则
 
