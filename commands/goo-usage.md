@@ -22,7 +22,29 @@ cd <AutoGoo> && python3 skills/auto-goo/scripts/goo-usage.py --once
 启动内建 HTTP 服务器，自动打开浏览器：
 
 ```bash
-python3 "${AUTO_GOO_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/workspace/AutoGoo}}/skills/auto-goo/scripts/goo-usage.py" --serve --interval 30
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-usage.py" ]; then
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  exit 127
+fi
+python3 "$auto_goo_root/skills/auto-goo/scripts/goo-usage.py" --serve --interval 30
 ```
 
 然后告知用户浏览器地址 `http://localhost:9876`。
@@ -36,7 +58,29 @@ python3 "${AUTO_GOO_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/workspace/AutoGoo}}/skills
 ### 选项 2: 内联 TUI
 
 ```bash
-python3 "${AUTO_GOO_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/workspace/AutoGoo}}/skills/auto-goo/scripts/goo-usage.py" --once
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-usage.py" ]; then
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  exit 127
+fi
+python3 "$auto_goo_root/skills/auto-goo/scripts/goo-usage.py" --once
 ```
 
 先让用户 approve 此命令。

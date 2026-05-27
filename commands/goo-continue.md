@@ -66,9 +66,10 @@ test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 6. 找出所有 status=pending 且 depends_on 全部 completed 的步骤
 7. 检查待执行步骤是否可仅凭 plan/Markdown/wiki 摘要执行；不合格则先补全 plan
 8. 校验待执行步骤必须包含 `subagent`、`depends_on`、`output` 和读写边界；缺失或不合法时先修复 plan，不由主 Agent 代执行
-9. 为每个待执行 step 构造 Subagent prompt，**必须包含 `references/execution-engine.md` 中对应类型的 Heartbeat 强制分段**
-10. 按 tier 分组，同 tier 内并行派发给对应 Subagent。**每次 step 状态变更后立即调用 `goo-status.py --update-status`**
-11. 按 AutoGoo 标准执行流程继续（Phase 2-4）
+9. 检查 `available_skills`；缺失时可补为空数组，包含不存在或无关 skill 时先修正 plan
+10. 为每个待执行 step 构造 Subagent prompt，包含 `available_skills` 作为 skill allowlist，并**必须包含 `references/execution-engine.md` 中对应类型的 Heartbeat 强制分段**
+11. 按 tier 分组，同 tier 内并行派发给对应 Subagent。**每次 step 状态变更后立即调用 `goo-status.py --update-status`**
+12. 按 AutoGoo 标准执行流程继续（Phase 2-4）
 
 ## 示例
 
@@ -95,6 +96,7 @@ test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 - 如果所有步骤已完成，提示"没有未完成的任务"
 - 关键路径上的失败步骤会询问是否跳过继续
 - 恢复执行必须派发 Subagent；主 Agent 做状态修复、派发和审核。若 Subagent 角色不存在，先补 plan 或创建角色，不由主 Agent 代执行
+- 恢复执行时使用 step 的 `available_skills` 作为 Subagent skill allowlist；缺失时先补为空数组
 - 如果 `.goo/brainstorm.json` 存在，恢复执行前必须确认 brainstorm 已归档；未归档时先归档 brainstorm，再恢复业务 step
 - `heartbeat_at` 为空且 status=running 的步骤：说明派发时写了 tier-X-start.json 但 agent 从未真正启动 → 直接重置为 pending
 - Plan 顶层 `status`（`pending` → `running` → `completed`/`failed`）由 `goo-status.py --update-status` 自动计算更新，主 Agent 在每次 step 状态变更后必须调用

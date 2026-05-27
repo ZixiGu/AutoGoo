@@ -58,7 +58,29 @@ Recorder 写入或更新 Markdown 时，必须同时维护页面之间的语义�
 为减少 token 消耗，Recorder 优先调用通用脚本生成紧凑链接上下文，而不是直接读取大量 Markdown：
 
 ```bash
-python3 "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/wiki-graph-assist.py" \
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" ]; then
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  exit 127
+fi
+python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" \
   --wiki-dir "$WIKI_DIR" \
   --project-slug "<project-slug>" \
   --query "<task title and key terms>" \

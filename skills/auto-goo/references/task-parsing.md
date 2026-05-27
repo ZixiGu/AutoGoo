@@ -171,6 +171,7 @@ Wiki 经验召回：
    - 依赖：<前置步骤>
    - 可并行：<true/false>
    - 类型：<exec/optimize>
+   - 可用 skill：<skill 名称列表；没有则 []>
    ...
 
 DAG 结构总结：
@@ -253,6 +254,9 @@ DAG 结构总结：
       "depends_on": [],
       "type": "exec",
       "subagent": "implementer",
+      "available_skills": [
+        "<本步骤允许或建议 Subagent 使用的 skill 名称；没有则留空数组>"
+      ],
       "status": "pending",
       "progress": 0,
       "output": "<产物路径>",
@@ -277,6 +281,7 @@ DAG 结构总结：
       "depends_on": [1],
       "type": "archive",
       "subagent": "recorder",
+      "available_skills": [],
       "status": "pending",
       "progress": 0,
       "output": "Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/",
@@ -322,6 +327,7 @@ DAG 结构总结：
 - 每个非归档步骤必须包含 `goal_id` 或 `goal_ids`；共享步骤用 `goal_ids`
 - 每个步骤应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths`、`validation`、`risk_level` 和 `requires_user_confirm`，让 Subagent 能明确知道输入、输出、读写范围、验收方式和是否需要用户确认
 - 每个步骤必须包含合法 `subagent`，明确执行角色：`research` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `recorder`。缺失或不合法时执行阶段先补 plan 或创建新角色，不由主 Agent 代执行
+- 每个步骤应包含 `available_skills` 数组，列出本 step 允许或建议 Subagent 使用的 skill 名称；没有额外 skill 时写 `[]`。该字段只用于上下文裁剪和派发提示，不替代 `subagent` 角色，也不授予额外文件/命令权限
 - 最后一步包含默认 Wiki 归档任务，依赖所有非归档叶子步骤
 - 展示简洁计划摘要、并行组、关键风险、需要用户确认的点
 - 不修改业务文件，不运行实现命令，不启动优化循环；允许写入 `.goo/plan.json` 和必要的 `context_artifacts`

@@ -115,7 +115,7 @@ done
 echo ""
 echo "── 4. 命令文件 ──"
 
-CMDS=("goo-init" "goo-brainstorm" "goo-plan" "goo-start" "goo-benchmark" "goo-continue" "goo-improve" "goo-status" "goo-daily-report" "goo-usage" "goo-usage-analyse")
+CMDS=("goo-init" "goo-brainstorm" "goo-plan" "goo-start" "goo-research" "goo-benchmark" "goo-continue" "goo-improve" "goo-status" "goo-daily-report" "goo-usage" "goo-usage-analyse")
 for cmd in "${CMDS[@]}"; do
   f="$ROOT/commands/$cmd.md"
   if [[ -f "$f" ]]; then

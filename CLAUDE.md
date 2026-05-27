@@ -56,7 +56,7 @@ AutoGoo 不应强行覆盖：
 
 - 当前任务唯一状态源是 `.goo/plan.json`。不得用历史 plan、聊天记忆或临时笔记替代当前 plan。
 - 覆盖 `.goo/plan.json` 前必须把旧 plan 归档到 `.goo/plans/history/plan-<timestamp>.json`。
-- 每个 step 至少要写清 `id`、`name`、`description`、`depends_on`、`type`、`subagent`、`status`，执行中维护 `progress`、`heartbeat_at`、`started_at`、`completed_at`、`agent_id`。
+- 每个 step 至少要写清 `id`、`name`、`description`、`depends_on`、`type`、`subagent`、`available_skills`、`status`，执行中维护 `progress`、`heartbeat_at`、`started_at`、`completed_at`、`agent_id`。
 - step 描述必须包含输入、边界、输出和验收点，确保执行者不依赖主会话隐含上下文。
 - 长对话方案、取舍原因、用户偏好和验收标准必须固化到 `context_digest` 或 `context_artifacts`。
 - 产物默认放在 `.goo/artifacts/`、任务指定输出路径或 plan 明确记录的位置；日志默认放在 `.goo/logs/`。
@@ -65,7 +65,7 @@ AutoGoo 不应强行覆盖：
 ## Subagent 规范
 
 - 合法角色包括 `research`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`recorder`。
-- 派发给 Subagent 的上下文只包含当前 step、必要项目约束、相关 wiki 摘要、上游产物路径、允许读写边界和回写要求。
+- 派发给 Subagent 的上下文只包含当前 step、`available_skills`、必要项目约束、相关 wiki 摘要、上游产物路径、允许读写边界和回写要求。
 - Subagent 不接收完整聊天记录，不自行修改全局目标，不替主 Agent 做范围扩张决策。
 - Subagent 完成后必须返回产物路径、验证结果、失败原因或待决问题；主 Agent 负责集成和最终验收。
 - 如果 step 缺少必要上下文、允许路径或合法角色，先补 plan 或 context artifact，再派发。
@@ -93,11 +93,7 @@ AutoGoo 的行为不能只改一处。涉及命令、计划 schema、配置、�
 - `skills/auto-goo/scripts/check-plugin.sh`
 - `.claude-plugin/marketplace.json` 或插件注册信息
 
-改动后优先运行结构校验脚本：
-
-```bash
-bash /home/zixigu/workspace/AutoGoo/skills/auto-goo/scripts/check-plugin.sh
-```
+改动后优先运行结构校验脚本。脚本路径必须通过 Claude Code 的 installed plugin `installPath` 解析；不要在 `CLAUDE.md` 中写展开后的路径解析代码或本机绝对路径。
 
 ## 参考入口
 

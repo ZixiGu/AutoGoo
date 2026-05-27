@@ -30,7 +30,8 @@
       "description": "读取 CSV 文件，处理缺失值，统一日期格式",
       "depends_on": [],
       "type": "exec",
-      "subagent": "implementer"
+      "subagent": "implementer",
+      "available_skills": []
     },
     {
       "id": 2,
@@ -39,7 +40,8 @@
       "description": "按地区分组计算销售额总和、平均值、订单数",
       "depends_on": [1],
       "type": "exec",
-      "subagent": "implementer"
+      "subagent": "implementer",
+      "available_skills": []
     },
     {
       "id": 3,
@@ -48,7 +50,8 @@
       "description": "用 matplotlib 生成柱状图 + 汇总表格 [dep: matplotlib]",
       "depends_on": [2],
       "type": "exec",
-      "subagent": "implementer"
+      "subagent": "implementer",
+      "available_skills": []
     }
   ]
 }

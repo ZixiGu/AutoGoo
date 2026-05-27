@@ -134,6 +134,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - 每个非归档步骤必须包含 `goal_id` 或 `goal_ids`；共享准备、统一验证或统一归档步骤使用 `goal_ids`
 - 每个步骤应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths` 和 `validation`，让执行阶段不依赖聊天记录猜测读写范围和验收方式
 - 每个步骤必须包含 `subagent`，明确执行角色：`research` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `recorder`
+- 每个步骤应包含 `available_skills` 数组，列出本步骤允许或建议 Subagent 使用的 skill；没有额外 skill 时写 `[]`
 - `steps` 最后必须包含 Wiki 归档任务，默认名称为 `归档到 Goo-wiki`，依赖所有非归档叶子步骤
 - 如果没有找到相关 wiki 经验，写入 `wiki_context.found=false`
 - 最终向用户展示简洁计划摘要和主要风险

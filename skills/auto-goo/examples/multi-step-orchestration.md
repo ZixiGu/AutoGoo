@@ -18,7 +18,8 @@
       "description": "读取 CSV 文件，验证列名和数据完整性",
       "depends_on": [],
       "type": "exec",
-      "subagent": "implementer"
+      "subagent": "implementer",
+      "available_skills": []
     },
     {
       "id": 2,
@@ -27,7 +28,8 @@
       "description": "处理缺失值、去重、类型转换",
       "depends_on": [1],
       "type": "exec",
-      "subagent": "implementer"
+      "subagent": "implementer",
+      "available_skills": []
     },
     {
       "id": 3,
@@ -36,7 +38,8 @@
       "description": "计算均值、中位数、标准差等统计指标",
       "depends_on": [2],
       "type": "exec",
-      "subagent": "implementer"
+      "subagent": "implementer",
+      "available_skills": []
     },
     {
       "id": 4,
@@ -45,7 +48,8 @@
       "description": "生成分布图、箱线图、趋势图",
       "depends_on": [2],
       "type": "exec",
-      "subagent": "implementer"
+      "subagent": "implementer",
+      "available_skills": []
     },
     {
       "id": 5,
@@ -54,7 +58,8 @@
       "description": "合并统计结果和图表为最终报告",
       "depends_on": [3, 4],
       "type": "exec",
-      "subagent": "implementer"
+      "subagent": "implementer",
+      "available_skills": []
     }
   ]
 }

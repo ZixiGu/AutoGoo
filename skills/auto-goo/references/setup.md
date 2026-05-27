@@ -20,7 +20,29 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 初始化采用主 Agent 交互模式：主 Agent 先通过对话确认作用域、wiki 路径、覆盖风险和项目 `CLAUDE.md` 更新意愿，再调用脚本落盘。底层写入仍由初始化脚本完成：
 
 ```bash
-bash "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/goo-init.sh"
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  exit 127
+fi
+bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh"
 ```
 
 主 Agent 应优先自己提问，而不是要求用户进入 Bash 交互。必须先问用户作用域和 wiki 路径，并在问题中展示默认路径 `~/workspace/Goo-wiki`；用户不输入路径时使用默认路径。随后显式传入 `--user/--project` 与 `--wiki-dir <路径>`；不得默认写入项目配置，也不得在未展示默认路径的情况下静默使用默认 wiki 路径。
@@ -170,7 +192,28 @@ sudo apt install sshpass
 不会自动安装，也不会中断初始化。自动连接脚本支持按服务器选择：
 
 ```bash
-auto_goo_root="${AUTO_GOO_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/workspace/AutoGoo}}"
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" ]; then
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  exit 127
+fi
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" --server <ip-or-host>
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" --server <ip-or-host>:<port>
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" --server <user>@<ip-or-host>:<port>

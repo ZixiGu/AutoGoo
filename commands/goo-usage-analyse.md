@@ -24,8 +24,30 @@ description: 分析 Claude Code usage 与 Goo-wiki 项目知识，找出可落�
 ## 推荐命令
 
 ```bash
-python3 "$HOME/workspace/AutoGoo/skills/auto-goo/scripts/goo-usage.py" --once --no-color
-python3 "$HOME/workspace/AutoGoo/skills/auto-goo/scripts/wiki-graph-assist.py" --query "<高耗项目或关键词>"
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-usage.py" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" ]; then
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  exit 127
+fi
+python3 "$auto_goo_root/skills/auto-goo/scripts/goo-usage.py" --once --no-color
+python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" --query "<高耗项目或关键词>"
 ```
 
 如果用户指定时间范围，先让 `goo-usage.py` 用对应参数生成快照；如果脚本暂不支持该范围，退化为读取最近可用的 daily/monthly 聚合，并在报告里标注限制。

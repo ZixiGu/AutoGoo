@@ -10,7 +10,28 @@ description: 显示当前 AutoGoo 任务执行进度 — 读取 .goo/plan.json �
 必须优先运行插件脚本，而不是手写临时渲染逻辑：
 
 ```bash
-auto_goo_root="${AUTO_GOO_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/workspace/AutoGoo}}"
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" ]; then
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  exit 127
+fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.json
 ```
 

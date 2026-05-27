@@ -34,16 +34,19 @@ Subagent 只对被分配的步骤负责，不能改写整体计划、扩大任�
 每个 plan step 必须显式声明 `subagent` 字段。`type` 描述步骤性质，`subagent` 描述执行角色。例如：
 
 ```json
-{ "type": "exec", "subagent": "implementer" }
-{ "type": "eval", "subagent": "evaluator" }
-{ "type": "archive", "subagent": "recorder" }
+{ "type": "exec", "subagent": "implementer", "available_skills": [] }
+{ "type": "eval", "subagent": "evaluator", "available_skills": [] }
+{ "type": "archive", "subagent": "recorder", "available_skills": [] }
 ```
+
+`available_skills` 是 step 级 skill allowlist，用来告诉主 Agent 在派发 Subagent 时哪些 skill 可以作为本步骤上下文。它不替代 `subagent` 角色，不自动授予额外工具权限，也不允许 Subagent 越过 `allowed_read_paths` / `allowed_write_paths`。
 
 ## Subagent 上下文隔离
 
 Subagent 默认隔离上下文。主 Agent 派发时只传：
 
 - 当前 step 的 `id`、`name`、`description`、`type`、`subagent`、`output`
+- 当前 step 的 `available_skills`；若为空数组，不额外加载 skill
 - 必要的项目约束和安全规则摘要
 - `wiki_context` 中与该 step 直接相关的 3-7 条要点
 - `context_digest` 中与该 step 直接相关的决策、约束和验收点
@@ -61,6 +64,27 @@ Subagent 默认隔离上下文。主 Agent 派发时只传：
 - 未完成并行步骤的中间状态
 
 Subagent 之间只通过 `.goo/plan.json`、`.goo/logs/`、Goo-wiki 项目笔记、`.goo/obsidian/` fallback、明确产物路径和最终归档摘要交接。需要共享大段上下文时，主 Agent 应先把它整理成 Goo-wiki 项目笔记或摘要，再显式传给下游步骤。若 Subagent 需要的信息只存在于主会话聊天记录中，必须暂停派发，由主 Agent 更新 plan 或创建 context artifact 后再继续。
+
+## Subagent Skill 派发
+
+规划阶段可以在每个 step 写入 `available_skills`：
+
+```json
+{
+  "id": 3,
+  "type": "exec",
+  "subagent": "implementer",
+  "available_skills": ["openai-docs"]
+}
+```
+
+派发规则：
+
+- `available_skills` 只列本步骤确实有用的 skill 名称；不要把所有 skill 全量塞给每个 Subagent。
+- 主 Agent 派发时把该列表写入 Subagent prompt，并说明“只在需要时加载这些 skill 的入口说明”。
+- 如果 skill 不存在、不可读或与 step 无关，主 Agent 应更新 plan 去掉它，或在 prompt 中标明不可用；不得让 Subagent 凭空假设 skill 内容。
+- 如果 step 需要的是项目内 reference，而不是 Codex/Claude skill，应把路径放进 `context_artifacts`、`inputs` 或 step `description`，不要混进 `available_skills`。
+- `available_skills` 不能扩大读写范围；真正的文件边界仍以 `allowed_read_paths` / `allowed_write_paths` 为准。
 
 ## Subagent 职能分工
 
@@ -165,7 +189,29 @@ for step in batch:
 **Plan 顶层状态更新是强制的**，不是可选的"建议"。主 Agent 在每次 step 状态变更后必须立即调用：
 
 ```bash
-python3 "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.json --update-status
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" ]; then
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  exit 127
+fi
+python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.json --update-status
 ```
 
 这会更新 plan 顶层的 `status`（`pending` → `running` → `completed`/`failed`）、`started_at`（首次进入 running 时）和 `completed_at`（全部完成或失败时）。不调用此命令会导致 plan 顶层状态与实际 step 状态不同步。`/auto-goo:goo-status` 也会读取此字段渲染仪表盘。
@@ -173,10 +219,32 @@ python3 "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/goo-statu
 状态回写必须使用插件脚本，避免多个 Agent 用临时 JSON 代码互相覆盖：
 
 ```bash
-python3 "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --start --progress 5 --agent-id <agent>
-python3 "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --heartbeat --progress <0-100>
-python3 "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --complete
-python3 "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --fail --error "<reason>"
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/update-step.py" ]; then
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  exit 127
+fi
+python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --start --progress 5 --agent-id <agent>
+python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --heartbeat --progress <0-100>
+python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --complete
+python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --fail --error "<reason>"
 ```
 
 ### MAX_CONCURRENT 配置
@@ -218,11 +286,11 @@ python3 "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/update-st
 
 **主 Agent 依赖此字段判断你是否存活。不更新 heartbeat 会被误判为僵尸进程并重派。**
 
-先解析 AutoGoo 根目录：`AUTO_GOO_ROOT="${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}"`
+先从 Claude Code 安装记录解析 AutoGoo 根目录；不要读取环境变量，也不要搜索插件目录。唯一来源是 `$HOME/.claude/plugins/installed_plugins.json` 中 `auto-goo@*` 的 `installPath`。若安装记录为空或目标脚本无效，必须 fail-fast 提示用户重新安装/启用 AutoGoo 插件。
 
 命令模板（替换 `<id>` 和 `<0-100>`）：
 ```bash
-python3 "$AUTO_GOO_ROOT/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --heartbeat --progress <0-100>
+python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --heartbeat --progress <0-100>
 ```
 
 在以下里程碑必须调用上述命令更新 `heartbeat_at` + `progress`：
@@ -345,7 +413,7 @@ python3 "$AUTO_GOO_ROOT/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 - Agent 启动后立即写第一次 heartbeat_at + progress=5
 - 之后每 30 秒更新：`heartbeat_at` + **`progress` (0-100)**
 - 进度估算：agent 在任务开头拆 3-5 个里程碑，每过一个里程碑更新进度
-- 心跳通过 `python3 "${AUTO_GOO_ROOT:-$CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/update-step.py"` 更新 plan.json，不要手写临时 JSON 修改代码
+- 心跳通过解析后的 `auto_goo_root` 调用 `skills/auto-goo/scripts/update-step.py` 更新 plan.json，不要手写临时 JSON 修改代码；`auto_goo_root` 只能来自 Claude Code 安装记录
 
 ### 进度判断
 

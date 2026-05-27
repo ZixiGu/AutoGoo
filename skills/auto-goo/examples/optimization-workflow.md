@@ -18,7 +18,8 @@
       "description": "WebSearch 搜索 JSON 序列化基准测试标准指标",
       "depends_on": [],
       "type": "exec",
-      "subagent": "research"
+      "subagent": "research",
+      "available_skills": []
     },
     {
       "id": 2,
@@ -27,7 +28,8 @@
       "description": "标准 json.dumps 实现，100k 条数据评测 3 次取平均",
       "depends_on": [1],
       "type": "exec",
-      "subagent": "implementer"
+      "subagent": "implementer",
+      "available_skills": []
     },
     {
       "id": 3,
@@ -36,7 +38,8 @@
       "description": "执行基线评测，记录延迟和内存",
       "depends_on": [2],
       "type": "eval",
-      "subagent": "evaluator"
+      "subagent": "evaluator",
+      "available_skills": []
     },
     {
       "id": 4,
@@ -45,7 +48,8 @@
       "description": "cProfile 分析热点，定位瓶颈",
       "depends_on": [2, 3],
       "type": "exec",
-      "subagent": "optimizer"
+      "subagent": "optimizer",
+      "available_skills": []
     },
     {
       "id": 5,
@@ -54,7 +58,8 @@
       "description": "基于瓶颈分析结果进行优化（orjson / ujson / 自定义）",
       "depends_on": [4],
       "type": "optimize",
-      "subagent": "optimizer"
+      "subagent": "optimizer",
+      "available_skills": []
     },
     {
       "id": 6,
@@ -63,7 +68,8 @@
       "description": "同基线指标评测优化版本，对比提升",
       "depends_on": [5],
       "type": "eval",
-      "subagent": "evaluator"
+      "subagent": "evaluator",
+      "available_skills": []
     }
   ]
 }

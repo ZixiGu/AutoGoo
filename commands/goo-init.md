@@ -23,20 +23,29 @@ description: 初始化 AutoGoo 配置 — 支持用户级 ~/.auto-goo/config.jso
 
 ## 行为
 
-该命令使用 **Agent 交互模式 + 脚本落盘**：主 Agent 收到命令后直接开始交互提问，不预先检查环境；脚本内部自行处理已有配置的检测和覆盖确认。slash command 的当前工作目录通常是用户项目，不一定是插件目录；脚本执行前必须先解析 AutoGoo 根目录，不能在 `AUTO_GOO_ROOT` 和 `CLAUDE_PLUGIN_ROOT` 都为空时拼出 `/skills/...`：
+该命令使用 **Agent 交互模式 + 脚本落盘**：主 Agent 收到命令后直接开始交互提问，不预先检查环境；脚本内部自行处理已有配置的检测和覆盖确认。slash command 的当前工作目录通常是用户项目，不一定是插件目录；脚本执行前必须从 Claude Code 安装记录解析 AutoGoo 根目录，不能拼出 `/skills/...`：
 
 ```bash
-auto_goo_root="${AUTO_GOO_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}"
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  for candidate in "$PWD" "$PWD/.." "$HOME/workspace/AutoGoo"; do
-    if [ -f "$candidate/skills/auto-goo/scripts/goo-init.sh" ]; then
-      auto_goo_root="$candidate"
-      break
-    fi
-  done
-fi
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  echo "AutoGoo root not found; set AUTO_GOO_ROOT or run Claude Code with --plugin-dir /path/to/AutoGoo" >&2
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
   exit 127
 fi
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" <用户选择的作用域>
@@ -52,17 +61,26 @@ bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" <用户选择的作用
 例如用户选择 `--user` 且不输入路径（使用默认路径）时，必须运行：
 
 ```bash
-auto_goo_root="${AUTO_GOO_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}"
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  for candidate in "$PWD" "$PWD/.." "$HOME/workspace/AutoGoo"; do
-    if [ -f "$candidate/skills/auto-goo/scripts/goo-init.sh" ]; then
-      auto_goo_root="$candidate"
-      break
-    fi
-  done
-fi
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  echo "AutoGoo root not found; set AUTO_GOO_ROOT or run Claude Code with --plugin-dir /path/to/AutoGoo" >&2
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
   exit 127
 fi
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --user --wiki-dir ~/workspace/Goo-wiki
@@ -71,17 +89,26 @@ bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --user --wiki-dir ~/wo
 例如用户选择 `--project` 且输入自定义路径时，必须运行：
 
 ```bash
-auto_goo_root="${AUTO_GOO_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}"
+auto_goo_root="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+registry = Path.home() / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    matches = []
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] == "auto-goo":
+            for entry in entries:
+                path = Path(entry.get("installPath", "")).expanduser()
+                if path.exists() and not (path / ".orphaned_at").exists():
+                    matches.append((entry.get("lastUpdated", ""), str(path)))
+    if matches:
+        print(sorted(matches)[-1][1])
+PY
+)"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  for candidate in "$PWD" "$PWD/.." "$HOME/workspace/AutoGoo"; do
-    if [ -f "$candidate/skills/auto-goo/scripts/goo-init.sh" ]; then
-      auto_goo_root="$candidate"
-      break
-    fi
-  done
-fi
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  echo "AutoGoo root not found; set AUTO_GOO_ROOT or run Claude Code with --plugin-dir /path/to/AutoGoo" >&2
+  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
   exit 127
 fi
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir /path/to/Goo-wiki
