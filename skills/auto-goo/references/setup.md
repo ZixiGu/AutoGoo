@@ -24,22 +24,52 @@ auto_goo_root="$(
   python3 - <<'PY' 2>/dev/null || true
 import json
 from pathlib import Path
-registry = Path.home() / ".claude/plugins/installed_plugins.json"
+
+home = Path.home()
+matches = []
+
+def usable(path):
+    return path.exists() and not (path / ".orphaned_at").exists()
+
+registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
-    matches = []
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] == "auto-goo":
-            for entry in entries:
-                path = Path(entry.get("installPath", "")).expanduser()
-                if path.exists() and not (path / ".orphaned_at").exists():
-                    matches.append((entry.get("lastUpdated", ""), str(path)))
-    if matches:
-        print(sorted(matches)[-1][1])
+        if key.split("@", 1)[0] != "auto-goo":
+            continue
+        for entry in entries:
+            path = Path(entry.get("installPath", "")).expanduser()
+            if usable(path):
+                matches.append((entry.get("lastUpdated", ""), str(path)))
+
+if not matches:
+    settings = home / ".claude/settings.json"
+    if settings.exists():
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        enabled = data.get("enabledPlugins", {})
+        marketplaces = data.get("extraKnownMarketplaces", {})
+        for key, is_enabled in enabled.items():
+            if not is_enabled or "@" not in key:
+                continue
+            plugin, marketplace = key.split("@", 1)
+            if plugin != "auto-goo":
+                continue
+            source = marketplaces.get(marketplace, {}).get("source", {})
+            if source.get("source") != "directory":
+                continue
+            path_text = source.get("path")
+            if not path_text:
+                continue
+            path = Path(path_text).expanduser()
+            if usable(path):
+                matches.append(("settings:" + marketplace, str(path)))
+
+if matches:
+    print(sorted(matches)[-1][1])
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh"
@@ -93,7 +123,7 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 - 规划前先从 Goo-wiki 召回相关项目经验、概念页、周报和 `log.md`
 - `goo-plan` 的 `.goo/plan.json` 最后保留 `归档到 Goo-wiki` 步骤
 - 执行后归档目标、计划、证据、产物路径、验证结果、决策、问题处理和可复用经验
-- 任何产生可复用内容的命令都必须归档到 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。适用内容包括 brainstorm 候选目标、usage/token 降本分析、日报/周报、改进建议、benchmark 指标、plan 摘要和执行经验
+- 任何产生可复用内容的命令最终都必须归档到 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。适用内容包括 usage/token 降本分析、日报/周报、改进建议、benchmark 指标和执行经验。brainstorm 候选目标与 plan 摘要必须先给用户审阅，确认后或进入执行前再归档最终版
 - 日报/周报请求通过 `/auto-goo:goo-daily-report` 沉淀到 Goo-wiki `journal/daily/` 并更新 `log.md`；同日日报已存在时只追加新增内容，不整体覆盖已有人工整理
 - 如果项目是 Git repo，将 git remote 地址写入 Goo-wiki 项目页或任务总览笔记
 - Goo-wiki 不可用时写入 `.goo/obsidian/` fallback
@@ -196,22 +226,52 @@ auto_goo_root="$(
   python3 - <<'PY' 2>/dev/null || true
 import json
 from pathlib import Path
-registry = Path.home() / ".claude/plugins/installed_plugins.json"
+
+home = Path.home()
+matches = []
+
+def usable(path):
+    return path.exists() and not (path / ".orphaned_at").exists()
+
+registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
-    matches = []
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] == "auto-goo":
-            for entry in entries:
-                path = Path(entry.get("installPath", "")).expanduser()
-                if path.exists() and not (path / ".orphaned_at").exists():
-                    matches.append((entry.get("lastUpdated", ""), str(path)))
-    if matches:
-        print(sorted(matches)[-1][1])
+        if key.split("@", 1)[0] != "auto-goo":
+            continue
+        for entry in entries:
+            path = Path(entry.get("installPath", "")).expanduser()
+            if usable(path):
+                matches.append((entry.get("lastUpdated", ""), str(path)))
+
+if not matches:
+    settings = home / ".claude/settings.json"
+    if settings.exists():
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        enabled = data.get("enabledPlugins", {})
+        marketplaces = data.get("extraKnownMarketplaces", {})
+        for key, is_enabled in enabled.items():
+            if not is_enabled or "@" not in key:
+                continue
+            plugin, marketplace = key.split("@", 1)
+            if plugin != "auto-goo":
+                continue
+            source = marketplaces.get(marketplace, {}).get("source", {})
+            if source.get("source") != "directory":
+                continue
+            path_text = source.get("path")
+            if not path_text:
+                continue
+            path = Path(path_text).expanduser()
+            if usable(path):
+                matches.append(("settings:" + marketplace, str(path)))
+
+if matches:
+    print(sorted(matches)[-1][1])
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" ]; then
-  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" --server <ip-or-host>

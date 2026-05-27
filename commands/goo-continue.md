@@ -11,6 +11,8 @@ description: 从中断处继续执行 AutoGoo 任务 — 读取 .goo/plan.json �
 
 恢复时默认先执行 context sync：检查 plan 生成后当前对话是否新增方案、约束、验收标准、用户偏好或 open question。若有增量，先把旧 `.goo/plan.json` 归档到 `.goo/plans/history/`，短内容写入 `context_digest.post_plan_updates`，长内容写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/*.md` 并追加到 `context_artifacts`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/context/*.md`。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认。
 
+如果 `.goo/brainstorm.json` 或 `.goo/plan.json` 的 `review.status` 仍是 `pending_user_review`，恢复前必须先停下来让用户审阅和确认；不得把未确认草案自动归档或继续执行。
+
 恢复执行一旦准备启动业务 step 调度，也必须先检查 `.goo/brainstorm.json`。如果该文件存在且 `archive` 缺失、`archive.status` 不是 `completed`，或归档路径不可验证，先派发 `recorder` 归档 brainstorm 候选 goals、推荐顺序、用户最终选择/合并依据、共同前置条件、ready checklist、wiki 证据和当前 plan 关联；归档完成并回写 `.goo/brainstorm.json.archive` 后，才能继续执行未完成 step。
 
 ## 恢复检测流程（按优先级）
@@ -97,6 +99,6 @@ test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 - 关键路径上的失败步骤会询问是否跳过继续
 - 恢复执行必须派发 Subagent；主 Agent 做状态修复、派发和审核。若 Subagent 角色不存在，先补 plan 或创建角色，不由主 Agent 代执行
 - 恢复执行时使用 step 的 `available_skills` 作为 Subagent skill allowlist；缺失时先补为空数组
-- 如果 `.goo/brainstorm.json` 存在，恢复执行前必须确认 brainstorm 已归档；未归档时先归档 brainstorm，再恢复业务 step
+- 如果 `.goo/brainstorm.json` 或 `.goo/plan.json` 仍是待审草案，恢复执行前必须先让用户确认；确认后如果 brainstorm 未归档，再归档最终版 brainstorm，然后恢复业务 step
 - `heartbeat_at` 为空且 status=running 的步骤：说明派发时写了 tier-X-start.json 但 agent 从未真正启动 → 直接重置为 pending
 - Plan 顶层 `status`（`pending` → `running` → `completed`/`failed`）由 `goo-status.py --update-status` 自动计算更新，主 Agent 在每次 step 状态变更后必须调用

@@ -19,8 +19,9 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 8. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
 9. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
 10. **历史计划归档** — 如果 `.goo/plan.json` 已存在且用户选择新建 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`
-11. **计划落盘** — 输出或更新 `.goo/plan.json`
-12. **等待确认** — 不派发 Subagent，不修改业务文件，不运行实现命令；允许写入 `.goo/plan.json` 和必要的 `context_artifacts`
+11. **计划落盘** — 输出或更新 `.goo/plan.json`，标记为待用户审阅。
+12. **等待确认** — 向用户展示计划摘要、并行组、主要风险和需要确认的点，允许用户修改 DAG、合并/拆分步骤、调整验收标准或回到 brainstorm。用户确认前不要归档 plan 摘要。
+13. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
 
 ## 现有 plan 冲突处理
 
@@ -96,7 +97,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 
 这里的“同根”指 Goo-wiki/fallback 知识归档，不改变本地 JSON 历史快照路径。旧 plan 快照仍归档到 `.goo/plans/history/`；旧 brainstorm 快照归档到 `.goo/brainstorms/history/`。
 
-如果 `.goo/brainstorm.json` 已存在并被本次 `goo-plan` 采用，plan 的 Goo-wiki/fallback 归档路径必须复用 brainstorm 的 `archive.task_archive_root`：
+如果 `.goo/brainstorm.json` 已存在并被本次 `goo-plan` 采用，plan 的 Goo-wiki/fallback 归档路径必须复用 brainstorm 的 `archive.task_archive_root`。但 brainstorm 和 plan 都要先给用户审阅；用户确认前只更新本地 `.goo/brainstorm.json` / `.goo/plan.json`，不要急着写 Goo-wiki/fallback 归档笔记：
 
 - brainstorm 内容放在 `<task_archive_root>/brainstorm/`。
 - plan 摘要、正式 DAG、`context_digest`、`wiki_context` 和计划取舍放在 `<task_archive_root>/plan/`。
@@ -128,6 +129,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - 如果用户选择了 `.goo/brainstorm.json` 中的 candidate goal，必须把候选目标、前置条件和 ready checklist 转成正式 `goals[]` 与前置检查 step
 - `.goo/plan.json` 必须包含 `goals[]`；单目标任务也写一个默认 goal，多目标任务按交付目标分别写验收标准和产物
 - `.goo/plan.json` 必须包含 `context_digest`；没有额外对话方案时也写 `{"found": false, "decisions": [], "constraints": [], "acceptance_criteria": [], "open_questions": []}`
+- `.goo/plan.json` 必须包含 `review`，初次生成后写 `{"status": "pending_user_review", "summary": "<给用户看的简短计划摘要>"}`；用户确认后改为 `confirmed`，用户要求修改时保持 `pending_user_review` 并记录修改要求
 - 如果存在大段方案材料，必须包含 `context_artifacts`，用文件路径引用 Goo-wiki 项目路径下的 `context/*.md` 或相关任务 Markdown；Goo-wiki 不可用时引用 `.goo/obsidian/<project-slug>/context/*.md`
 - 写入新的 `.goo/plan.json` 前，必须把已有 `.goo/plan.json` 原样归档到 `.goo/plans/history/`
 - 每个步骤必须包含 `output`，便于后续 `/auto-goo:goo-continue` 恢复
@@ -136,6 +138,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - 每个步骤必须包含 `subagent`，明确执行角色：`research` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `recorder`
 - 每个步骤应包含 `available_skills` 数组，列出本步骤允许或建议 Subagent 使用的 skill；没有额外 skill 时写 `[]`
 - `steps` 最后必须包含 Wiki 归档任务，默认名称为 `归档到 Goo-wiki`，依赖所有非归档叶子步骤
+- 初次 plan-only 只写入 archive step，不执行归档；计划摘要归档要等用户确认计划后再做
 - 如果没有找到相关 wiki 经验，写入 `wiki_context.found=false`
 - 最终向用户展示简洁计划摘要和主要风险
 

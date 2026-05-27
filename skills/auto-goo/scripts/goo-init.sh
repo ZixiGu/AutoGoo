@@ -664,12 +664,12 @@ if wiki_ready:
 - 本项目启用 Goo-wiki 作为项目记忆层；规划前先检索 `{wiki_dir}` 中相关项目页、概念页、周报和 `log.md`，复用已有约束、命令、路径、指标口径和历史经验。
 - 使用 `/auto-goo:goo-plan` 生成计划时，必须在 `.goo/plan.json` 最后保留 `归档到 Goo-wiki` 步骤，并依赖所有非归档叶子步骤；计划必须包含 `wiki_context` 和 `context_digest`，让后续执行不依赖主会话聊天记录。
 - 如果当前对话已经形成方案、取舍、约束或验收标准，短内容写入 `.goo/plan.json.context_digest`；长方案、会议纪要或 prompt 草案优先写入 `Goo-wiki/{project_archive_dir}/context/`，并在 `.goo/plan.json.context_artifacts` 中引用。
-- 如果 `.goo/plan.json` 已生成后又通过对话产生新方案、约束、验收标准或用户偏好，`/auto-goo:goo-start` 和 `/auto-goo:goo-continue` 默认先做 context sync：归档旧 plan，短内容写入 `context_digest.post_plan_updates`，长内容写入 `context_artifacts` 指向的 Markdown；只有与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认。
+- 如果 `.goo/plan.json` 已生成后又通过对话产生新方案、约束、验收标准或用户偏好，`/auto-goo:goo-start` 和 `/auto-goo:goo-continue` 默认先做 context sync：把旧 plan 复制到 `.goo/plans/history/`，短内容写入 `context_digest.post_plan_updates`，长内容写入 `context_artifacts` 指向的 Markdown；只有与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认。
 - 使用 `/auto-goo:goo-start` 或 `/auto-goo:goo-continue` 执行时，只能基于当前 `.goo/plan.json`、`context_artifacts` 指向的 Goo-wiki/Markdown、相关 `wiki_context`、`.goo/logs/` 和上游产物路径恢复任务；不得依赖“刚才讨论过”的隐含上下文。
 - 使用 `/auto-goo:goo-start` 或 `/auto-goo:goo-continue` 执行时，所有 `research` / `exec` / `optimize` / `eval` / `review` / `archive` step 必须派发给 `.goo/plan.json` 中声明的 `subagent`；主 Agent 只负责编排、状态修复、上下文补全和产物审核，不直接代写步骤产物或代跑步骤命令。
 - 如果待执行 step 缺少 `subagent`、`depends_on`、`output`、读写边界或必要上下文，先更新 `.goo/plan.json` / `context_artifacts` 后再派发，不用主会话聊天记录临时补齐。
 - 使用 `/auto-goo:goo-start` 或 `/auto-goo:goo-continue` 执行后，必须归档任务目标、计划摘要、步骤证据、产物路径、验证结果、关键决策、问题处理和可复用经验。
-- 任何产生可复用内容的命令都必须归档到 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。适用内容包括 brainstorm 候选目标、usage/token 降本分析、日报/周报、改进建议、benchmark 指标、plan 摘要和执行经验。
+- 任何产生可复用内容的命令最终都必须归档到 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。brainstorm 候选目标和 plan 摘要必须先给用户审阅，确认后或进入执行前再归档最终版；usage/token 降本分析、日报/周报、改进建议、benchmark 指标和执行经验按命令规则归档。
 - 用户要求日报、周报、总结今天或调用 `/auto-goo:goo-daily-report` 时，必须把 Claude Code / Codex 会话沉淀到 Goo-wiki `journal/daily/`，并更新 `log.md`；同日日报已存在时只追加新增内容，不整体覆盖已有人工整理。
 - Goo-wiki 可用时优先写入 `{wiki_dir}/{project_archive_dir}/` 并追加 `Goo-wiki/log.md`；不可用时写入 `{fallback_project_dir}` 作为本地 fallback。
 - 归档完成前必须补齐并验收 Markdown 连接图谱：任务页链接项目入口、复用的 `wiki_context` / `context_artifacts` 和关键概念/问题/指标/历史任务页；项目 `index.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口。缺少这些链接时不得把 archive step 标记为 completed。

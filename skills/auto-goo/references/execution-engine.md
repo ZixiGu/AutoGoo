@@ -193,22 +193,52 @@ auto_goo_root="$(
   python3 - <<'PY' 2>/dev/null || true
 import json
 from pathlib import Path
-registry = Path.home() / ".claude/plugins/installed_plugins.json"
+
+home = Path.home()
+matches = []
+
+def usable(path):
+    return path.exists() and not (path / ".orphaned_at").exists()
+
+registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
-    matches = []
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] == "auto-goo":
-            for entry in entries:
-                path = Path(entry.get("installPath", "")).expanduser()
-                if path.exists() and not (path / ".orphaned_at").exists():
-                    matches.append((entry.get("lastUpdated", ""), str(path)))
-    if matches:
-        print(sorted(matches)[-1][1])
+        if key.split("@", 1)[0] != "auto-goo":
+            continue
+        for entry in entries:
+            path = Path(entry.get("installPath", "")).expanduser()
+            if usable(path):
+                matches.append((entry.get("lastUpdated", ""), str(path)))
+
+if not matches:
+    settings = home / ".claude/settings.json"
+    if settings.exists():
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        enabled = data.get("enabledPlugins", {})
+        marketplaces = data.get("extraKnownMarketplaces", {})
+        for key, is_enabled in enabled.items():
+            if not is_enabled or "@" not in key:
+                continue
+            plugin, marketplace = key.split("@", 1)
+            if plugin != "auto-goo":
+                continue
+            source = marketplaces.get(marketplace, {}).get("source", {})
+            if source.get("source") != "directory":
+                continue
+            path_text = source.get("path")
+            if not path_text:
+                continue
+            path = Path(path_text).expanduser()
+            if usable(path):
+                matches.append(("settings:" + marketplace, str(path)))
+
+if matches:
+    print(sorted(matches)[-1][1])
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.json --update-status
@@ -223,22 +253,52 @@ auto_goo_root="$(
   python3 - <<'PY' 2>/dev/null || true
 import json
 from pathlib import Path
-registry = Path.home() / ".claude/plugins/installed_plugins.json"
+
+home = Path.home()
+matches = []
+
+def usable(path):
+    return path.exists() and not (path / ".orphaned_at").exists()
+
+registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
-    matches = []
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] == "auto-goo":
-            for entry in entries:
-                path = Path(entry.get("installPath", "")).expanduser()
-                if path.exists() and not (path / ".orphaned_at").exists():
-                    matches.append((entry.get("lastUpdated", ""), str(path)))
-    if matches:
-        print(sorted(matches)[-1][1])
+        if key.split("@", 1)[0] != "auto-goo":
+            continue
+        for entry in entries:
+            path = Path(entry.get("installPath", "")).expanduser()
+            if usable(path):
+                matches.append((entry.get("lastUpdated", ""), str(path)))
+
+if not matches:
+    settings = home / ".claude/settings.json"
+    if settings.exists():
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        enabled = data.get("enabledPlugins", {})
+        marketplaces = data.get("extraKnownMarketplaces", {})
+        for key, is_enabled in enabled.items():
+            if not is_enabled or "@" not in key:
+                continue
+            plugin, marketplace = key.split("@", 1)
+            if plugin != "auto-goo":
+                continue
+            source = marketplaces.get(marketplace, {}).get("source", {})
+            if source.get("source") != "directory":
+                continue
+            path_text = source.get("path")
+            if not path_text:
+                continue
+            path = Path(path_text).expanduser()
+            if usable(path):
+                matches.append(("settings:" + marketplace, str(path)))
+
+if matches:
+    print(sorted(matches)[-1][1])
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/update-step.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --start --progress 5 --agent-id <agent>
@@ -286,7 +346,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 
 **主 Agent 依赖此字段判断你是否存活。不更新 heartbeat 会被误判为僵尸进程并重派。**
 
-先从 Claude Code 安装记录解析 AutoGoo 根目录；不要读取环境变量，也不要搜索插件目录。唯一来源是 `$HOME/.claude/plugins/installed_plugins.json` 中 `auto-goo@*` 的 `installPath`。若安装记录为空或目标脚本无效，必须 fail-fast 提示用户重新安装/启用 AutoGoo 插件。
+先从 Claude Code 安装记录解析 AutoGoo 根目录；不要读取环境变量，也不要搜索插件目录。优先来源是 `$HOME/.claude/plugins/installed_plugins.json` 中 `auto-goo@*` 的 `installPath`。如果 `installPath` 不存在或已 orphaned，再读取 `$HOME/.claude/settings.json`，只有 `enabledPlugins` 中启用了 `auto-goo@<marketplace>`，且 `extraKnownMarketplaces.<marketplace>.source` 是本地 `directory` 时，才使用该本地 marketplace 路径。若安装记录和本地 marketplace 都不可用或目标脚本无效，必须 fail-fast 提示用户重新安装/启用 AutoGoo 插件。
 
 命令模板（替换 `<id>` 和 `<0-100>`）：
 ```bash

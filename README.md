@@ -1,6 +1,6 @@
 # AutoGoo
 
-[![Release](https://img.shields.io/badge/release-v0.2.1-blue)](#版本)
+[![Release](https://img.shields.io/badge/release-v0.2.2-blue)](#版本)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-black)](#安装)
 [![Status](https://img.shields.io/badge/status-preview-orange)](#版本)
@@ -19,6 +19,7 @@ AutoGoo 是一个 Claude Code 插件，用于把开放式任务转成可追踪�
 - **主 Agent 把关**：主 Agent 负责规划、上下文裁剪、调度、审查、冲突处理和最终验收；subagent 只执行被分配的步骤。
 - **优化循环**：识别性能类任务，加入 benchmark、baseline、profiling 和优化对比。
 - **持久知识归档**：把任务摘要、步骤证据、指标、决策和经验写回 Goo-wiki。
+- **研究资料归档**：通过 `/auto-goo:goo-research paper` 做论文深读、代码/数据集搜索、下载检查和 wiki 归档。
 - **日报/周报生成**：扫描 Claude Code 与 Codex 会话，把每日工作沉淀到 Goo-wiki `journal/daily/`。
 - **Usage 监控**：参考 Claude-Code-Usage-Monitor 的终端界面风格，扫描本机 Claude Code usage 日志，输出今天总 token、项目分布、模型分布和可选 cost 面板。
 - **自改进工作流**：收集执行摩擦点，并通过 `/auto-goo:goo-improve` 进入插件优化流程。
@@ -47,57 +48,20 @@ AutoGoo 是一个 Claude Code 插件，用于把开放式任务转成可追踪�
 ```
 
 
-### 直接加载插件
+### 本地安装
 
-从 GitHub 直接安装：
+从本地 checkout 添加 marketplace：
 
-```bash
-cc --plugin git+https://github.com/ZixiGu/AutoGoo.git
+```text
+/plugin marketplace add /path/AutoGoo
 ```
 
-或从本地 checkout 安装：
+安装并启用插件：
 
-```bash
-cc --plugin-dir /path/to/AutoGoo
+```text
+/plugin install auto-goo@AutoGoo
+/plugin enable auto-goo@AutoGoo
 ```
-
-安装后检查插件结构：
-
-```bash
-auto_goo_root="$(
-  python3 - <<'PY' 2>/dev/null || true
-import json
-from pathlib import Path
-
-registry = Path.home() / ".claude/plugins/installed_plugins.json"
-if registry.exists():
-    data = json.loads(registry.read_text(encoding="utf-8"))
-    matches = []
-    for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
-            continue
-        for entry in entries:
-            path = Path(entry.get("installPath", "")).expanduser()
-            if path.exists() and not (path / ".orphaned_at").exists():
-                matches.append((entry.get("lastUpdated", ""), str(path)))
-    if matches:
-        print(sorted(matches)[-1][1])
-PY
-)"
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/check-plugin.sh" ]; then
-  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
-  exit 127
-fi
-bash "$auto_goo_root/skills/auto-goo/scripts/check-plugin.sh"
-```
-
-脚本执行路径约定：
-
-- skill 和 slash command 只从 Claude Code 安装记录 `~/.claude/plugins/installed_plugins.json` 中读取 `auto-goo@*` 的 `installPath`。
-- 安装记录里的 `installPath` 通常位于 `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>`，这是 Claude Code 实际加载的插件副本。
-- AutoGoo 不扫描当前目录、上级目录或源码 checkout 路径；只读取 Claude Code 的安装 registry。
-- 命令必须验证目标脚本存在，不能拼出 `/skills/...` 这类空根路径；安装记录不可用时必须 fail-fast，提示用户重新安装/启用 AutoGoo 插件。
-- skill 和 slash command 不应使用 `find` 全盘搜索脚本，也不应静默拼接出 `/skills/...` 这样的无效路径。
 
 ## 快速开始
 
@@ -140,7 +104,7 @@ AutoGoo 会：
 | `/auto-goo:goo-brainstorm <方向>` | 目标不明确时，基于 Goo-wiki 生成候选 goals，写入 `.goo/brainstorm.json`，不执行。 |
 | `/auto-goo:goo-plan <任务>` | 召回 wiki 上下文并生成 `.goo/plan.json`，不执行。 |
 | `/auto-goo:goo-start <任务>` | 启动完整 AutoGoo 工作流。 |
-| `/auto-goo:goo-research paper <论文>` | 论文深读、代码/数据集搜索、下载检查和 Goo-wiki 归档。 |
+| `/auto-goo:goo-research paper <论文/DOI/arXiv/URL/PDF>` | 论文深读、代码/数据集搜索、下载检查和 Goo-wiki 归档。 |
 | `/auto-goo:goo-status` | 渲染当前 `.goo/plan.json` 进度面板。 |
 | `/auto-goo:goo-continue` | 通过状态、产物和心跳检查恢复中断任务。 |
 | `/auto-goo:goo-daily-report [日期\|范围]` | 扫描 Claude Code 与 Codex 会话，生成 Goo-wiki 日报/周报素材。 |
@@ -149,7 +113,7 @@ AutoGoo 会：
 | `/auto-goo:goo-benchmark` | 执行指标发现、基线测量、profiling、优化和对比。 |
 | `/auto-goo:goo-improve` | 回顾近期流程摩擦，生成插件改进建议。 |
 
-自然触发词如 `brainstorm`、`找目标`、`开始任务`、`run:`、`读论文`、`论文`、`paper`、`状态`、`继续`、`日报`、`周报`、`评测`、`自改进` 也在 skill prompt 中定义；对外推荐优先使用命名空间 slash command。
+自然触发词如 `brainstorm`、`找目标`、`开始任务`、`run:`、`goo-research`、`research`、`读论文`、`论文`、`paper`、`状态`、`继续`、`日报`、`周报`、`评测`、`自改进` 也在 skill prompt 中定义；对外推荐优先使用命名空间 slash command。
 
 ## 研究资料归档
 
@@ -173,14 +137,9 @@ AutoGoo 会：
 /auto-goo:goo-usage --view daily
 ```
 
-命令从 Claude Code 安装记录解析 AutoGoo 根目录后调用 `skills/auto-goo/scripts/goo-usage.py`，默认扫描 `~/.claude/projects/**/*.jsonl` 中的 `message.usage`，统计本机时区今天的整体使用情况，并按项目目录、模型和 token 类型拆分展示。默认输出带 ANSI 颜色；传入 `--no-color` 时禁用。也支持 `daily` 和 `monthly` 聚合视图。cost 不猜测实时价格；需要费用统计时传入 `--price MODEL=INPUT,OUTPUT,CACHE_READ` 或 `--pricing pricing.json`，价格单位为 USD / 1M tokens。
+命令默认扫描 `~/.claude/projects/**/*.jsonl` 中的 `message.usage`，统计本机时区今天的整体使用情况，并按项目目录、模型和 token 类型拆分展示。默认输出带 ANSI 颜色；传入 `--no-color` 时禁用。也支持 `daily` 和 `monthly` 聚合视图。cost 不猜测实时价格；需要费用统计时传入 `--price MODEL=INPUT,OUTPUT,CACHE_READ` 或 `--pricing pricing.json`，价格单位为 USD / 1M tokens。
 
-也可以在普通 shell 里直接运行脚本：
-
-```bash
-cd <AutoGoo> && python3 skills/auto-goo/scripts/goo-usage.py --once
-cd <AutoGoo> && python3 skills/auto-goo/scripts/goo-usage.py --serve --interval 30
-```
+用户侧推荐通过 `/auto-goo:goo-usage` 使用，不需要手动进入插件目录或直接运行内部脚本。
 
 ## Usage 降本分析
 
@@ -215,7 +174,7 @@ cd <AutoGoo> && python3 skills/auto-goo/scripts/goo-usage.py --serve --interval 
 /auto-goo:goo-brainstorm <方向/项目/问题>
 ```
 
-`goo-brainstorm` 会召回 Goo-wiki 中的项目页、概念页、周报和 `log.md`，提取未完成事项、反复问题、风险、近期计划、指标缺口、文档缺口、测试缺口、发布阻塞和可复用经验。它不会写 `.goo/plan.json`，也不会生成执行 DAG 或启动 subagent；但它产生了可复用候选 goals，因此必须把结果归档到 Goo-wiki，Goo-wiki 不可用时写入 `.goo/obsidian/` fallback。
+`goo-brainstorm` 会召回 Goo-wiki 中的项目页、概念页、周报和 `log.md`，提取未完成事项、反复问题、风险、近期计划、指标缺口、文档缺口、测试缺口、发布阻塞和可复用经验。它不会写 `.goo/plan.json`，也不会生成执行 DAG 或启动 subagent；生成后先把候选 goals 写入 `.goo/brainstorm.json` 并展示给用户审阅。用户可能会选择、合并、改写或要求继续 brainstorm，因此不要急着归档；确认最终候选目标后，再归档到 Goo-wiki，Goo-wiki 不可用时写入 `.goo/obsidian/` fallback。
 
 输出写入 `.goo/brainstorm.json`，包含：
 
@@ -224,7 +183,8 @@ cd <AutoGoo> && python3 skills/auto-goo/scripts/goo-usage.py --serve --interval 
 - `candidate_goals`：3-7 个候选目标，每个包含依据、预期产物、验收标准、风险、前置要求、ready checklist 和第一步。
 - `recommended_goal_ids`：推荐优先考虑的目标。
 - `decision_needed: true`：等待用户选择、合并、改写或继续 brainstorm。
-- `archive`：本次候选目标归档到 Goo-wiki 或 fallback 的路径与状态；默认写入同一任务归档根的 `brainstorm/` 子目录，后续 plan 写入同一根下的 `plan/` 子目录。如果暂时无法归档，后续 plan 开始执行前必须先补归档。注意这不同于本地 JSON 历史快照：brainstorm 快照放 `.goo/brainstorms/history/`，plan 快照放 `.goo/plans/history/`。
+- `review.status: pending_user_review`：等待用户审阅，不把草案当成最终结果。
+- `archive`：本次候选目标归档到 Goo-wiki 或 fallback 的路径与状态；初次生成时保持 `pending_user_review`，确认后写入同一任务归档根的 `brainstorm/` 子目录，后续 plan 写入同一根下的 `plan/` 子目录。如果暂时无法归档，后续 plan 开始执行前必须先补归档。注意这不同于本地 JSON 历史快照：brainstorm 快照放 `.goo/brainstorms/history/`，plan 快照放 `.goo/plans/history/`。
 
 选定一个或多个候选目标后，再进入计划阶段：
 
@@ -242,7 +202,7 @@ cd <AutoGoo> && python3 skills/auto-goo/scripts/goo-usage.py --serve --interval 
 /auto-goo:goo-plan <任务>
 ```
 
-该命令会写入可审阅、可恢复的 `.goo/plan.json`。如果旧 plan 已存在，AutoGoo 会先检查 `steps[]` 是否全部完成：已完成时归档到 `.goo/plans/history/` 后写入新的当前 plan；未完成时先提醒用户当前未完成项，并询问是修改当前 plan，还是新建 plan 并归档旧 plan。用户未明确选择前，不覆盖 `.goo/plan.json`。
+该命令会写入可审阅、可恢复的 `.goo/plan.json`，并先让用户看计划摘要、并行组、主要风险和需要确认的点。用户可能会修改 DAG、合并/拆分步骤或调整验收标准，因此计划确认前不要归档 plan 摘要，也不要执行。如果旧 plan 已存在，AutoGoo 会先检查 `steps[]` 是否全部完成：已完成时归档到 `.goo/plans/history/` 后写入新的当前 plan；未完成时先提醒用户当前未完成项，并询问是修改当前 plan，还是新建 plan 并归档旧 plan。用户未明确选择前，不覆盖 `.goo/plan.json`。
 
 如果你还不知道目标，只想基于 Goo-wiki 和项目现状 brainstorm，先使用 `/auto-goo:goo-brainstorm <方向>`。它会写入 `.goo/brainstorm.json`，生成候选 goals、共同前置条件、ready checklist、推荐顺序和风险依据，然后等待你选择；选定一个或多个 goals 后，再用 `/auto-goo:goo-plan <明确目标>` 生成执行 DAG。
 
@@ -261,6 +221,7 @@ Markdown 文件或片段会被按结构化任务输入解析：标题、checkbox
 - `wiki_context`：规划前召回的 Goo-wiki 来源和可复用知识。
 - `context_digest`：当前对话中已确认的方案、约束、验收标准和未决问题。
 - `context_artifacts`：可选，指向 Goo-wiki 项目路径下的 `context/*.md`、fallback `.goo/obsidian/<project-slug>/context/*.md` 或任务 Markdown。
+- `review`：计划审阅状态，初次生成后为 `pending_user_review`；用户确认后才进入执行或计划摘要归档。
 - `steps`：有序 DAG 节点，包含 `id`、`goal_id` / `goal_ids`、`tier`、`depends_on`、`type`、`status`、`progress`、预期 `output`、`inputs` / `outputs`、读写边界、验收方式和风险确认字段。
 - `subagent`：每个步骤的执行角色，例如 `research`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`recorder`。
 - `available_skills`：每个步骤允许或建议 Subagent 使用的 skill 名称列表；没有额外 skill 时写空数组，避免把全部 skill 都塞进隔离上下文。
@@ -268,7 +229,7 @@ Markdown 文件或片段会被按结构化任务输入解析：标题、checkbox
 
 审阅后可使用 `/auto-goo:goo-start <同一任务>` 执行完整流程，或用 `/auto-goo:goo-continue` 从当前 `.goo/plan.json` 恢复。
 
-一旦 plan 准备开始执行，AutoGoo 会先检查 `.goo/brainstorm.json` 是否已经归档。若 brainstorm 结果还没有 `archive.status=completed`，会先归档候选 goals、推荐顺序、用户选择/合并依据、前置条件和 wiki 证据，并把归档路径回写到 `.goo/brainstorm.json`，然后才启动业务步骤。brainstorm 与由它生成的 plan 默认共用同一个 Goo-wiki/fallback 任务归档根，例如 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-task-slug>/brainstorm/` 和 `.../plan/`；fallback 时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/` 与 `.../plan/`。
+一旦 plan 准备开始执行，AutoGoo 会先检查 `.goo/brainstorm.json` 和 `.goo/plan.json` 是否已经由用户确认。若仍是 `pending_user_review`，先停下来让用户审阅和修改，不自动归档、不直接执行。确认后，如果 brainstorm 结果还没有 `archive.status=completed`，会先归档候选 goals、推荐顺序、用户选择/合并依据、前置条件和 wiki 证据，并把归档路径回写到 `.goo/brainstorm.json`，然后才启动业务步骤。brainstorm 与由它生成的 plan 默认共用同一个 Goo-wiki/fallback 任务归档根，例如 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-task-slug>/brainstorm/` 和 `.../plan/`；fallback 时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/` 与 `.../plan/`。
 
 ## Wiki 记忆循环
 
@@ -279,15 +240,15 @@ AutoGoo 把 Goo-wiki 当作项目记忆层，而不只是最终报告目录。�
 
 归档时 AutoGoo 不只是创建一个 Markdown 文件。Recorder 需要先检索相关页面，优先复用已有项目/概念/经验页；写入任务页后同步更新项目 `index.md` 和 `log.md` 链接，避免产生孤立页面。archive step 的验收必须包含链接关系：任务页链接项目入口、复用知识和关键概念/问题/指标/历史任务页；项目入口和 `log.md` 反向链接任务页；新增经验页链接回任务页或项目入口。这样 Goo-wiki 会形成可通过 Obsidian graph/backlinks 漫游的项目知识图谱。
 
-任何产生可复用内容的命令都必须归档到 Goo-wiki，不能只保留 `.goo/*.json` 或聊天输出。适用范围包括 `goo-brainstorm` 的候选 goals、`goo-research paper` 的论文资料包和深度笔记、`goo-usage-analyse` 的降本报告、`goo-daily-report` 的日报/周报、`goo-improve` 的改进建议，以及 benchmark/plan/start/continue 的计划、指标、执行证据和经验。纯状态查看、纯初始化配置或用户明确要求不归档时除外；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。若 brainstorm 先前未完成归档，`goo-start` / `goo-continue` 在执行 plan 前必须先补归档。
+任何产生可复用内容的命令最终都应归档到 Goo-wiki，不能只保留 `.goo/*.json` 或聊天输出。适用范围包括 `goo-brainstorm` 的候选 goals、`goo-research paper` 的论文资料包和深度笔记、`goo-usage-analyse` 的降本报告、`goo-daily-report` 的日报/周报、`goo-improve` 的改进建议，以及 benchmark/plan/start/continue 的计划、指标、执行证据和经验。纯状态查看、纯初始化配置或用户明确要求不归档时除外；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。注意 `goo-brainstorm` 和 `goo-plan` 是 review-first：先让用户审阅和修改，确认后或执行前再归档最终版。
 
 同一条任务链路的 Goo-wiki/fallback 知识归档默认放在同一个任务目录下，用子目录区分阶段：`brainstorm/` 保存候选目标与选择依据，`plan/` 保存正式 DAG、上下文摘要和计划取舍，`execution/` 保存步骤证据、验证结果和最终经验。`.goo/brainstorm.json.archive.task_archive_root` 与 `.goo/plan.json.archive.task_archive_root` 应指向同一个目录，便于从任一阶段追溯完整链路。
 
 本地 JSON 历史快照仍按状态文件类型分开保存，避免破坏现有恢复约定：旧 `.goo/plan.json` 复制到 `.goo/plans/history/plan-<timestamp>.json`；旧 `.goo/brainstorm.json` 复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。这些 history 目录用于审计和回滚参考，不替代 Goo-wiki/fallback 知识归档。
 
-为减少 token 消耗，归档阶段优先使用 `skills/auto-goo/scripts/wiki-graph-assist.py` 生成紧凑 graph packet。它会扫描配置的 wiki 路径，返回少量候选页面、`[[Wikilink]]`、标题和片段；任务页写好后也可以用它机械更新项目 `index.md` 与 `log.md`。
+为减少 token 消耗，归档阶段优先生成紧凑 graph packet。它会扫描配置的 wiki 路径，返回少量候选页面、`[[Wikilink]]`、标题和片段；任务页写好后也可以机械更新项目 `index.md` 与 `log.md`。
 
-AutoGoo 的 skill 设计遵循渐进披露：`SKILL.md` 只保留触发条件、阶段入口和关键铁律，长规则进入 `references/`，重复机械操作进入 `scripts/`。`check-plugin.sh` 会检查必需 reference、脚本可执行性、脚本语法和 skill frontmatter，避免这些约定只停留在文档里。
+AutoGoo 的 skill 设计遵循渐进披露：`SKILL.md` 只保留触发条件、阶段入口和关键铁律，长规则进入 `references/`，重复机械操作进入 `scripts/`，避免重复机械内容挤占启动上下文。
 
 `goo-init` 会自动创建用户选择的 Goo-wiki 路径，并补齐 `CLAUDE.md`、`log.md`、`wiki/projects/`、`wiki/concepts/`、`wiki/questions/`、`journal/daily/` 和 `journal/weekly/`。运行时只有在 wiki 不可用或不可写时才降级到 `.goo/obsidian/`，并保持本地笔记结构一致。
 
@@ -439,7 +400,7 @@ agents/                     Subagent 定义
 
 ## 版本
 
-当前版本：**v0.2.1**
+当前版本：**v0.2.2**
 
 这是一个 preview 版本，重点覆盖核心插件契约：
 

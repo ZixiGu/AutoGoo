@@ -22,7 +22,7 @@ AutoGoo 的核心交付包括：
 - **执行必留痕**：关键命令、输入、输出、产物路径、验证结果、失败原因和用户决策都要能在 `.goo/logs/`、plan 或 Goo-wiki 中追溯。
 - **优化必有指标**：性能、效率、质量、准确率、成本等优化任务必须先定义指标和基线，再做改动和对比。
 - **归档不是收尾作文**：Goo-wiki 是启动时的记忆层，也是完成后的知识层；归档要记录可复用结论，而不是复制聊天流水。
-- **内容输出必须归档**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令都必须写入 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。适用内容包括 brainstorm 候选目标、usage/token 降本分析、日报/周报、改进建议、benchmark 指标、plan 摘要和执行经验。
+- **内容输出必须归档**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令最终都必须写入 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。`goo-brainstorm` 和 `goo-plan` 先写本地草案并等待用户审阅，确认后或执行前再归档最终候选目标、plan 摘要和关键取舍。
 - **脚本优先，文档同步**：可重复操作优先沉淀到脚本；命令、README、SKILL、reference、示例和校验脚本必须保持一致。
 
 ## 工作边界
@@ -50,7 +50,7 @@ AutoGoo 不应强行覆盖：
 6. **归档沉淀**：将目标、计划、关键证据、产物、验证结果、决策和复用经验写入 Goo-wiki 或 `.goo/obsidian/` fallback。
 7. **自改进**：任务后记录流程问题；高频问题经用户确认后更新对应规范、脚本或 allowlist。
 
-内容输出类命令即使不进入完整执行 DAG，也必须完成归档沉淀。`goo-brainstorm`、`goo-usage-analyse`、`goo-daily-report`、`goo-improve`、`goo-benchmark`、`goo-plan` 等只要产出可复用判断、候选目标、报告、指标、规则或经验，就要写入 Goo-wiki 项目路径并更新项目入口或 `log.md`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback，并在对应 `.goo/*.json` 产物记录 `archive` 字段。
+内容输出类命令即使不进入完整执行 DAG，也必须完成归档沉淀。`goo-usage-analyse`、`goo-daily-report`、`goo-improve`、`goo-benchmark` 等只要产出可复用判断、报告、指标、规则或经验，就要写入 Goo-wiki 项目路径并更新项目入口或 `log.md`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback，并在对应 `.goo/*.json` 产物记录 `archive` 字段。`goo-brainstorm` 和 `goo-plan` 例外：先写本地草案并让用户审阅，用户可能会修改候选目标或 DAG；确认后或进入执行前，再归档最终版候选目标、计划摘要和关键取舍。
 
 ## 状态与产物规范
 
@@ -93,7 +93,7 @@ AutoGoo 的行为不能只改一处。涉及命令、计划 schema、配置、�
 - `skills/auto-goo/scripts/check-plugin.sh`
 - `.claude-plugin/marketplace.json` 或插件注册信息
 
-改动后优先运行结构校验脚本。脚本路径必须通过 Claude Code 的 installed plugin `installPath` 解析；不要在 `CLAUDE.md` 中写展开后的路径解析代码或本机绝对路径。
+改动后优先运行结构校验脚本。脚本路径必须先通过 Claude Code 的 installed plugin `installPath` 解析；如果该路径不存在，再检查 `settings.json` 中是否启用了本地 directory marketplace，并使用该 marketplace 路径。不要在 `CLAUDE.md` 中写展开后的路径解析代码或本机绝对路径。
 
 ## 参考入口
 

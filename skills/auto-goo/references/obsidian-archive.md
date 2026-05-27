@@ -13,15 +13,17 @@ AutoGoo 的 wiki 流程分成两段：
 
 ## 内容输出命令归档
 
-除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的 AutoGoo 命令都必须写入 Goo-wiki，不能只保存在 `.goo/` 或聊天消息中。
+除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的 AutoGoo 命令最终都必须写入 Goo-wiki，不能只保存在 `.goo/` 或聊天消息中。
+
+`goo-brainstorm` 和 `goo-plan` 是 review-first 命令：先写本地 `.goo/brainstorm.json` / `.goo/plan.json`，向用户展示候选目标或计划摘要，允许用户选择、合并、改写、拆分或调整验收标准。用户确认前不要把草案写成 Goo-wiki/fallback 知识归档；确认后或进入执行前，再归档最终版。
 
 必须归档的内容输出包括：
-- `/auto-goo:goo-brainstorm` 的候选 goals、共同前置条件、推荐顺序和关键 wiki 证据。
+- `/auto-goo:goo-brainstorm` 经用户确认后的候选 goals、共同前置条件、推荐顺序和关键 wiki 证据。
 - `/auto-goo:goo-usage-analyse` 的 usage 快照、成本归因、节省机会、候选 workflow rules 和后续动作。
 - `/auto-goo:goo-daily-report` 的日报/周报。
 - `/auto-goo:goo-improve` 的流程摩擦、改进建议和采纳状态。
 - `/auto-goo:goo-benchmark`、`/auto-goo:goo-start`、`/auto-goo:goo-continue` 产生的指标、执行证据、优化经验和最终结论。
-- `/auto-goo:goo-plan` 产生的计划摘要、关键约束和可复用规划经验；完整 `.goo/plan.json` 仍保留为本地状态源。
+- `/auto-goo:goo-plan` 经用户确认后的计划摘要、关键约束和可复用规划经验；完整 `.goo/plan.json` 仍保留为本地状态源。
 
 归档优先写入 `<wiki_dir>/<archive.project_dir>/`，并更新项目入口或 `log.md`。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。命令对应的 `.goo/*.json` 产物应包含 `archive` 字段，记录归档路径、fallback 状态和 `log.md` 是否更新。
 
@@ -62,22 +64,52 @@ auto_goo_root="$(
   python3 - <<'PY' 2>/dev/null || true
 import json
 from pathlib import Path
-registry = Path.home() / ".claude/plugins/installed_plugins.json"
+
+home = Path.home()
+matches = []
+
+def usable(path):
+    return path.exists() and not (path / ".orphaned_at").exists()
+
+registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
-    matches = []
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] == "auto-goo":
-            for entry in entries:
-                path = Path(entry.get("installPath", "")).expanduser()
-                if path.exists() and not (path / ".orphaned_at").exists():
-                    matches.append((entry.get("lastUpdated", ""), str(path)))
-    if matches:
-        print(sorted(matches)[-1][1])
+        if key.split("@", 1)[0] != "auto-goo":
+            continue
+        for entry in entries:
+            path = Path(entry.get("installPath", "")).expanduser()
+            if usable(path):
+                matches.append((entry.get("lastUpdated", ""), str(path)))
+
+if not matches:
+    settings = home / ".claude/settings.json"
+    if settings.exists():
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        enabled = data.get("enabledPlugins", {})
+        marketplaces = data.get("extraKnownMarketplaces", {})
+        for key, is_enabled in enabled.items():
+            if not is_enabled or "@" not in key:
+                continue
+            plugin, marketplace = key.split("@", 1)
+            if plugin != "auto-goo":
+                continue
+            source = marketplaces.get(marketplace, {}).get("source", {})
+            if source.get("source") != "directory":
+                continue
+            path_text = source.get("path")
+            if not path_text:
+                continue
+            path = Path(path_text).expanduser()
+            if usable(path):
+                matches.append(("settings:" + marketplace, str(path)))
+
+if matches:
+    print(sorted(matches)[-1][1])
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo so Claude Code records it in ~/.claude/plugins/installed_plugins.json" >&2
+  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" \

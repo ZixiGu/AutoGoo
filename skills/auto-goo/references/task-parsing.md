@@ -133,7 +133,7 @@
 
 - 简短内容直接进入 `.goo/plan.json.context_digest`。
 - 超过 10 行、包含代码块、prompt、表格或多方案比较时，优先写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md`，并在 `context_artifacts` 引用；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/context/`。
-- 如果 `.goo/plan.json` 已经生成，之后对话又产生新方案、约束、验收标准或用户偏好，`goo-start` / `goo-continue` 默认在执行前做 context sync：先归档旧 plan，短内容追加到 `context_digest.post_plan_updates`，长内容写入 `context_artifacts` 指向的 Markdown。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认。
+- 如果 `.goo/plan.json` 已经生成，之后对话又产生新方案、约束、验收标准或用户偏好，`goo-start` / `goo-continue` 默认在执行前做 context sync：先把旧 plan 复制到 `.goo/plans/history/`，短内容追加到 `context_digest.post_plan_updates`，长内容写入 `context_artifacts` 指向的 Markdown。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认。
 - 如果这段方案具有长期复用价值，在最后的 `归档到 Goo-wiki` step 中明确要求把它沉淀为项目页或经验页。
 - step 描述必须可独立执行；如果删掉聊天记录后 step 仍然不清楚，说明 plan 不合格。
 
@@ -312,7 +312,7 @@ DAG 结构总结：
 - 内容：任务目标、plan 摘要、步骤证据、产物路径、验证结果、关键决策、问题处理和可复用经验
 - 链接：更新任务页、项目入口 `index.md` 和 `log.md` 之间的链接，并把任务页链接到复用的 `wiki_context`、`context_artifacts`、关键概念、问题、指标或历史任务页；新增 concept/lessons/metrics 页面必须链接回任务页或项目入口
 - 验收：archive step 不能只检查“文件存在”。必须检查连接关系存在：任务页 → 项目入口/复用知识/上下文/关键概念，项目入口与 `log.md` → 任务页，新增经验页 → 任务页或项目入口。缺少链接时保持 `status=running` 或 `failed`，补齐后才可 `completed`
-- plan-only 模式只把该步骤写入 `.goo/plan.json`，不实际执行归档
+- plan-only 模式只把该步骤写入 `.goo/plan.json`，不实际执行归档；计划摘要和 brainstorm 候选目标要等用户审阅确认后再归档最终版
 
 ## Plan-only 模式
 
@@ -321,6 +321,7 @@ DAG 结构总结：
 输出要求：
 - 覆盖 `.goo/plan.json` 前，先把旧 plan 原样复制到 `.goo/plans/history/`
 - 写入 `.goo/plan.json`
+- 写入 `review.status="pending_user_review"`，并展示简洁计划摘要、并行组、关键风险和需要用户确认的点
 - 填充 `wiki_context`
 - 填充 `goals[]`；单目标任务也写一个默认 goal，多目标任务必须为每个交付目标写清验收标准和产物
 - 每个步骤包含 `output`，便于后续恢复和验收
@@ -329,10 +330,10 @@ DAG 结构总结：
 - 每个步骤必须包含合法 `subagent`，明确执行角色：`research` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `recorder`。缺失或不合法时执行阶段先补 plan 或创建新角色，不由主 Agent 代执行
 - 每个步骤应包含 `available_skills` 数组，列出本 step 允许或建议 Subagent 使用的 skill 名称；没有额外 skill 时写 `[]`。该字段只用于上下文裁剪和派发提示，不替代 `subagent` 角色，也不授予额外文件/命令权限
 - 最后一步包含默认 Wiki 归档任务，依赖所有非归档叶子步骤
-- 展示简洁计划摘要、并行组、关键风险、需要用户确认的点
 - 不修改业务文件，不运行实现命令，不启动优化循环；允许写入 `.goo/plan.json` 和必要的 `context_artifacts`
+- 用户确认前不要执行 Wiki 归档任务，也不要把 plan 草案或 brainstorm 草案写成 Goo-wiki/fallback 知识归档
 
-用户确认后，可用 `/auto-goo:goo-start <任务>` 执行完整流程，或从已有 `.goo/plan.json` 继续。
+用户确认后，可用 `/auto-goo:goo-start <任务>` 执行完整流程，或从已有 `.goo/plan.json` 继续；此时才归档最终版 brainstorm/plan 摘要。
 
 ## 历史 plan 归档
 
@@ -369,6 +370,7 @@ DAG 结构总结：
 | `context_digest` | 当前对话中已确认方案的持久摘要。没有额外对话信息时也要写 `{"found": false, "decisions": [], "constraints": [], "acceptance_criteria": [], "open_questions": [], "post_plan_updates": []}` |
 | `context_digest.post_plan_updates` | plan 生成后、执行前通过对话产生的增量方案/约束/验收标准。`goo-start` / `goo-continue` 默认同步到这里；长内容用 `artifact` 指向 `context_artifacts` 中的 Markdown |
 | `context_artifacts` | 可选。大段方案、会议纪要、prompt 草案或任务 Markdown 的路径列表，优先位于 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/`；Goo-wiki 不可用时位于 `.goo/obsidian/<project-slug>/context/` |
+| `review` | 用户审阅状态。初次 `goo-plan` 生成后写 `{"status": "pending_user_review", "summary": "..."}`；用户确认后改为 `confirmed`；用户要求修改时保持 `pending_user_review` 并记录修改要求 |
 | `id` | 全局唯一数字 ID |
 | `goal_id` / `goal_ids` | 本步骤服务的目标。单目标 step 用 `goal_id`；共享步骤、统一验证、统一归档用 `goal_ids` |
 | `tier` | 执行轮次，同一轮内无依赖的步骤可并行 |
