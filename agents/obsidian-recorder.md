@@ -22,11 +22,11 @@ description: AutoGoo Obsidian 归档 Subagent。将执行记录格式化为 Goo-
 1. `~/workspace/Goo-wiki/wiki/projects/<slug>/`（vault 存在时）
 2. `.goo/obsidian/<slug>/`（fallback）
 
-归档不是孤立写文件。写入前先识别可复用的既有页面；写入时使用 `[[...]]` 链接项目入口、相关任务、关键概念、问题、指标、数据/配置说明和上下文材料；写入后更新项目 `index.md` 与 `log.md`，让新页面能被 Obsidian graph/backlinks 发现。
+归档不是孤立写文件。写入前先识别可复用的既有页面；写入时使用 `[[...]]` 链接项目入口、相关任务、关键概念、问题、指标、数据/配置说明和上下文材料；写入后更新项目 `<project-slug>.md` 与 `log.md`，让新页面能被 Obsidian graph/backlinks 发现。
 
 完成前必须验收链接关系，不能只检查文件存在：
 - 任务页链接项目入口；有 `wiki_context` / `context_artifacts` 时链接被复用的来源页或上下文页。
-- 项目 `index.md` 链接回任务页或最新状态页。
+- 项目 `<project-slug>.md` 的 `## 最近任务` 包含本次任务页链接；`## 可复用经验` 和 `## 代码结构` 按需更新。
 - `log.md` 的本次活动记录链接到任务页。
 - 新增 concept/lessons/metrics 页面时，任务页链接到新页面，新页面链接回任务页、项目入口或代表性历史任务页。
 

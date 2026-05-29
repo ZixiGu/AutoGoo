@@ -44,7 +44,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
 9. 按优先级解析 wiki 路径：`AUTO_GOO_WIKI_DIR` → `.goo/config.json.wiki_dir` → `~/.auto-goo/config.json.wiki_dir` → `~/workspace/Goo-wiki`。
 10. 确保 Goo-wiki 路径存在：如果用户确认或输入的 `<wiki_dir>` 不存在，脚本必须自动创建该目录，并补齐 `CLAUDE.md`、`log.md`、`wiki/projects/`、`wiki/concepts/`、`wiki/questions/`、`journal/daily/`、`journal/weekly/` 基础结构；不得因为路径不存在而改用 `.goo/obsidian/` fallback。
 11. 如果是 `--project`，确定 `project_slug`：默认用项目根目录名，可用 `--project-slug <slug>` 覆盖；创建或复用 `<wiki_dir>/wiki/projects/<project_slug>/` 作为项目归档根路径。
-12. 如果项目是 Git repo，读取 `origin` remote（没有 origin 时读取第一个 remote），写入 `.goo/config.json.archive.git_remote_url`，并同步到 `<wiki_dir>/wiki/projects/<project_slug>/index.md` 的项目元信息块。
+12. 如果项目是 Git repo，读取 `origin` remote（没有 origin 时读取第一个 remote），写入 `.goo/config.json.archive.git_remote_url`，并同步到 `<wiki_dir>/wiki/projects/<project_slug>/<project_slug>.md` 的项目元信息块。
 13. 写入目标 config，默认结构参考 `skills/auto-goo/templates/config.example.json`；项目级配置必须记录 `archive.project_slug`、`archive.project_dir` 和 `archive.fallback_project_dir`；有远程服务器时写入 `servers`。
 14. 如果是 `--project` 且 Goo-wiki 可用，必须询问用户是否在项目 `CLAUDE.md` 中加入或更新 AutoGoo marker 包裹的项目归档原则和要求；只改该段，不覆盖用户已有项目指引。非交互场景默认不写，需传 `--update-claude-md` 明确写入；用户传 `--skip-claude-md` 时跳过。
 15. 展示推荐 SessionStart hooks，但不要自动覆盖 `.claude/settings.json`，除非用户明确要求。
@@ -200,7 +200,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
       "goal_ids": ["g1"],
       "tier": 2,
       "name": "归档到 Goo-wiki",
-      "description": "将任务目标、计划、关键证据、产物路径、验证结果、决策和可复用经验归档到 Goo-wiki；必须补齐任务页、项目入口 index.md、log.md、复用知识页和新增经验页之间的 Wikilink/backlink 关系，防止 Obsidian 连接图谱断裂；Goo-wiki 不可用时写入 .goo/obsidian/ fallback",
+      "description": "将任务目标、计划、关键证据、产物路径、验证结果、决策和可复用经验归档到 Goo-wiki；必须补齐任务页、项目入口 <project-slug>.md、log.md、复用知识页和新增经验页之间的 Wikilink/backlink 关系，防止 Obsidian 连接图谱断裂；Goo-wiki 不可用时写入 .goo/obsidian/ fallback",
       "depends_on": [1],
       "type": "archive",
       "subagent": "recorder",
@@ -211,7 +211,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
       "outputs": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
       "allowed_read_paths": [".goo/plan.json", ".goo/logs/", ".goo/artifacts/"],
       "allowed_write_paths": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
-      "validation": "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts 和关键概念/问题/指标/历史任务页；项目 index.md 与 log.md 反向链接任务页；新增 concept/lessons/metrics 页也链接回任务页或项目入口；记录产物路径、验证结果和可复用经验",
+      "validation": "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts 和关键概念/问题/指标/历史任务页；项目 <project-slug>.md 与 log.md 反向链接任务页；新增 concept/lessons/metrics 页也链接回任务页或项目入口；记录产物路径、验证结果和可复用经验",
       "risk_level": "low",
       "requires_user_confirm": false,
       "agent_id": null,
@@ -431,8 +431,8 @@ Subagent prompt 模板（exec / optimize / eval 三种变体）、上下文传�
 - 内容输出对应的 `.goo/*.json` 产物应包含 `archive` 字段，记录归档路径、fallback 状态和 `log.md` 是否更新。
 - 如果 Goo-wiki vault 不存在且 `.goo/obsidian/` 也不必要（临时项目），跳过归档，仅保留 `.goo/logs/` 日志
 - 如果项目是 Git repo，归档到项目页或任务总览时必须记录 git remote 地址；优先使用 `.goo/config.json.archive.git_remote_url`
-- 归档必须维护 Markdown 关联图谱：写入前检索相关项目页、概念页、问题页、周报、历史任务页和 `context_artifacts`；写入任务页时添加高价值 `[[Wikilink]]`；写入后更新项目入口 `index.md` 和 `log.md`，避免新页面孤立
-- 归档 step 的完成条件必须包含链接验收：任务页链接项目入口、复用的 `wiki_context` / `context_artifacts` 和关键概念/问题/指标/历史任务页；项目 `index.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口。缺少这些连接时不得把 archive step 标记为 completed。
+- 归档必须维护 Markdown 关联图谱：写入前检索相关项目页、概念页、问题页、周报、历史任务页和 `context_artifacts`；写入任务页时添加高价值 `[[Wikilink]]`；写入后更新项目入口 `<project-slug>.md`（维护 `## 最近任务`、`## 可复用经验`、`## 代码结构` 等小节的双向链接）和 `log.md`，避免新页面孤立
+- 归档 step 的完成条件必须包含链接验收：任务页链接项目入口、复用的 `wiki_context` / `context_artifacts` 和关键概念/问题/指标/历史任务页；项目 `<project-slug>.md` 的 `## 最近任务` 包含本次任务页链接，`## 可复用经验` 和 `## 代码结构` 按需更新；`log.md` 反向链接任务页；新增 lessons/metrics 页面链接回任务页或项目入口。缺少这些连接时不得把 archive step 标记为 completed。
 - 为节省 token，Recorder 优先在解析 AutoGoo 根目录后调用 `skills/auto-goo/scripts/wiki-graph-assist.py` 生成紧凑 graph packet，并在任务页写好后用该脚本的 `--update-index --append-log` 维护项目入口和活动日志；只有候选链接不足时才读取完整 Markdown
 - YAML frontmatter 规范、wikilink 格式、log.md 追加格式 → `references/obsidian-archive.md`
 

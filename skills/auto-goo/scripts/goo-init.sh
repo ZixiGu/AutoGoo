@@ -442,7 +442,7 @@ if [[ "$SCOPE" == "project" && "$WIKI_READY" -eq 1 ]]; then
   mkdir -p "$WIKI_DIR_EXPANDED/$PROJECT_ARCHIVE_DIR"
   echo "  archive root: $WIKI_DIR_EXPANDED/$PROJECT_ARCHIVE_DIR"
   if [[ -n "$GIT_REMOTE_URL" ]]; then
-    python3 - "$WIKI_DIR_EXPANDED/$PROJECT_ARCHIVE_DIR/index.md" "$PROJECT_SLUG" "$ROOT" "$GIT_REMOTE_URL" <<'PY'
+    python3 - "$WIKI_DIR_EXPANDED/$PROJECT_ARCHIVE_DIR/$PROJECT_SLUG.md" "$PROJECT_SLUG" "$ROOT" "$GIT_REMOTE_URL" <<'PY'
 import sys
 from pathlib import Path
 
@@ -465,7 +465,21 @@ block = f"""{begin}
 if target.exists():
     text = target.read_text(encoding="utf-8")
 else:
-    text = f"# {project_slug}\n"
+    text = f"""# {project_slug}
+
+> 项目描述待补充：请在此处填写项目的背景、目标和核心功能说明。
+
+## 项目说明
+
+（请填写）
+
+## 最近任务
+
+## 可复用经验
+
+## 代码结构
+
+"""
 
 if begin in text and end in text:
     prefix, rest = text.split(begin, 1)
@@ -476,7 +490,7 @@ else:
 
 target.write_text(new_text, encoding="utf-8")
 PY
-    echo "  project page: updated git repository in $WIKI_DIR_EXPANDED/$PROJECT_ARCHIVE_DIR/index.md"
+    echo "  project page: updated git repository in $WIKI_DIR_EXPANDED/$PROJECT_ARCHIVE_DIR/$PROJECT_SLUG.md"
   fi
 fi
 
@@ -672,7 +686,7 @@ if wiki_ready:
 - 任何产生可复用内容的命令最终都必须归档到 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。brainstorm 候选目标和 plan 摘要必须先给用户审阅，确认后或进入执行前再归档最终版；usage/token 降本分析、日报/周报、改进建议、benchmark 指标和执行经验按命令规则归档。
 - 用户要求日报、周报、总结今天或调用 `/auto-goo:goo-daily-report` 时，必须把 Claude Code / Codex 会话沉淀到 Goo-wiki `journal/daily/`，并更新 `log.md`；同日日报已存在时只追加新增内容，不整体覆盖已有人工整理。
 - Goo-wiki 可用时优先写入 `{wiki_dir}/{project_archive_dir}/` 并追加 `Goo-wiki/log.md`；不可用时写入 `{fallback_project_dir}` 作为本地 fallback。
-- 归档完成前必须补齐并验收 Markdown 连接图谱：任务页链接项目入口、复用的 `wiki_context` / `context_artifacts` 和关键概念/问题/指标/历史任务页；项目 `index.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口。缺少这些链接时不得把 archive step 标记为 completed。
+- 归档完成前必须补齐并验收 Markdown 连接图谱：任务页链接项目入口、复用的 `wiki_context` / `context_artifacts` 和关键概念/问题/指标/历史任务页；项目 `<project-slug>.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口。缺少这些链接时不得把 archive step 标记为 completed。
 - 不把归档当作事后报告；归档内容要能支撑下一次任务的召回、规划和复用。
 """
 

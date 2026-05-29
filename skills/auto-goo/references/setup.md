@@ -112,7 +112,7 @@ bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh"
 - `archive.fallback_project_dir`，例如 `.goo/obsidian/<project-slug>`
 - `archive.git_remote_url`（仅当项目是 Git repo 且能读取 remote 时）
 
-如果当前项目是 Git repo，初始化时还会读取 `origin` remote（没有 origin 时读取第一个 remote），并将地址写入 `<wiki_dir>/wiki/projects/<project-slug>/index.md` 的 `AUTO-GOO-PROJECT-META` marker 块。该信息用于后续任务归档、迁移、复现和项目溯源；Recorder 写项目页或任务总览时也应保留该 git 地址。
+如果当前项目是 Git repo，初始化时还会读取 `origin` remote（没有 origin 时读取第一个 remote），并将地址写入 `<wiki_dir>/wiki/projects/<project-slug>/<project-slug>.md` 的 `AUTO-GOO-PROJECT-META` marker 块。该信息用于后续任务归档、迁移、复现和项目溯源；Recorder 写项目页或任务总览时也应保留该 git 地址。
 
 Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可用时再写入 `archive.fallback_project_dir`。
 
@@ -127,7 +127,7 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 - 日报/周报请求通过 `/auto-goo:goo-daily-report` 沉淀到 Goo-wiki `journal/daily/` 并更新 `log.md`；同日日报已存在时只追加新增内容，不整体覆盖已有人工整理
 - 如果项目是 Git repo，将 git remote 地址写入 Goo-wiki 项目页或任务总览笔记
 - Goo-wiki 不可用时写入 `.goo/obsidian/` fallback
-- 归档完成前必须验收 Markdown 连接图谱：任务页链接项目入口、复用知识、上下文材料和关键概念/问题/指标/历史任务页；项目 `index.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口
+- 归档完成前必须验收 Markdown 连接图谱：任务页链接项目入口、复用知识、上下文材料和关键概念/问题/指标/历史任务页；项目 `<project-slug>.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口
 - 归档内容必须服务下一次任务复用，而不是只做事后报告
 
 该更新是幂等的，只替换 AutoGoo marker 内的内容，不覆盖项目已有指引。非交互场景默认不写，需传 `--update-claude-md` 明确写入；需要跳过时传 `--skip-claude-md`。

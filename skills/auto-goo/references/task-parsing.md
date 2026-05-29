@@ -277,7 +277,7 @@ DAG 结构总结：
       "goal_ids": ["g1"],
       "tier": 2,
       "name": "归档到 Goo-wiki",
-      "description": "将任务目标、计划、关键证据、产物路径、验证结果、决策和可复用经验归档到 Goo-wiki；必须补齐任务页、项目入口 index.md、log.md、复用知识页和新增经验页之间的 Wikilink/backlink 关系，防止 Obsidian 连接图谱断裂；Goo-wiki 不可用时写入 .goo/obsidian/ fallback",
+      "description": "将任务目标、计划、关键证据、产物路径、验证结果、决策和可复用经验归档到 Goo-wiki；必须补齐任务页、项目入口 <project-slug>.md、log.md、复用知识页和新增经验页之间的 Wikilink/backlink 关系，防止 Obsidian 连接图谱断裂；Goo-wiki 不可用时写入 .goo/obsidian/ fallback",
       "depends_on": [1],
       "type": "archive",
       "subagent": "recorder",
@@ -289,7 +289,7 @@ DAG 结构总结：
       "outputs": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
       "allowed_read_paths": [".goo/plan.json", ".goo/logs/", ".goo/artifacts/"],
       "allowed_write_paths": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
-      "validation": "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts 和关键概念/问题/指标/历史任务页；项目 index.md 与 log.md 反向链接任务页；新增 concept/lessons/metrics 页也链接回任务页或项目入口；记录产物路径、验证结果和可复用经验",
+      "validation": "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts 和关键概念/问题/指标/历史任务页；项目 <project-slug>.md 与 log.md 反向链接任务页；新增 concept/lessons/metrics 页也链接回任务页或项目入口；记录产物路径、验证结果和可复用经验",
       "risk_level": "low",
       "requires_user_confirm": false,
       "agent_id": null,
@@ -310,7 +310,7 @@ DAG 结构总结：
 - 依赖关系：依赖所有非归档叶子步骤，确保实现、验证、报告等最终交付完成后再归档
 - 输出：Goo-wiki 可用时写入 `Goo-wiki/wiki/projects/<project-slug>/`，不可用时写入 `.goo/obsidian/<project-slug>/`
 - 内容：任务目标、plan 摘要、步骤证据、产物路径、验证结果、关键决策、问题处理和可复用经验
-- 链接：更新任务页、项目入口 `index.md` 和 `log.md` 之间的链接，并把任务页链接到复用的 `wiki_context`、`context_artifacts`、关键概念、问题、指标或历史任务页；新增 concept/lessons/metrics 页面必须链接回任务页或项目入口
+- 链接：更新任务页、项目入口 `<project-slug>.md` 和 `log.md` 之间的链接，并把任务页链接到复用的 `wiki_context`、`context_artifacts`、关键概念、问题、指标或历史任务页；新增 concept/lessons/metrics 页面必须链接回任务页或项目入口
 - 验收：archive step 不能只检查“文件存在”。必须检查连接关系存在：任务页 → 项目入口/复用知识/上下文/关键概念，项目入口与 `log.md` → 任务页，新增经验页 → 任务页或项目入口。缺少链接时保持 `status=running` 或 `failed`，补齐后才可 `completed`
 - plan-only 模式只把该步骤写入 `.goo/plan.json`，不实际执行归档；计划摘要和 brainstorm 候选目标要等用户审阅确认后再归档最终版
 

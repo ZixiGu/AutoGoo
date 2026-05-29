@@ -1,6 +1,6 @@
 # AutoGoo
 
-[![Release](https://img.shields.io/badge/release-v0.2.2-blue)](#版本)
+[![Release](https://img.shields.io/badge/release-v0.2.3-blue)](#版本)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-black)](#安装)
 [![Status](https://img.shields.io/badge/status-preview-orange)](#版本)
@@ -238,7 +238,7 @@ AutoGoo 把 Goo-wiki 当作项目记忆层，而不只是最终报告目录。�
 1. **规划前召回**：读取与任务相关的项目页、概念笔记、周报和 `log.md`，提取可复用约束、失败经验、已验证命令、数据位置、指标口径和命名规范。
 2. **执行后归档**：把最终任务笔记、步骤证据、指标结果、关键决策和后续经验写回 Goo-wiki，同时维护任务页、项目入口、概念页、问题页、周报和 `log.md` 之间的 `[[Wikilink]]`，供未来 AutoGoo 任务复用。
 
-归档时 AutoGoo 不只是创建一个 Markdown 文件。Recorder 需要先检索相关页面，优先复用已有项目/概念/经验页；写入任务页后同步更新项目 `index.md` 和 `log.md` 链接，避免产生孤立页面。archive step 的验收必须包含链接关系：任务页链接项目入口、复用知识和关键概念/问题/指标/历史任务页；项目入口和 `log.md` 反向链接任务页；新增经验页链接回任务页或项目入口。这样 Goo-wiki 会形成可通过 Obsidian graph/backlinks 漫游的项目知识图谱。
+归档时 AutoGoo 不只是创建一个 Markdown 文件。Recorder 需要先检索相关页面，优先复用已有项目/概念/经验页；写入任务页后同步更新项目 `<project-slug>.md` 和 `log.md` 链接，避免产生孤立页面。archive step 的验收必须包含链接关系：任务页链接项目入口、复用知识和关键概念/问题/指标/历史任务页；项目入口和 `log.md` 反向链接任务页；新增经验页链接回任务页或项目入口。这样 Goo-wiki 会形成可通过 Obsidian graph/backlinks 漫游的项目知识图谱。
 
 任何产生可复用内容的命令最终都应归档到 Goo-wiki，不能只保留 `.goo/*.json` 或聊天输出。适用范围包括 `goo-brainstorm` 的候选 goals、`goo-research paper` 的论文资料包和深度笔记、`goo-usage-analyse` 的降本报告、`goo-daily-report` 的日报/周报、`goo-improve` 的改进建议，以及 benchmark/plan/start/continue 的计划、指标、执行证据和经验。纯状态查看、纯初始化配置或用户明确要求不归档时除外；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。注意 `goo-brainstorm` 和 `goo-plan` 是 review-first：先让用户审阅和修改，确认后或执行前再归档最终版。
 
@@ -246,7 +246,7 @@ AutoGoo 把 Goo-wiki 当作项目记忆层，而不只是最终报告目录。�
 
 本地 JSON 历史快照仍按状态文件类型分开保存，避免破坏现有恢复约定：旧 `.goo/plan.json` 复制到 `.goo/plans/history/plan-<timestamp>.json`；旧 `.goo/brainstorm.json` 复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。这些 history 目录用于审计和回滚参考，不替代 Goo-wiki/fallback 知识归档。
 
-为减少 token 消耗，归档阶段优先生成紧凑 graph packet。它会扫描配置的 wiki 路径，返回少量候选页面、`[[Wikilink]]`、标题和片段；任务页写好后也可以机械更新项目 `index.md` 与 `log.md`。
+为减少 token 消耗，归档阶段优先生成紧凑 graph packet。它会扫描配置的 wiki 路径，返回少量候选页面、`[[Wikilink]]`、标题和片段；任务页写好后也可以机械更新项目 `<project-slug>.md` 与 `log.md`。
 
 AutoGoo 的 skill 设计遵循渐进披露：`SKILL.md` 只保留触发条件、阶段入口和关键铁律，长规则进入 `references/`，重复机械操作进入 `scripts/`，避免重复机械内容挤占启动上下文。
 
@@ -400,7 +400,7 @@ agents/                     Subagent 定义
 
 ## 版本
 
-当前版本：**v0.2.2**
+当前版本：**v0.2.3**
 
 这是一个 preview 版本，重点覆盖核心插件契约：
 

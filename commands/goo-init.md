@@ -249,7 +249,7 @@ Agent 交互流程：
 5. **配置远程服务器** — Wiki 路径配置后，询问用户是否有远程服务器需要配置；用户确认后逐个交互输入服务器类型（cpu/gpu）、IP、端口（默认 22）、用户名、用途说明和密码（密码隐藏输入）。密码存储在独立的 secrets 文件中（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限设为 `chmod 600`；项目级 secrets 文件自动加入 `.gitignore`。config 中只记录 `servers[].{ip, port, user, type, purpose, secrets_file}`，不存储密码。支持配置多个服务器。配置服务器后必须检查本机是否安装 `sshpass`；缺失时提醒用户运行 `sudo apt install sshpass`，但不中断初始化。
 6. **确保 Goo-wiki 存在** — 如果用户确认或输入的 `<wiki_dir>` 不存在，自动创建该目录，并补齐 `CLAUDE.md`、`log.md`、`wiki/projects/`、`wiki/concepts/`、`wiki/questions/`、`journal/daily/`、`journal/weekly/` 基础结构；不得因为路径不存在而改用 `.goo/obsidian/` fallback
 7. **确定项目归档根路径** — `--project` 时默认用项目根目录名生成 `project_slug`，也可传 `--project-slug <slug>`；创建 `<wiki_dir>/wiki/projects/<project_slug>/`
-8. **记录 Git 地址** — `--project` 且当前项目是 Git repo 时，读取 `origin` remote（没有 origin 时读取第一个 remote），写入 `.goo/config.json.archive.git_remote_url`，并同步到 Goo-wiki 项目页 `wiki/projects/<project_slug>/index.md`
+8. **记录 Git 地址** — `--project` 且当前项目是 Git repo 时，读取 `origin` remote（没有 origin 时读取第一个 remote），写入 `.goo/config.json.archive.git_remote_url`，并同步到 Goo-wiki 项目页 `wiki/projects/<project_slug>/<project_slug>.md`
 9. **写入配置** — 生成目标配置文件；项目级配置写入 `archive.project_slug`、`archive.project_dir`、`archive.fallback_project_dir`，以及可用时的 `archive.git_remote_url`；有算力服务器时写入 `compute_servers`
 10. **项目归档原则** — `--project` 且 Goo-wiki 可用时，询问用户是否幂等更新项目 `CLAUDE.md`，加入 Goo-wiki 召回与归档要求；非交互场景默认不写，需传 `--update-claude-md` 明确写入；如需明确跳过，传 `--skip-claude-md`
 11. **提示 hooks** — 展示推荐的 `.claude/settings.json` SessionStart hooks，由用户决定是否复制/合并
@@ -316,7 +316,7 @@ Agent 交互流程：
 - 不覆盖已有 `~/.auto-goo/config.json`，除非用户明确确认
 - 不删除任何已有 `.goo/` 内容
 - `--project` 且 Goo-wiki 可用时，必须创建或复用 `<wiki_dir>/wiki/projects/<project_slug>/` 作为项目归档根路径
-- `--project` 且项目是 Git repo 时，必须把 git remote 地址写入 `.goo/config.json.archive.git_remote_url`；Goo-wiki 可用时同步写入 `<wiki_dir>/wiki/projects/<project_slug>/index.md`
+- `--project` 且项目是 Git repo 时，必须把 git remote 地址写入 `.goo/config.json.archive.git_remote_url`；Goo-wiki 可用时同步写入 `<wiki_dir>/wiki/projects/<project_slug>/<project_slug>.md`
 - `--project` 且 Goo-wiki 可用时，必须先询问用户是否更新 `CLAUDE.md`；用户同意后只追加或更新由 AutoGoo marker 包裹的归档原则段落，不重写其他内容
 - 初始化交互由主 Agent 负责；不得派发 Subagent 或用临时代码替代脚本写配置
 - 配置完成后，脚本不得尝试连接服务器（不做 ssh、ping、端口探测等网络连接）；仅写入配置文件

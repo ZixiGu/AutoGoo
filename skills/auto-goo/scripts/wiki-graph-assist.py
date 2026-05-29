@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build compact Goo-wiki link context and optionally update index/log.
+"""Build compact Goo-wiki link context and optionally update project page/log.
 
 This helper keeps common archive graph work out of the LLM context window:
 it scans only Markdown metadata/snippets, ranks related pages, prints a small
@@ -107,15 +107,13 @@ def score_page(rel: str, title: str, text: str, query_terms: set[str], project_s
         count = low_text.count(term)
         if count:
             score += min(count, 6)
-    if rel.endswith("/index.md"):
-        score += 4
+    # Boost score for project entry pages (named after project slug, not index.md)
     return score
 
 
 def wikilink(rel: str, title: str | None = None) -> str:
     target = rel[:-3] if rel.endswith(".md") else rel
-    if target.endswith("/index"):
-        target = target[:-6]
+    # No longer stripping /index — project entry is now <slug>.md
     if title:
         return f"[[{target}|{title}]]"
     return f"[[{target}]]"
@@ -226,7 +224,7 @@ def render_markdown(
             "",
             "## Recorder Checklist",
             "",
-            "- Link the task page back to the project index.",
+            "- Link the task page back to the project entry page.",
             "- Link reused wiki_context/context_artifacts from the task page.",
             "- Update project index and log.md after writing the task page.",
             "- Keep only high-value semantic links; do not link every repeated word.",
@@ -263,7 +261,7 @@ def main() -> int:
         project_dir = args.project_dir or (f"wiki/projects/{args.project_slug}" if args.project_slug else None)
         if not project_dir:
             raise SystemExit("--update-index requires --project-dir or --project-slug")
-        index_path = wiki_dir / project_dir / "index.md"
+        index_path = (wiki_dir / project_dir / f"{args.project_slug}.md") if args.project_slug else (wiki_dir / project_dir / "index.md")
         if replace_or_append_recent(index_path, wikilink(args.task_page, title), title, date.today().isoformat()):
             changed.append(index_path.relative_to(wiki_dir).as_posix())
 
