@@ -1,0 +1,159 @@
+<svg width="1280" height="760" viewBox="0 0 1280 760" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">AutoGoo subagent architecture</title>
+  <desc id="desc">AutoGoo main agent dispatches seven role agents: researcher, implementer, optimizer, evaluator, reviewer, auditor, and recorder. Task agents are grouped by department paths.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#020617"/>
+      <stop offset="0.55" stop-color="#07111F"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="main" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#112A46"/>
+      <stop offset="1" stop-color="#0B1324"/>
+    </linearGradient>
+    <linearGradient id="role" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#0F253E"/>
+      <stop offset="1" stop-color="#08111F"/>
+    </linearGradient>
+    <linearGradient id="task" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#082F49"/>
+      <stop offset="1" stop-color="#0F172A"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" stroke="#1E3A5F" stroke-width="1" stroke-opacity="0.48"/>
+      <path d="M20 0V40M0 20H40" stroke="#164E63" stroke-width="0.5" stroke-opacity="0.25"/>
+    </pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#020617" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="760" rx="28" fill="url(#bg)"/>
+  <rect width="1280" height="760" fill="url(#grid)" opacity="0.72"/>
+
+  <g font-family="Inter, Arial, sans-serif">
+    <text x="64" y="72" fill="#F8FAFC" font-size="34" font-weight="800">AutoGoo Subagent Architecture</text>
+    <text x="64" y="104" fill="#A5F3FC" font-size="17">Role agents stay stable in plan.json; task agents are organized by department path.</text>
+    <text x="978" y="72" fill="#67E8F9" font-size="14" font-weight="700">agents/roles + agents/tasks</text>
+    <text x="978" y="98" fill="#94A3B8" font-size="13">subagent = role, task_agent = profile</text>
+  </g>
+
+  <g filter="url(#shadow)" font-family="Inter, Arial, sans-serif">
+    <rect x="424" y="134" width="432" height="86" rx="18" fill="url(#main)" stroke="#22D3EE" stroke-width="1.5"/>
+    <text x="640" y="169" text-anchor="middle" fill="#F8FAFC" font-size="25" font-weight="800">Main Agent</text>
+    <text x="640" y="197" text-anchor="middle" fill="#BAE6FD" font-size="14">目标拆解 · DAG 调度 · 上下文裁剪 · 最终验收</text>
+  </g>
+
+  <g stroke="#38BDF8" stroke-width="2" stroke-linecap="round" opacity="0.8">
+    <path d="M640 220V252"/>
+    <path d="M640 252H130V286"/>
+    <path d="M640 252H300V286"/>
+    <path d="M640 252H470V286"/>
+    <path d="M640 252H640V286"/>
+    <path d="M640 252H810V286"/>
+    <path d="M640 252H980V286"/>
+    <path d="M640 252H1150V286"/>
+  </g>
+
+  <g font-family="Inter, Arial, sans-serif" filter="url(#shadow)">
+    <g>
+      <rect x="42" y="286" width="176" height="90" rx="14" fill="url(#role)" stroke="#38BDF8"/>
+      <text x="130" y="320" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="800">researcher</text>
+      <text x="130" y="346" text-anchor="middle" fill="#BAE6FD" font-size="13">research</text>
+    </g>
+    <g>
+      <rect x="212" y="286" width="176" height="90" rx="14" fill="url(#role)" stroke="#34D399"/>
+      <text x="300" y="320" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="800">implementer</text>
+      <text x="300" y="346" text-anchor="middle" fill="#BBF7D0" font-size="13">exec</text>
+    </g>
+    <g>
+      <rect x="382" y="286" width="176" height="90" rx="14" fill="url(#role)" stroke="#FBBF24"/>
+      <text x="470" y="320" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="800">optimizer</text>
+      <text x="470" y="346" text-anchor="middle" fill="#FEF3C7" font-size="13">optimize</text>
+    </g>
+    <g>
+      <rect x="552" y="286" width="176" height="90" rx="14" fill="url(#role)" stroke="#A78BFA"/>
+      <text x="640" y="320" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="800">evaluator</text>
+      <text x="640" y="346" text-anchor="middle" fill="#DDD6FE" font-size="13">eval</text>
+    </g>
+    <g>
+      <rect x="722" y="286" width="176" height="90" rx="14" fill="url(#role)" stroke="#F472B6"/>
+      <text x="810" y="320" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="800">reviewer</text>
+      <text x="810" y="346" text-anchor="middle" fill="#FBCFE8" font-size="13">review</text>
+    </g>
+    <g>
+      <rect x="892" y="286" width="176" height="90" rx="14" fill="url(#role)" stroke="#EF4444"/>
+      <text x="980" y="320" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="800">auditor</text>
+      <text x="980" y="346" text-anchor="middle" fill="#FECACA" font-size="13">audit</text>
+    </g>
+    <g>
+      <rect x="1062" y="286" width="176" height="90" rx="14" fill="url(#role)" stroke="#22D3EE"/>
+      <text x="1150" y="320" text-anchor="middle" fill="#F8FAFC" font-size="18" font-weight="800">recorder</text>
+      <text x="1150" y="346" text-anchor="middle" fill="#A5F3FC" font-size="13">archive</text>
+    </g>
+  </g>
+
+  <g font-family="Inter, Arial, sans-serif" filter="url(#shadow)">
+    <g>
+      <rect x="42" y="418" width="176" height="158" rx="14" fill="url(#task)" stroke="#164E63"/>
+      <text x="60" y="448" fill="#E0F2FE" font-size="13" font-weight="800">tasks/research</text>
+      <text x="60" y="478" fill="#CBD5E1" font-size="12">codebase-scout</text>
+      <text x="60" y="502" fill="#CBD5E1" font-size="12">document-analyst</text>
+      <text x="60" y="526" fill="#CBD5E1" font-size="12">domain-researcher</text>
+      <text x="60" y="550" fill="#CBD5E1" font-size="12">requirement-analyst</text>
+    </g>
+    <g>
+      <rect x="212" y="418" width="176" height="158" rx="14" fill="url(#task)" stroke="#14532D"/>
+      <text x="230" y="448" fill="#DCFCE7" font-size="13" font-weight="800">tasks/implementation</text>
+      <text x="230" y="478" fill="#CBD5E1" font-size="12">feature-builder</text>
+      <text x="230" y="502" fill="#CBD5E1" font-size="12">bug-fixer</text>
+      <text x="230" y="526" fill="#CBD5E1" font-size="12">refactorer</text>
+      <text x="230" y="550" fill="#CBD5E1" font-size="12">script-writer</text>
+    </g>
+    <g>
+      <rect x="382" y="418" width="176" height="158" rx="14" fill="url(#task)" stroke="#713F12"/>
+      <text x="400" y="448" fill="#FEF9C3" font-size="13" font-weight="800">tasks/optimization</text>
+      <text x="400" y="478" fill="#CBD5E1" font-size="12">profiler</text>
+      <text x="400" y="502" fill="#CBD5E1" font-size="12">performance-optimizer</text>
+      <text x="400" y="526" fill="#CBD5E1" font-size="12">token-cost-optimizer</text>
+      <text x="400" y="550" fill="#CBD5E1" font-size="12">workflow-optimizer</text>
+    </g>
+    <g>
+      <rect x="552" y="418" width="176" height="158" rx="14" fill="url(#task)" stroke="#4C1D95"/>
+      <text x="570" y="448" fill="#EDE9FE" font-size="13" font-weight="800">tasks/evaluation</text>
+      <text x="570" y="478" fill="#CBD5E1" font-size="12">test-runner</text>
+      <text x="570" y="502" fill="#CBD5E1" font-size="12">benchmark-runner</text>
+      <text x="570" y="526" fill="#CBD5E1" font-size="12">data-validator</text>
+      <text x="570" y="550" fill="#CBD5E1" font-size="12">acceptance-checker</text>
+    </g>
+    <g>
+      <rect x="722" y="418" width="176" height="158" rx="14" fill="url(#task)" stroke="#831843"/>
+      <text x="740" y="448" fill="#FCE7F3" font-size="13" font-weight="800">tasks/review</text>
+      <text x="740" y="478" fill="#CBD5E1" font-size="12">code-reviewer</text>
+      <text x="740" y="502" fill="#CBD5E1" font-size="12">api-contract-reviewer</text>
+      <text x="740" y="526" fill="#CBD5E1" font-size="12">doc-reviewer</text>
+    </g>
+    <g>
+      <rect x="892" y="418" width="176" height="158" rx="14" fill="url(#task)" stroke="#7F1D1D"/>
+      <text x="910" y="448" fill="#FEE2E2" font-size="13" font-weight="800">tasks/audit</text>
+      <text x="910" y="478" fill="#CBD5E1" font-size="12">security-checker</text>
+      <text x="910" y="502" fill="#CBD5E1" font-size="12">compliance-auditor</text>
+      <text x="910" y="526" fill="#CBD5E1" font-size="12">evidence-auditor</text>
+      <text x="910" y="550" fill="#CBD5E1" font-size="12">traceability-auditor</text>
+    </g>
+    <g>
+      <rect x="1062" y="418" width="176" height="158" rx="14" fill="url(#task)" stroke="#155E75"/>
+      <text x="1080" y="448" fill="#CFFAFE" font-size="13" font-weight="800">tasks/recording</text>
+      <text x="1080" y="478" fill="#CBD5E1" font-size="12">obsidian-recorder</text>
+      <text x="1080" y="502" fill="#CBD5E1" font-size="12">wiki-curator</text>
+      <text x="1080" y="526" fill="#CBD5E1" font-size="12">execution-summarizer</text>
+      <text x="1080" y="550" fill="#CBD5E1" font-size="12">lesson-extractor</text>
+    </g>
+  </g>
+
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="232" y="626" width="816" height="54" rx="14" fill="#061827" stroke="#0E7490"/>
+    <text x="640" y="649" text-anchor="middle" fill="#A5F3FC" font-size="15" font-weight="800">Path contract</text>
+    <text x="640" y="671" text-anchor="middle" fill="#CBD5E1" font-size="13">agents/roles/*.md for stable subagent roles; agents/tasks/&lt;department&gt;/*.md for task_agent profiles</text>
+  </g>
+</svg>

@@ -135,8 +135,9 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - 每个步骤必须包含 `output`，便于后续 `/auto-goo:goo-continue` 恢复
 - 每个非归档步骤必须包含 `goal_id` 或 `goal_ids`；共享准备、统一验证或统一归档步骤使用 `goal_ids`
 - 每个步骤应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths` 和 `validation`，让执行阶段不依赖聊天记录猜测读写范围和验收方式
-- 每个步骤必须包含 `subagent`，明确执行角色：`research` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `recorder`
-- 每个步骤应包含 `available_skills` 数组，列出本步骤允许或建议 Subagent 使用的 skill；没有额外 skill 时写 `[]`
+- 每个步骤必须包含 `subagent`，明确稳定 Role Agent：`researcher` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `auditor` / `recorder`
+- 每个步骤必须包含 `task_agent`，明确细分 Task Agent，例如 `codebase-scout`、`feature-builder`、`test-runner`、`code-reviewer`、`evidence-auditor`、`wiki-curator`；不确定时先选对应 role 下最通用的 task agent，不要留空
+- 每个步骤应包含 `available_skills` 数组，列出本步骤允许或建议 Subagent 使用的 skill；没有额外 skill 时写 `[]`。该字段只放 Codex/Claude skill 名称，不放 agent 名称、文件路径或项目 reference
 - `steps` 最后必须包含 Wiki 归档任务，默认名称为 `归档到 Goo-wiki`，依赖所有非归档叶子步骤
 - 初次 plan-only 只写入 archive step，不执行归档；计划摘要归档要等用户确认计划后再做
 - 如果没有找到相关 wiki 经验，写入 `wiki_context.found=false`

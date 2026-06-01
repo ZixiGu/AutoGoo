@@ -254,6 +254,7 @@ DAG 结构总结：
       "depends_on": [],
       "type": "exec",
       "subagent": "implementer",
+      "task_agent": "feature-builder",
       "available_skills": [
         "<本步骤允许或建议 Subagent 使用的 skill 名称；没有则留空数组>"
       ],
@@ -281,6 +282,7 @@ DAG 结构总结：
       "depends_on": [1],
       "type": "archive",
       "subagent": "recorder",
+      "task_agent": "wiki-curator",
       "available_skills": [],
       "status": "pending",
       "progress": 0,
@@ -327,8 +329,9 @@ DAG 结构总结：
 - 每个步骤包含 `output`，便于后续恢复和验收
 - 每个非归档步骤必须包含 `goal_id` 或 `goal_ids`；共享步骤用 `goal_ids`
 - 每个步骤应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths`、`validation`、`risk_level` 和 `requires_user_confirm`，让 Subagent 能明确知道输入、输出、读写范围、验收方式和是否需要用户确认
-- 每个步骤必须包含合法 `subagent`，明确执行角色：`research` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `recorder`。缺失或不合法时执行阶段先补 plan 或创建新角色，不由主 Agent 代执行
-- 每个步骤应包含 `available_skills` 数组，列出本 step 允许或建议 Subagent 使用的 skill 名称；没有额外 skill 时写 `[]`。该字段只用于上下文裁剪和派发提示，不替代 `subagent` 角色，也不授予额外文件/命令权限
+- 每个步骤必须包含合法 `subagent`，明确稳定 Role Agent：`researcher` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `auditor` / `recorder`。缺失或不合法时执行阶段先补 plan 或创建新角色，不由主 Agent 代执行
+- 每个步骤必须包含合法 `task_agent`，从该 Role Agent 旗下选择细分 Task Agent，例如 `document-analyst`、`feature-builder`、`benchmark-runner`、`code-reviewer`、`evidence-auditor`、`obsidian-recorder`。`task_agent` 用于选择更精确的 agent 文件和提示词，不替代 `subagent` 的调度角色
+- 每个步骤应包含 `available_skills` 数组，列出本 step 允许或建议 Subagent 使用的 skill 名称；没有额外 skill 时写 `[]`。该字段只用于上下文裁剪和派发提示，不替代 `subagent` / `task_agent`，不授予额外文件/命令权限，也不要放 agent 名称或项目 reference 路径
 - 最后一步包含默认 Wiki 归档任务，依赖所有非归档叶子步骤
 - 不修改业务文件，不运行实现命令，不启动优化循环；允许写入 `.goo/plan.json` 和必要的 `context_artifacts`
 - 用户确认前不要执行 Wiki 归档任务，也不要把 plan 草案或 brainstorm 草案写成 Goo-wiki/fallback 知识归档
@@ -377,8 +380,9 @@ DAG 结构总结：
 | `name` | 简短动词短语 |
 | `description` | 做什么，含完整上下文。必须能脱离聊天记录执行，不使用"按上面方案/参考前文"等隐含引用。需要外部包时末尾标注 `[dep: <包名>]` |
 | `depends_on` | 前置步骤 ID 列表，空数组表示无依赖 |
-| `type` | `exec` / `optimize` / `eval` / `archive` |
-| `subagent` | 执行该步骤的 Subagent 角色：`research` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `recorder`。缺失或不合法时先补 plan 或创建新角色，不由主 Agent 降级代执行 |
+| `type` | `research` / `exec` / `optimize` / `eval` / `review` / `audit` / `archive` |
+| `subagent` | 执行该步骤的稳定 Role Agent：`researcher` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `auditor` / `recorder`。缺失或不合法时先补 plan 或创建新角色，不由主 Agent 降级代执行 |
+| `task_agent` | 执行该步骤的细分 Task Agent，必须来自对应 Role Agent 旗下，例如 `codebase-scout`、`feature-builder`、`test-runner`、`code-reviewer`、`evidence-auditor`、`wiki-curator`。用于选择 agent 文件和 prompt 细节 |
 | `output` | 预期产物文件路径，用于恢复时检测是否已完成 |
 | `inputs` | 本步骤明确依赖的输入文件、上游产物、wiki/context artifact 或外部资料 |
 | `outputs` | 本步骤会产生或更新的产物列表；通常包含 `output`，复杂步骤可列多个 |

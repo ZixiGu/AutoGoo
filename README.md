@@ -1,6 +1,6 @@
 # AutoGoo
 
-[![Release](https://img.shields.io/badge/release-v0.2.3-blue)](#版本)
+[![Release](https://img.shields.io/badge/release-v0.3.0-blue)](#版本)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-black)](#安装)
 [![Status](https://img.shields.io/badge/status-preview-orange)](#版本)
@@ -223,7 +223,8 @@ Markdown 文件或片段会被按结构化任务输入解析：标题、checkbox
 - `context_artifacts`：可选，指向 Goo-wiki 项目路径下的 `context/*.md`、fallback `.goo/obsidian/<project-slug>/context/*.md` 或任务 Markdown。
 - `review`：计划审阅状态，初次生成后为 `pending_user_review`；用户确认后才进入执行或计划摘要归档。
 - `steps`：有序 DAG 节点，包含 `id`、`goal_id` / `goal_ids`、`tier`、`depends_on`、`type`、`status`、`progress`、预期 `output`、`inputs` / `outputs`、读写边界、验收方式和风险确认字段。
-- `subagent`：每个步骤的执行角色，例如 `research`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`recorder`。
+- `subagent`：每个步骤的稳定 Role Agent，例如 `researcher`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`auditor`、`recorder`。
+- `task_agent`：可选的细分 Task Agent，例如 `code-reviewer`、`document-analyst`、`test-runner`、`data-validator`、`evidence-auditor`、`obsidian-recorder`、`wiki-curator`；用于选择更精确的提示词、工具范围和验收重点，不改变主调度角色。
 - `available_skills`：每个步骤允许或建议 Subagent 使用的 skill 名称列表；没有额外 skill 时写空数组，避免把全部 skill 都塞进隔离上下文。
 - `max_concurrent`：计划中的并发执行上限。
 
@@ -368,6 +369,24 @@ AutoGoo 同时读取用户级和项目级配置。项目配置覆盖用户配置
 
 Subagent 默认使用隔离上下文：只拿当前步骤、step 的 `available_skills`、`context_digest` 中相关决策、相关 wiki 约束、直接上游产物、允许读写路径，以及 plan/log/heartbeat 回写要求。它们不会收到完整主会话历史或无关 subagent 推理；需要共享的大段方案必须先整理成 Goo-wiki 项目路径下的 `context/*.md`，再通过路径传递。
 
+### Subagent 组织架构
+
+AutoGoo 的 Subagent 分成两级：**Role Agent** 保持少量稳定，写入 `plan.json` 的 `subagent` 字段并承担状态、心跳、日志和权限边界；**Task Agent** 是 Role Agent 下的细分任务画像，写入 `task_agent` 或步骤说明，用于更精确地控制提示词、工具范围和验收重点。
+
+![AutoGoo Subagent 组织架构](docs/assets/autogoo-subagent-architecture.svg)
+
+| Role Agent | 常用 Task Agent | 典型职责 |
+| --- | --- | --- |
+| `researcher` | `codebase-scout`, `document-analyst`, `domain-researcher`, `requirement-analyst` | 代码/文档/外部资料调研，整理约束和方案。 |
+| `implementer` | `feature-builder`, `bug-fixer`, `refactorer`, `script-writer`, `doc-editor` | 在明确范围内实现、修复、整理脚本或编辑文档。 |
+| `optimizer` | `profiler`, `performance-optimizer`, `token-cost-optimizer`, `workflow-optimizer` | 建立基线、定位瓶颈、执行有限轮次优化。 |
+| `evaluator` | `test-runner`, `benchmark-runner`, `data-validator`, `acceptance-checker` | 运行测试、benchmark、数据质量检查和验收核对。 |
+| `reviewer` | `code-reviewer`, `api-contract-reviewer`, `doc-reviewer` | 审查代码、接口/Schema 兼容性和文档可执行性。 |
+| `auditor` | `security-checker`, `compliance-auditor`, `evidence-auditor`, `traceability-auditor`, `risk-auditor` | 独立审计安全、合规、证据链、可追溯性和交付风险。 |
+| `recorder` | `obsidian-recorder`, `wiki-curator`, `execution-summarizer`, `lesson-extractor` | 整理执行日志，补齐 Goo-wiki/Obsidian 任务页、项目页和经验链接。 |
+
+完整架构、拆分规则和典型流水线见 [`docs/subagent-architecture.md`](docs/subagent-architecture.md)。
+
 | 阶段 | 输出 |
 | --- | --- |
 | Recall | 相关 Goo-wiki 笔记、历史决策、可复用命令、已知风险和项目约定。 |
@@ -389,6 +408,15 @@ skills/auto-goo/            goo-workflow skill 和参考文档
   scripts/                  校验、状态、图谱上下文和辅助脚本
   templates/                项目配置模板
 agents/                     Subagent 定义
+  roles/                    稳定 Role Agent，写入 plan.json 的 subagent
+  tasks/                    细分 Task Agent，写入 task_agent 或步骤说明
+    research/               调研类任务画像
+    implementation/         实现类任务画像
+    optimization/           优化类任务画像
+    evaluation/             评测类任务画像
+    review/                 审查类任务画像
+    audit/                  审计类任务画像
+    recording/              记录归档类任务画像
 .goo/                       本地任务计划、日志和归档运行记录
 ```
 
@@ -400,7 +428,7 @@ agents/                     Subagent 定义
 
 ## 版本
 
-当前版本：**v0.2.3**
+当前版本：**v0.3.0**
 
 这是一个 preview 版本，重点覆盖核心插件契约：
 

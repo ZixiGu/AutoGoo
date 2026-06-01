@@ -27,17 +27,20 @@ AutoGoo 的"并行"是 **task-level 并行**（多个独立 Subagent 同时执�
 
 Subagent 只对被分配的步骤负责，不能改写整体计划、扩大任务范围、越权修改其他步骤文件，或自行决定跳过主 Agent 定义的验收条件。
 
-`goo-start` / `goo-continue` 执行阶段必须派发 Subagent：`research`、`exec`、`optimize`、`eval`、`review`、`archive` 等步骤由对应 Subagent 执行。主 Agent 负责编排、上下文裁剪、派发、状态修复、产物审核和必要返工，不直接代做步骤产物。
+`goo-start` / `goo-continue` 执行阶段必须派发 Subagent：`research`、`exec`、`optimize`、`eval`、`review`、`audit`、`archive` 等步骤由对应 Subagent 执行。主 Agent 负责编排、上下文裁剪、派发、状态修复、产物审核和必要返工，不直接代做步骤产物。
 
-**Subagent 缺失处理**：当 plan step 的 `subagent` 字段缺失或不属于合法角色（`research`/`implementer`/`optimizer`/`evaluator`/`reviewer`/`recorder`）时，暂停派发并先修正 `.goo/plan.json` 或创建新的合法 Subagent 角色；不得由主 Agent 降级代执行该步骤。
+**Subagent 缺失处理**：当 plan step 的 `subagent` 字段缺失或不属于合法角色（`researcher`/`implementer`/`optimizer`/`evaluator`/`reviewer`/`auditor`/`recorder`）时，暂停派发并先修正 `.goo/plan.json` 或创建新的合法 Subagent 角色；不得由主 Agent 降级代执行该步骤。
 
-每个 plan step 必须显式声明 `subagent` 字段。`type` 描述步骤性质，`subagent` 描述执行角色。例如：
+每个 plan step 必须显式声明 `subagent` 和 `task_agent` 字段。`type` 描述步骤性质，`subagent` 描述稳定 Role Agent，`task_agent` 描述该 role 下的细分 Task Agent。例如：
 
 ```json
-{ "type": "exec", "subagent": "implementer", "available_skills": [] }
-{ "type": "eval", "subagent": "evaluator", "available_skills": [] }
-{ "type": "archive", "subagent": "recorder", "available_skills": [] }
+{ "type": "exec", "subagent": "implementer", "task_agent": "feature-builder", "available_skills": [] }
+{ "type": "eval", "subagent": "evaluator", "task_agent": "test-runner", "available_skills": [] }
+{ "type": "audit", "subagent": "auditor", "task_agent": "evidence-auditor", "available_skills": [] }
+{ "type": "archive", "subagent": "recorder", "task_agent": "wiki-curator", "available_skills": [] }
 ```
+
+`task_agent` 用于选择 `agents/tasks/` 下的细分 agent 文件和 prompt 重点；它不是 skill 名称，也不写入 `available_skills`。
 
 `available_skills` 是 step 级 skill allowlist，用来告诉主 Agent 在派发 Subagent 时哪些 skill 可以作为本步骤上下文。它不替代 `subagent` 角色，不自动授予额外工具权限，也不允许 Subagent 越过 `allowed_read_paths` / `allowed_write_paths`。
 
@@ -45,7 +48,7 @@ Subagent 只对被分配的步骤负责，不能改写整体计划、扩大任�
 
 Subagent 默认隔离上下文。主 Agent 派发时只传：
 
-- 当前 step 的 `id`、`name`、`description`、`type`、`subagent`、`output`
+- 当前 step 的 `id`、`name`、`description`、`type`、`subagent`、`task_agent`、`output`
 - 当前 step 的 `available_skills`；若为空数组，不额外加载 skill
 - 必要的项目约束和安全规则摘要
 - `wiki_context` 中与该 step 直接相关的 3-7 条要点
@@ -74,13 +77,14 @@ Subagent 之间只通过 `.goo/plan.json`、`.goo/logs/`、Goo-wiki 项目笔记
   "id": 3,
   "type": "exec",
   "subagent": "implementer",
+  "task_agent": "feature-builder",
   "available_skills": ["openai-docs"]
 }
 ```
 
 派发规则：
 
-- `available_skills` 只列本步骤确实有用的 skill 名称；不要把所有 skill 全量塞给每个 Subagent。
+- `available_skills` 只列本步骤确实有用的 skill 名称；不要把所有 skill 全量塞给每个 Subagent，也不要放 role agent、task agent、文件路径或项目 reference。
 - 主 Agent 派发时把该列表写入 Subagent prompt，并说明“只在需要时加载这些 skill 的入口说明”。
 - 如果 skill 不存在、不可读或与 step 无关，主 Agent 应更新 plan 去掉它，或在 prompt 中标明不可用；不得让 Subagent 凭空假设 skill 内容。
 - 如果 step 需要的是项目内 reference，而不是 Codex/Claude skill，应把路径放进 `context_artifacts`、`inputs` 或 step `description`，不要混进 `available_skills`。
@@ -92,11 +96,12 @@ Subagent 之间只通过 `.goo/plan.json`、`.goo/logs/`、Goo-wiki 项目笔记
 
 | `subagent` | 职能 | 主要责任 | 不应负责 |
 |------|------|----------|----------|
-| `research` | Research | 查资料、读文档、整理约束和方案选项 | 直接改业务代码 |
+| `researcher` | Researcher | 查资料、读文档、整理约束和方案选项 | 直接改业务代码 |
 | `implementer` | Implementer | 在指定文件/模块内实现功能或修复 | 自行改变任务范围或验收标准 |
 | `optimizer` | Optimizer | 做性能测量、瓶颈分析和局部优化 | 没有基线就盲目优化 |
 | `evaluator` | Evaluator | 运行测试、benchmark、数据质量检查 | 修代码，除非主 Agent 明确授权 |
 | `reviewer` | Reviewer | 审查代码、方案、风险和缺失测试 | 直接合并或覆盖实现 |
+| `auditor` | Auditor | 审计安全、合规、证据链、可追溯性和交付风险 | 直接修改业务实现或替代评测 |
 | `recorder` | Recorder | 整理日志和 Goo-wiki 归档 | 修改执行产物或改变事实 |
 
 主 Agent 可以把同一大任务拆成多个不同职能步骤，例如 `Research -> Implementer -> Evaluator -> Reviewer -> Recorder`。只有当任务足够小且风险低时，才合并职能。
@@ -139,7 +144,7 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
 
     4. 心跳与进度巡检
        每 30s 检查 running 中 agent 的 heartbeat_at + progress
-       heartbeat_at 超时 >= 5min → 标记 failed, 释放槽位
+       heartbeat_at 超时 >= 15min（可通过 plan.json `heartbeat_timeout_min` 自定义） → 标记 failed, 释放槽位
        progress 停滞不变超过 3 轮心跳 → 标记为 stuck，发出警告
 
 所有步骤 completed 或无可执行步骤 → 结束
@@ -445,8 +450,8 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
      while running slots < MAX_CONCURRENT AND ready_queue 非空:
        step = ready_queue.pop(0)
        → 检查 step.subagent 是否合法
-         → 合法: 按 step.subagent 构造 Subagent Prompt，启动 Agent (run_in_background)
-         → 不合法/缺失: 暂停派发，先修正 plan 或创建新 Subagent 角色
+         → 合法: 按 step.subagent 读取 agents/roles/<role>.md，再按 step.task_agent 读取 agents/tasks/<department>/<task>.md，合成 Subagent Prompt 后启动 Agent (run_in_background)
+         → subagent 或 task_agent 不合法/缺失: 暂停派发，先修正 plan 或创建新角色/任务画像
        → 更新 plan.json: status="running", started_at=now
        → 等待 3-5s（错峰）
        → running.append(step)
@@ -501,10 +506,10 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 | Agent 执行失败 | 记录错误日志，重试 1 次 |
 | 重试仍失败 | 标记 status="failed"，继续执行不依赖它的步骤 |
 | 关键路径失败 | 通知用户，询问是否继续 |
-| Agent 超时（>5 分钟无心跳） | 视为失败，按失败流程处理 |
+| Agent 超时（>15 分钟无心跳，可配置） | 视为失败，按失败流程处理 |
 | 会话中断（心跳停滞 >= 2min） | 恢复时检测到僵尸，重置为 pending 重新派发 |
 | 部分成功 | 合并已成功的结果，标注失败步骤 |
-| Subagent 角色缺失 | 暂停派发，先补 plan 或创建新 Subagent 角色 |
+| Subagent 或 task_agent 缺失 | 暂停派发，先补 plan 或创建新 Role Agent/Task Agent |
 
 ## 结果合并
 
@@ -553,11 +558,13 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 
 | 类型 | 用途 | 典型工具 | 返回格式 |
 |------|------|---------|---------|
-| **Research** | 调研、搜索 | WebSearch, context7, Read | `.md` 报告 |
+| **Researcher** | 调研、搜索 | WebSearch, context7, Read | `.md` 报告 |
 | **Implementer** | 写代码、实现 | Write, Edit, Bash | 文件路径 |
 | **Optimizer** | 性能分析优化 | Bash(profiling), Edit | 对比报告 |
 | **Evaluator** | 评测、benchmark | Bash, WebSearch | 数值指标 |
 | **Reviewer** | 审查代码方案 | Read, Grep | Review 报告 |
+| **Auditor** | 安全、合规、证据链、可追溯性审计 | Read, Grep, Bash | 审计报告 |
+| **Security Checker** | auditor 旗下安全检测 task agent | Read, Grep, Bash | 安全风险清单 |
 | **Recorder** | Obsidian 归档 | Write | 格式化 `.md` |
 
 ## 日志格式

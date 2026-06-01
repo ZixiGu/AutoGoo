@@ -134,11 +134,65 @@ done
 echo ""
 echo "── 5. Agent 文件 ──"
 
-if [[ -f "$ROOT/agents/obsidian-recorder.md" ]]; then
-  pass "agents/obsidian-recorder.md"
-else
-  fail "agents/obsidian-recorder.md 缺失"
-fi
+ROLE_AGENTS=("researcher" "implementer" "optimizer" "evaluator" "reviewer" "auditor" "recorder")
+TASK_AGENTS=(
+  "tasks/research/codebase-scout"
+  "tasks/research/document-analyst"
+  "tasks/research/domain-researcher"
+  "tasks/research/requirement-analyst"
+  "tasks/implementation/feature-builder"
+  "tasks/implementation/bug-fixer"
+  "tasks/implementation/refactorer"
+  "tasks/implementation/script-writer"
+  "tasks/implementation/doc-editor"
+  "tasks/optimization/profiler"
+  "tasks/optimization/performance-optimizer"
+  "tasks/optimization/token-cost-optimizer"
+  "tasks/optimization/workflow-optimizer"
+  "tasks/evaluation/test-runner"
+  "tasks/evaluation/benchmark-runner"
+  "tasks/evaluation/data-validator"
+  "tasks/evaluation/acceptance-checker"
+  "tasks/review/code-reviewer"
+  "tasks/review/api-contract-reviewer"
+  "tasks/review/doc-reviewer"
+  "tasks/audit/security-checker"
+  "tasks/audit/compliance-auditor"
+  "tasks/audit/evidence-auditor"
+  "tasks/audit/traceability-auditor"
+  "tasks/audit/risk-auditor"
+  "tasks/recording/obsidian-recorder"
+  "tasks/recording/wiki-curator"
+  "tasks/recording/execution-summarizer"
+  "tasks/recording/lesson-extractor"
+)
+for agent in "${ROLE_AGENTS[@]}"; do
+  f="$ROOT/agents/roles/$agent.md"
+  if [[ -f "$f" ]]; then
+    pass "agents/roles/$agent.md"
+    if head -1 "$f" | grep -q '^---$\|^#'; then
+      pass "  frontmatter/heading 起始正确"
+    else
+      warn "  agents/roles/$agent.md 缺少 frontmatter 或 heading"
+    fi
+  else
+    fail "agents/roles/$agent.md 缺失"
+  fi
+done
+
+for agent in "${TASK_AGENTS[@]}"; do
+  f="$ROOT/agents/$agent.md"
+  if [[ -f "$f" ]]; then
+    pass "agents/$agent.md"
+    if head -1 "$f" | grep -q '^---$\|^#'; then
+      pass "  frontmatter/heading 起始正确"
+    else
+      warn "  agents/$agent.md 缺少 frontmatter 或 heading"
+    fi
+  else
+    fail "agents/$agent.md 缺失"
+  fi
+done
 
 # ── 6. 脚本文件 ──
 echo ""

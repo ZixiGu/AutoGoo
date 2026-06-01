@@ -18,7 +18,7 @@
       "description": "WebSearch 搜索 JSON 序列化基准测试标准指标",
       "depends_on": [],
       "type": "exec",
-      "subagent": "research",
+      "subagent": "researcher",
       "available_skills": []
     },
     {

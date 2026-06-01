@@ -64,7 +64,7 @@ AutoGoo 不应强行覆盖：
 
 ## Subagent 规范
 
-- 合法角色包括 `research`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`recorder`。
+- 合法角色包括 `researcher`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`auditor`、`recorder`。
 - 派发给 Subagent 的上下文只包含当前 step、`available_skills`、必要项目约束、相关 wiki 摘要、上游产物路径、允许读写边界和回写要求。
 - Subagent 不接收完整聊天记录，不自行修改全局目标，不替主 Agent 做范围扩张决策。
 - Subagent 完成后必须返回产物路径、验证结果、失败原因或待决问题；主 Agent 负责集成和最终验收。

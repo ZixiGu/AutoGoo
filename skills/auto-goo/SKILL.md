@@ -1,7 +1,7 @@
 ---
 name: goo-workflow
 description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', 'brainstorm', '找目标', '开始任务', 'run:', '读论文', '论文', 'paper', '日报', '周报', 'usage', 'token统计', 'token降本', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent tools."
-version: 0.2.1
+version: 0.3.0
 tools: [Read, Write, Edit, Bash, WebSearch, Agent]
 ---
 
@@ -180,6 +180,8 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
       "depends_on": [],
       "type": "exec",
       "subagent": "implementer",
+      "task_agent": "feature-builder",
+      "available_skills": [],
       "status": "pending",
       "progress": 0,
       "output": "<主产物路径>",
@@ -204,6 +206,8 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
       "depends_on": [1],
       "type": "archive",
       "subagent": "recorder",
+      "task_agent": "wiki-curator",
+      "available_skills": [],
       "status": "pending",
       "progress": 0,
       "output": "Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/",
@@ -248,13 +252,13 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 
 **主 Agent 总控**：主 Agent 负责整体目标、DAG 拆解、上下文裁剪、调度、验收、冲突处理和最终归档判断；Subagent 只执行被分配的 step，不得自行扩大范围或改写整体计划。
 
-**强制 Subagent 执行**：除 `goo-plan` 只生成计划外，`goo-start` / `goo-continue` 的 `research`、`exec`、`optimize`、`eval`、`review`、`archive` 步骤必须派发给对应 Subagent。主 Agent 不得直接替 Subagent 读写步骤产物、运行步骤命令或完成步骤验收。
+**强制 Subagent 执行**：除 `goo-plan` 只生成计划外，`goo-start` / `goo-continue` 的 `research`、`exec`、`optimize`、`eval`、`review`、`audit`、`archive` 步骤必须派发给对应 Subagent。主 Agent 不得直接替 Subagent 读写步骤产物、运行步骤命令或完成步骤验收。
 
 **Subagent 缺失处理**：如果步骤的 `subagent` 字段缺失或不属于合法角色，先补 plan 或创建新的 Subagent 角色，不由主 Agent 降级代执行。
 
 **Subagent 上下文隔离**：每个 Subagent 默认只拿当前 step、必要项目约束、相关 wiki_context 摘要、上游产物路径、允许读写边界和回写要求。Subagent 之间通过 `.goo/plan.json`、`.goo/logs/`、`.goo/artifacts/` 和产物路径交接，不共享完整会话历史或彼此的推理草稿。
 
-**Subagent 显式分工**：每个 step 必须包含 `subagent` 字段。允许值为 `research`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`recorder`。`type` 表示步骤类型，`subagent` 表示执行角色；调度时按 `subagent` 选择 prompt 模板。若 `subagent` 缺失或不合法，先补 plan 或创建新角色，不由主 Agent 代执行。
+**Subagent 显式分工**：每个 step 必须包含 `subagent` 和 `task_agent` 字段。`subagent` 只允许稳定 Role Agent：`researcher`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`auditor`、`recorder`；`task_agent` 必须从对应 role 的 `agents/tasks/` 目录下选择，例如 `document-analyst`、`feature-builder`、`test-runner`、`code-reviewer`、`evidence-auditor`、`wiki-curator`。调度时先按 `subagent` 选择 role prompt，再按 `task_agent` 叠加细分任务 prompt。若缺失或不合法，先补 plan 或创建新角色/任务画像，不由主 Agent 代执行。
 
 ```
 MAX_CONCURRENT = 6 (plan.json 顶层可覆盖)
@@ -535,4 +539,12 @@ Phase 4 归档完成后，在任务日志末尾追加 `## 流程问题` 反思�
 - **`skills/auto-goo/scripts/goo-ssh.sh`** — 连接已配置的远程服务器；从 `secrets.json` 读取密码，不暴露在命令行。调用前先解析 AutoGoo 根目录
 
 ### Agents
-- **`../../agents/obsidian-recorder.md`** — Obsidian 归档 Subagent
+- **`../../agents/roles/researcher.md`** — 调研 Role Agent（查资料、读文档、整理约束和方案选项）
+- **`../../agents/roles/implementer.md`** — 执行 Role Agent（实现功能或修复）
+- **`../../agents/roles/optimizer.md`** — 优化 Role Agent（性能测量、瓶颈分析、局部优化）
+- **`../../agents/roles/evaluator.md`** — 评测 Role Agent（运行测试、benchmark、数据质量检查）
+- **`../../agents/roles/reviewer.md`** — 审查 Role Agent（审查代码、方案、风险和缺失测试）
+- **`../../agents/roles/auditor.md`** — 审计 Role Agent（安全、合规、证据链、可追溯性和交付风险）
+- **`../../agents/roles/recorder.md`** — 记录归档 Role Agent（整理日志、产物、评测结果和经验）
+- **`../../agents/tasks/audit/security-checker.md`** — auditor 旗下安全检测 Task Agent（扫描注入、XSS、敏感信息泄露、依赖漏洞）
+- **`../../agents/tasks/recording/obsidian-recorder.md`** — recorder 旗下 Obsidian 归档 Task Agent（格式化 Goo-wiki 笔记）

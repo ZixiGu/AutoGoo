@@ -680,7 +680,7 @@ if wiki_ready:
 - 如果当前对话已经形成方案、取舍、约束或验收标准，短内容写入 `.goo/plan.json.context_digest`；长方案、会议纪要或 prompt 草案优先写入 `Goo-wiki/{project_archive_dir}/context/`，并在 `.goo/plan.json.context_artifacts` 中引用。
 - 如果 `.goo/plan.json` 已生成后又通过对话产生新方案、约束、验收标准或用户偏好，`/auto-goo:goo-start` 和 `/auto-goo:goo-continue` 默认先做 context sync：把旧 plan 复制到 `.goo/plans/history/`，短内容写入 `context_digest.post_plan_updates`，长内容写入 `context_artifacts` 指向的 Markdown；只有与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认。
 - 使用 `/auto-goo:goo-start` 或 `/auto-goo:goo-continue` 执行时，只能基于当前 `.goo/plan.json`、`context_artifacts` 指向的 Goo-wiki/Markdown、相关 `wiki_context`、`.goo/logs/` 和上游产物路径恢复任务；不得依赖“刚才讨论过”的隐含上下文。
-- 使用 `/auto-goo:goo-start` 或 `/auto-goo:goo-continue` 执行时，所有 `research` / `exec` / `optimize` / `eval` / `review` / `archive` step 必须派发给 `.goo/plan.json` 中声明的 `subagent`；主 Agent 只负责编排、状态修复、上下文补全和产物审核，不直接代写步骤产物或代跑步骤命令。
+- 使用 `/auto-goo:goo-start` 或 `/auto-goo:goo-continue` 执行时，所有 `research` / `exec` / `optimize` / `eval` / `review` / `audit` / `archive` step 必须派发给 `.goo/plan.json` 中声明的 `subagent`；主 Agent 只负责编排、状态修复、上下文补全和产物审核，不直接代写步骤产物或代跑步骤命令。
 - 如果待执行 step 缺少 `subagent`、`depends_on`、`output`、读写边界或必要上下文，先更新 `.goo/plan.json` / `context_artifacts` 后再派发，不用主会话聊天记录临时补齐。
 - 使用 `/auto-goo:goo-start` 或 `/auto-goo:goo-continue` 执行后，必须归档任务目标、计划摘要、步骤证据、产物路径、验证结果、关键决策、问题处理和可复用经验。
 - 任何产生可复用内容的命令最终都必须归档到 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。brainstorm 候选目标和 plan 摘要必须先给用户审阅，确认后或进入执行前再归档最终版；usage/token 降本分析、日报/周报、改进建议、benchmark 指标和执行经验按命令规则归档。
