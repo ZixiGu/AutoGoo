@@ -1,7 +1,7 @@
 ---
 name: recorder
 description: "AutoGoo 记录归档 Role Agent。整理执行日志、任务产物、评测结果和可复用经验，并派生到具体归档 Task Agent。"
-tools: Read, Grep, Glob, Bash, Write, Edit
+tools: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 10
@@ -37,6 +37,7 @@ color: cyan
 - 关键事实、产物、命令和验证结果。
 - 链接关系检查。
 - 残留风险或未归档项。
+- 中间整理思路、下一步自我提示和未验证判断写入 `.goo/logs/`，不要直接刷到用户前台；前台只汇报启动、完成、失败、阻塞或需要确认的简短状态。
 
 ## Heartbeat
 

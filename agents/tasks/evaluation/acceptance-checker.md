@@ -1,7 +1,7 @@
 ---
 name: acceptance-checker
 description: "AutoGoo 验收核对 Task Agent。按用户验收标准逐项核对交付物，列出通过、失败和残留风险。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 8

@@ -1,7 +1,7 @@
 ---
 name: requirement-analyst
 description: "AutoGoo 需求分析 Task Agent。把混合输入整理成目标、非目标、约束、验收标准和候选 DAG。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 8

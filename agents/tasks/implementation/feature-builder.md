@@ -1,7 +1,7 @@
 ---
 name: feature-builder
 description: "AutoGoo 功能实现 Task Agent。在明确范围内添加功能，保持现有架构和风格，不自行改变验收标准。"
-tools: Read, Grep, Glob, Bash, Edit, MultiEdit, Write
+tools: Read, Grep, Glob, Bash, Edit, MultiEdit, Write, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 12

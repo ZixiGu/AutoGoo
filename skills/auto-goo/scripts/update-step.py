@@ -28,7 +28,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Update .goo/plan.json step state")
     parser.add_argument("--plan", default=".goo/plan.json", help="plan.json path")
     parser.add_argument("--step-id", type=int, required=True, help="step id to update")
-    parser.add_argument("--status", choices=["pending", "running", "completed", "failed"], help="new status")
+    parser.add_argument("--status", choices=["pending", "running", "completed", "failed", "blocked"], help="new status")
     parser.add_argument("--progress", type=int, help="progress 0-100")
     parser.add_argument("--agent-id", help="agent id/name")
     parser.add_argument("--error", help="failure summary")
@@ -36,6 +36,7 @@ def main() -> int:
     parser.add_argument("--start", action="store_true", help="set started_at and heartbeat_at")
     parser.add_argument("--complete", action="store_true", help="set status=completed, progress=100, completed_at")
     parser.add_argument("--fail", action="store_true", help="set status=failed, completed_at, optional error")
+    parser.add_argument("--block", action="store_true", help="set status=blocked, optional approval/error summary")
     args = parser.parse_args()
 
     plan_path = Path(args.plan)
@@ -65,6 +66,13 @@ def main() -> int:
     if args.fail:
         target["status"] = "failed"
         target["completed_at"] = stamp
+        target["heartbeat_at"] = stamp
+        if args.error:
+            target["error"] = args.error
+
+    if args.block:
+        target["status"] = "blocked"
+        target["blocked_at"] = stamp
         target["heartbeat_at"] = stamp
         if args.error:
             target["error"] = args.error

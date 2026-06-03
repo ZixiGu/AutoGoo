@@ -15,6 +15,17 @@
     "plan_history_dir": ".goo/plans/history",
     "brainstorm_history_dir": ".goo/brainstorms/history"
   },
+  "publish": {
+    "enabled": true,
+    "site_dir": ".goo/site",
+    "index_file": ".goo/site/index.html",
+    "split_pages": false,
+    "host": "0.0.0.0",
+    "port": 9877,
+    "open_browser": true,
+    "include_activity_heatmap": true,
+    "include_dag": true
+  },
   "execution": {
     "max_concurrent": 6,
     "heartbeat_seconds": 30,

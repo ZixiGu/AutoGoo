@@ -9,7 +9,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 
 ## 行为
 
-1. **现有计划完成检查** — 如果 `.goo/plan.json` 已存在，先读取 `steps[]` 和顶层 `status`；只要存在非 `completed` 的 step，或顶层状态不是 `completed`，就暂停新建 plan，提醒用户当前 plan 未完成，并询问是“修改当前 plan”还是“新建 plan 并归档旧 plan”。用户未明确选择前，不得覆盖 `.goo/plan.json`
+1. **现有计划完成检查** — 如果 `.goo/plan.json` 已存在，先读取 `steps[]` 和顶层 `status`；只要存在非 `completed` 的 step，或顶层状态不是 `completed`，就暂停新建 plan，提醒用户当前 plan 未完成，并优先用 `AskUserQuestion` / 结构化选择 UI 询问是“修改当前 plan”还是“新建 plan 并归档旧 plan”。用户未明确选择前，不得覆盖 `.goo/plan.json`
 2. **Wiki 经验召回** — 检索 Goo-wiki 中相关项目页、概念页、周报和 `log.md`
 3. **输入形态识别** — 判断输入是普通任务、Markdown 任务包、已有 plan、issue/PR 描述还是日志片段
 4. **目标明确性检查** — 判断输入是否已有明确 goal，或是否引用了 `.goo/brainstorm.json` 中的候选 goal；否则停止 plan 流程并改用 `/auto-goo:goo-brainstorm`
@@ -20,7 +20,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 9. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
 10. **历史计划归档** — 如果 `.goo/plan.json` 已存在且用户选择新建 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`
 11. **计划落盘** — 输出或更新 `.goo/plan.json`，标记为待用户审阅。
-12. **等待确认** — 向用户展示计划摘要、并行组、主要风险和需要确认的点，允许用户修改 DAG、合并/拆分步骤、调整验收标准或回到 brainstorm。用户确认前不要归档 plan 摘要。
+12. **等待确认** — 向用户展示计划摘要、并行组、主要风险和需要确认的点，并优先用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。用户确认前不要归档 plan 摘要。
 13. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
 
 ## 现有 plan 冲突处理
@@ -29,10 +29,27 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 
 - 如果文件不存在，正常生成新 plan。
 - 如果所有 `steps[]` 的 `status` 都是 `completed`，且顶层 `status` 为 `completed` 或缺失但可由 steps 推断为完成，允许归档旧 plan 后生成新 plan。
-- 如果任一 step 的 `status` 不是 `completed`，或顶层 `status` 是 `pending` / `running` / `paused` / `failed`，必须暂停并提醒用户未完成项数量、当前运行/失败/待执行 step 摘要，然后询问：
+- 如果任一 step 的 `status` 不是 `completed`，或顶层 `status` 是 `pending` / `running` / `blocked` / `paused` / `failed`，必须暂停并提醒用户未完成项数量、当前运行/阻塞/失败/待执行 step 摘要，然后询问：
   - 修改当前 plan：把新需求合并到现有 `.goo/plan.json`，保留已完成步骤和执行证据。
   - 新建 plan：先把旧 `.goo/plan.json` 原样归档到 `.goo/plans/history/`，再写入新的 `.goo/plan.json`。
 - 用户未明确选择“修改当前 plan”或“新建 plan”前，不得覆盖、归档或重写 `.goo/plan.json`。
+
+提问必须优先使用 `AskUserQuestion` / 结构化选择 UI，选项为：
+
+- 修改当前 plan
+- 新建 plan
+- 取消
+
+仅当交互控件不可用时，才使用纯文本 fallback：
+
+```text
+当前 .goo/plan.json 还未完成。请选择处理方式：
+1. 修改当前 plan - 合并新需求，保留已完成步骤和执行证据
+2. 新建 plan - 先归档旧 plan 到 .goo/plans/history/，再写入新 plan
+3. 取消 - 暂不改动当前 plan
+
+请回复 1/2/3，或回复“修改当前 plan”/“新建 plan”。
+```
 
 ## Markdown 任务输入
 
@@ -152,3 +169,26 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 ```
 
 或让 AutoGoo 从当前 `.goo/plan.json` 继续执行。
+
+## 计划审阅提问格式
+
+生成或更新 `.goo/plan.json` 后，必须优先用 `AskUserQuestion` / 结构化选择 UI 收尾，选项为：
+
+- 确认计划
+- 修改计划
+- 拆分/合并步骤
+- 回到 brainstorm
+
+仅当交互控件不可用时，才使用纯文本 fallback：
+
+```text
+请审阅计划：
+1. 确认计划 - 保持当前 .goo/plan.json，后续可执行 /auto-goo:goo-start
+2. 修改计划 - 回复需要调整的步骤、验收标准或风险控制
+3. 拆分/合并步骤 - 回复要拆分或合并的 step ID
+4. 回到 brainstorm - 重新选择或扩展候选目标
+
+请回复 1/2/3/4，或直接写修改要求。
+```
+
+用户未明确确认前，`review.status` 必须保持 `pending_user_review`，不得归档计划摘要或启动执行。

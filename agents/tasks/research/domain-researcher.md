@@ -1,7 +1,7 @@
 ---
 name: domain-researcher
 description: "AutoGoo 领域调研 Task Agent。查外部资料、官方文档、论文或库用法，整理方案对比和时效性风险。"
-tools: Read, Grep, Glob, Bash, WebSearch
+tools: Read, Grep, Glob, Bash, WebSearch, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 10

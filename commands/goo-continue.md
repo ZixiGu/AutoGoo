@@ -9,7 +9,7 @@ description: 从中断处继续执行 AutoGoo 任务 — 读取 .goo/plan.json �
 
 `goo-continue` 的执行依据只能是当前 `.goo/plan.json`、`context_artifacts` 指向的 Goo-wiki/Markdown、Goo-wiki 摘要、`.goo/logs/` 和上游产物路径。不要依赖当前 Claude Code 会话还记得之前讨论过什么。
 
-恢复时默认先执行 context sync：检查 plan 生成后当前对话是否新增方案、约束、验收标准、用户偏好或 open question。若有增量，先把旧 `.goo/plan.json` 归档到 `.goo/plans/history/`，短内容写入 `context_digest.post_plan_updates`，长内容写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/*.md` 并追加到 `context_artifacts`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/context/*.md`。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认。
+恢复时默认先执行 context sync：检查 plan 生成后当前对话是否新增方案、约束、验收标准、用户偏好或 open question。若有增量，先把旧 `.goo/plan.json` 归档到 `.goo/plans/history/`，短内容写入 `context_digest.post_plan_updates`，长内容写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/*.md` 并追加到 `context_artifacts`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/context/*.md`。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认；该询问必须优先使用结构化选项：`同步并继续执行`、`先修改 plan`、`停止并保留当前 plan`。
 
 如果 `.goo/brainstorm.json` 或 `.goo/plan.json` 的 `review.status` 仍是 `pending_user_review`，恢复前必须先停下来让用户审阅和确认；不得把未确认草案自动归档或继续执行。
 
@@ -41,11 +41,22 @@ heartbeat_at 距今 < 2 分钟？
 ### 3. status = "failed" → 判断是否关键路径
 
 - 非关键路径（不阻塞其他 pending 步骤）→ 跳过
-- 关键路径（阻塞后续步骤）→ 询问用户是否重试
+- 关键路径（阻塞后续步骤）→ 优先用 `AskUserQuestion` / 结构化选择 UI 询问用户是否重试、跳过继续或停止
 
 ### 4. status = "pending" → 正常执行
 
 检查 depends_on 是否全部 completed，满足则加入当前执行轮。
+
+关键路径失败提问必须优先使用 `AskUserQuestion` / 结构化选择 UI。仅当交互控件不可用时，才使用纯文本 fallback：
+
+```text
+关键路径步骤失败，会阻塞后续步骤。请选择处理方式：
+1. 重试该步骤
+2. 跳过并继续可执行的非依赖步骤
+3. 停止并保留当前现场
+
+请回复 1/2/3，或回复“重试”/“跳过”/“停止”。
+```
 
 ## 产物文件存在性检测
 
@@ -96,9 +107,9 @@ test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 ## 备注
 
 - 如果所有步骤已完成，提示"没有未完成的任务"
-- 关键路径上的失败步骤会询问是否跳过继续
+- 关键路径上的失败步骤必须优先用结构化选择 UI 询问是否重试、跳过继续或停止
 - 恢复执行必须派发 Subagent；主 Agent 做状态修复、派发和审核。若 Subagent 角色不存在，先补 plan 或创建角色，不由主 Agent 代执行
 - 恢复执行时使用 step 的 `available_skills` 作为 Subagent skill allowlist；缺失时先补为空数组
-- 如果 `.goo/brainstorm.json` 或 `.goo/plan.json` 仍是待审草案，恢复执行前必须先让用户确认；确认后如果 brainstorm 未归档，再归档最终版 brainstorm，然后恢复业务 step
+- 如果 `.goo/brainstorm.json` 或 `.goo/plan.json` 仍是待审草案，恢复执行前必须先展示摘要并优先用结构化选择 UI 让用户确认、修改或停止；确认后如果 brainstorm 未归档，再归档最终版 brainstorm，然后恢复业务 step
 - `heartbeat_at` 为空且 status=running 的步骤：说明派发时写了 tier-X-start.json 但 agent 从未真正启动 → 直接重置为 pending
-- Plan 顶层 `status`（`pending` → `running` → `completed`/`failed`）由 `goo-status.py --update-status` 自动计算更新，主 Agent 在每次 step 状态变更后必须调用
+- Plan 顶层 `status`（`pending` → `running` → `blocked` → `completed`/`failed`）由 `goo-status.py --update-status` 自动计算更新，主 Agent 在每次 step 状态变更后必须调用

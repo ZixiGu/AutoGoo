@@ -19,7 +19,7 @@ description: 基于 Goo-wiki 和当前项目上下文 brainstorm 候选 goals，
 4. **候选目标生成** — 生成 3-7 个候选 goals，每个 goal 都要有依据、产物、验收标准、风险、第一步、前置要求和 ready checklist。
 5. **推荐排序** — 给出 `recommended_goal_ids` 和排序理由。
 6. **本地落盘** — 写入 `.goo/brainstorm.json`，标记为待用户审阅。
-7. **等待用户审阅** — 展示候选 goals、推荐顺序、共同前置条件和关键风险，让用户选择、合并、改写或要求继续 brainstorm。
+7. **等待用户审阅** — 展示候选 goals、推荐顺序、共同前置条件和关键风险，让用户选择、合并、改写或要求继续 brainstorm。必须优先用 `AskUserQuestion` / 结构化选择 UI 展示候选 goal 的 ID/编号和动作选项；不得在交互控件可用时只用普通文本要求用户手打回复。
 8. **确认后归档** — 用户确认候选目标后，再将最终版本、选择依据、共同前置条件和关键 wiki 证据归档到 Goo-wiki 项目路径，并更新项目入口或 `log.md`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。不要在用户还可能修改候选目标时急着归档。
 
 如果 `.goo/brainstorm.json` 已存在，写入新的 brainstorm 前，先把旧文件原样复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。该目录是本地 JSON 历史快照，和 Goo-wiki/fallback 知识归档不同；知识归档仍写入同一任务归档根的 `brainstorm/` 子目录。
@@ -53,6 +53,31 @@ description: 基于 Goo-wiki 和当前项目上下文 brainstorm 候选 goals，
   - `archive.task_archive_root` 记录任务归档根；后续由该 brainstorm 生成的 `.goo/plan.json.archive.task_archive_root` 必须复用同一目录，并把正式计划写入 `plan/` 子目录。
   - fallback 时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/`，并同样保留 `task_archive_root`。
   - 本地历史快照另存到 `.goo/brainstorms/history/`，不要和 Goo-wiki/fallback 归档路径混用。
+
+## 审阅提问格式
+
+展示候选目标后，必须优先用 `AskUserQuestion` / 结构化选择 UI 收尾，选项至少包含：
+
+- 选择推荐目标 `<goal_id>`
+- 选择其他目标
+- 合并多个目标
+- 修改候选目标
+- 继续 brainstorm
+
+仅当交互控件不可用时，才使用纯文本 fallback：
+
+```text
+请选择下一步：
+1. 选择推荐目标 <goal_id>
+2. 选择其他目标（回复 goal ID，例如 g2）
+3. 合并多个目标（回复例如：合并 g1,g3）
+4. 修改候选目标（回复：修改: <你的要求>）
+5. 继续 brainstorm
+
+这是 fallback；也可以直接回复 goal ID、编号或上面的动作文本。
+```
+
+如果候选 goal 已经有稳定 `id`，优先展示和接受 `id`；没有时使用本次消息中的编号，并在写回 `.goo/brainstorm.json.review` 时记录用户选择来源。
 
 ### checklist 规则
 

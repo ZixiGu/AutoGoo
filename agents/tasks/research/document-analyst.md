@@ -1,7 +1,7 @@
 ---
 name: document-analyst
 description: "AutoGoo 文档分析 Task Agent。分析 README、Markdown、日志、prompt、计划和会议记录，提取结构化要点和可执行信号。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 10

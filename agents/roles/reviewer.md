@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: "AutoGoo 审查 Subagent。审查代码、方案、风险和缺失测试，不直接合并或覆盖实现。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 10
@@ -34,6 +34,7 @@ color: purple
 - 每条发现：`file:line`、描述、严重程度、建议修复。
 - 末尾附总结。
 - 简洁为主，非必要不贴完整代码块。
+- 中间审查思路、下一步自我提示和未验证判断写入 `.goo/logs/`，不要直接刷到用户前台；前台只汇报启动、完成、失败、阻塞或需要确认的简短状态。
 
 ## Heartbeat
 

@@ -5,11 +5,21 @@ description: 显示 Claude Code token 和 usage 监控面板 — 多色可视化
 
 ## 执行流程
 
-加载此命令后，**先使用 AskUserQuestion 询问用户**：
+加载此命令后，**必须优先使用 AskUserQuestion / 结构化选择 UI 询问用户**；不得在交互控件可用时用普通文本要求用户手打 `1/2`：
 
 - 问题: "How do you want to view the usage dashboard?"
 - 选项 1: "Browser popup with auto-refresh" — 浏览器 HTML 仪表盘，自动刷新
 - 选项 2: "Inline (interactive TUI)" — 当前终端内交互式 TUI
+
+如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，才用纯文本编号选项降级：
+
+```text
+How do you want to view the usage dashboard?
+1. Browser popup with auto-refresh
+2. Inline (interactive TUI)
+
+Please reply 1/2, or reply with the option text.
+```
 
 不要提示用户手动进入插件目录或直跑内部脚本；本命令必须优先从 Claude Code 安装记录解析 `installPath`，路径不可用时 fallback 到已启用的本地 directory marketplace，再调用脚本。
 

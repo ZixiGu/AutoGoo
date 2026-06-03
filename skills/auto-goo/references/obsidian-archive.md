@@ -27,6 +27,8 @@ AutoGoo 的 wiki 流程分成两段：
 
 归档优先写入 `<wiki_dir>/<archive.project_dir>/`，并更新项目入口或 `log.md`。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。命令对应的 `.goo/*.json` 产物应包含 `archive` 字段，记录归档路径、fallback 状态和 `log.md` 是否更新。
 
+`/auto-goo:goo-publish` 是归档之外的只读展示层。它从 `.goo/brainstorm.json`、`.goo/plan.json`、history、logs、artifacts、reports、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/index.html` 单页站点。发布页面必须以 `skills/auto-goo/templates/publish/workflow-*.html` 为页面外壳和视觉契约来源，复用模板的 sidebar、工作区导航、topbar、主题切换、基础 CSS token、卡片/表格/详情块样式，脚本只负责填入 `.goo/` 实时数据，不另起独立 UI。默认内容完整保留在首页，工作区导航可切换 Status、Plan、Brainstorm、Subagents、Artifacts 等视图；Overview 包含可切换 Daily、Weekly 和 Cumulative 的 Token Activity 热力图，Status 展示运行状态，Activity 展示 workflow 事件和按 turn/session 聚合的 token 消耗，Subagents 内嵌架构图，其他视图仍在同一 HTML 内。配置 `publish.split_pages=true` 时才拆出独立页面。它默认启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读已生成 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。HTML 发布不替代 Goo-wiki/fallback 归档，也不得把草案状态误标为已归档；token 行只展示聚合 token、模型和记录数，不展示对话正文。
+
 ## 目录规则
 
 不设独立 `auto-goo/` 目录，按任务所属领域放入对应目录，通过 `auto-goo` tag 区分来源。

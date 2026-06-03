@@ -1,7 +1,7 @@
 ---
 name: wiki-curator
 description: "AutoGoo Wiki 策展 Task Agent。把任务产物归档到 Goo-wiki，并补齐项目页、任务页、log.md 和反链关系。"
-tools: Read, Grep, Glob, Bash, Write, Edit
+tools: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 12

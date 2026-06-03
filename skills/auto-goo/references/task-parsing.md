@@ -95,6 +95,18 @@
 
 如果 `.goo/brainstorm.json` 存在，但用户没有明确选择 candidate goal，`goo-plan` 不能默认选推荐项直接执行。可以展示 `recommended_goal_ids`，但必须等待用户确认。
 
+确认问题必须优先使用 `AskUserQuestion` / 结构化选择 UI；不得在交互控件可用时要求用户手打编号或 goal ID。仅当交互控件不可用时，才使用纯文本 fallback：
+
+```text
+检测到已有 brainstorm 候选目标。请选择用于 plan 的目标：
+1. 使用推荐目标 <goal_id>
+2. 选择其他目标（回复 goal ID，例如 g2）
+3. 合并多个目标（回复例如：合并 g1,g3）
+4. 回到 brainstorm
+
+请回复 1/2/3/4，或直接回复 goal ID / 合并指令。
+```
+
 ## Markdown 任务输入
 
 当用户把 `.md` 文件、Markdown 片段、会议纪要、需求文档、TODO 清单、issue 模板或设计文档作为任务输入时，必须把它视为**结构化任务载体**，而不是默认归类为"文本整理"。
@@ -133,7 +145,7 @@
 
 - 简短内容直接进入 `.goo/plan.json.context_digest`。
 - 超过 10 行、包含代码块、prompt、表格或多方案比较时，优先写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md`，并在 `context_artifacts` 引用；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/context/`。
-- 如果 `.goo/plan.json` 已经生成，之后对话又产生新方案、约束、验收标准或用户偏好，`goo-start` / `goo-continue` 默认在执行前做 context sync：先把旧 plan 复制到 `.goo/plans/history/`，短内容追加到 `context_digest.post_plan_updates`，长内容写入 `context_artifacts` 指向的 Markdown。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认。
+- 如果 `.goo/plan.json` 已经生成，之后对话又产生新方案、约束、验收标准或用户偏好，`goo-start` / `goo-continue` 默认在执行前做 context sync：先把旧 plan 复制到 `.goo/plans/history/`，短内容追加到 `context_digest.post_plan_updates`，长内容写入 `context_artifacts` 指向的 Markdown。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认；确认问题必须优先使用结构化选项：`同步并继续执行`、`先修改 plan`、`停止并保留当前 plan`。
 - 如果这段方案具有长期复用价值，在最后的 `归档到 Goo-wiki` step 中明确要求把它沉淀为项目页或经验页。
 - step 描述必须可独立执行；如果删掉聊天记录后 step 仍然不清楚，说明 plan 不合格。
 
@@ -324,6 +336,7 @@ DAG 结构总结：
 - 覆盖 `.goo/plan.json` 前，先把旧 plan 原样复制到 `.goo/plans/history/`
 - 写入 `.goo/plan.json`
 - 写入 `review.status="pending_user_review"`，并展示简洁计划摘要、并行组、关键风险和需要用户确认的点
+- 计划审阅消息必须优先使用结构化选项：`确认计划`、`修改计划`、`拆分/合并步骤`、`回到 brainstorm`；纯文本编号只作为交互控件不可用时的 fallback
 - 填充 `wiki_context`
 - 填充 `goals[]`；单目标任务也写一个默认 goal，多目标任务必须为每个交付目标写清验收标准和产物
 - 每个步骤包含 `output`，便于后续恢复和验收
@@ -360,7 +373,7 @@ DAG 结构总结：
 | 字段 | 说明 |
 |------|------|
 | `task` | 用户任务原文或等价摘要 |
-| `status` | Plan 整体状态：`pending`（未开始）→ `running`（执行中）→ `completed`（全部完成）/ `failed`（关键失败）/ `paused`（用户暂停） |
+| `status` | Plan 整体状态：`pending`（未开始）→ `running`（执行中）→ `blocked`（等待用户许可或外部条件）→ `completed`（全部完成）/ `failed`（关键失败）/ `paused`（用户暂停） |
 | `created_at` | plan 创建时间 |
 | `started_at` | plan 开始执行时间，首个步骤派发时设置 |
 | `completed_at` | plan 完成时间，所有步骤完成或标记失败时设置 |
@@ -391,7 +404,7 @@ DAG 结构总结：
 | `validation` | 本步骤完成后的验收方式，可以是命令、文件存在性、人工检查点或指标阈值 |
 | `risk_level` | 风险等级，建议 `low` / `medium` / `high`；涉及覆盖、远程、批量改写、发布等通常不应为 low |
 | `requires_user_confirm` | 是否需要用户确认后才能执行；高风险或不可逆步骤必须为 `true` |
-| `status` | `pending` → `running` → `completed` / `failed`。主会话派发/检测到完成时更新 |
+| `status` | `pending` → `running` → `blocked` / `completed` / `failed`。主会话派发、检测到权限阻塞或完成时更新 |
 | `progress` | 0-100 整数，agent 每次心跳时更新。pending 为 0，completed 为 100 |
 | `agent_id` | 执行该步骤的 Agent ID，派发时填写，完成后保留用于审计 |
 | `heartbeat_at` | 最后一次心跳时间戳。agent 在每个里程碑更新（启动→读输入→核心过半→产物接近完成→完成，见 execution-engine.md Heartbeat 表），主会话通过此字段判断 agent 是否存活 |

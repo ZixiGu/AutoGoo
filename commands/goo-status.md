@@ -69,7 +69,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.
 
 ## 信息密度原则
 
-- 顶部先给总览：完成数、进度、running/ready/blocked/failed、槽位占用
+- 顶部先给总览：完成数、进度、running/ready/waiting/blocked/failed、槽位占用
 - 第二行明确 `Next:`，直接告诉用户下一步该等、该跑还是该处理告警
 - Ready 和 Blocked 分开展示，不把所有 pending 混在一起
 - 执行中步骤：进度条 + output 预览 + heartbeat
@@ -82,7 +82,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.
 ╔══════════════════════════════════════════════════════════════════════════════════════╗
 ║ AutoGoo Status  {task}                                           {done}/{total}  86% ║
 ╚══════════════════════════════════════════════════════════════════════════════════════╝
-  ██████████████████████████░░░░  completed 12 · running 2 · ready 1 · blocked 1 · failed 0 · slots 2/6
+  ██████████████████████████░░░░  completed 12 · running 2 · ready 1 · waiting 1 · blocked 0 · failed 0 · slots 2/6
 ────────────────────────────────────────────────────────────────────────────────────────
 Next: 等待执行中步骤完成；完成后下游步骤会解锁。
 
@@ -107,14 +107,15 @@ DONE (10)
 三行边框标题 + 一行总体状态。总体状态必须包含：
 
 - 总进度条
-- completed / running / ready / blocked / failed 数量
+- completed / running / ready / waiting / blocked / failed 数量
 - slots `{running}/{max_concurrent}`
 
 紧跟一行 `Next:`，用一句话说明下一步行动：
 - 有告警 → 先处理告警
 - 有 running → 等待运行中步骤完成
 - 有 ready → 展示最多 3 个可立即执行步骤
-- 只有 blocked → 等待依赖完成
+- 只有 waiting → 等待依赖完成
+- 只有 blocked → 等待主 Agent 前台处理权限或外部阻塞
 - 全部完成 → 所有步骤已完成
 
 ### 执行中面板

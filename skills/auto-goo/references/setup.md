@@ -17,65 +17,25 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 - `/auto-goo:goo-init --user` → `~/.auto-goo/config.json`
 - `/auto-goo:goo-init --project` → `.goo/config.json`；自动创建或复用 Goo-wiki 与 `wiki/projects/<project-slug>/` 项目归档根目录，并询问是否更新项目 `CLAUDE.md` 的归档原则段落
 
-初始化采用主 Agent 交互模式：主 Agent 先通过对话确认作用域、wiki 路径、覆盖风险和项目 `CLAUDE.md` 更新意愿，再调用脚本落盘。底层写入仍由初始化脚本完成：
+初始化采用主 Agent 交互模式：主 Agent 先通过 `AskUserQuestion` / 结构化选择 UI 确认作用域、wiki 路径、覆盖风险和项目 `CLAUDE.md` 更新意愿，再调用脚本落盘。每个交互问题必须展示可点击选项；不得在 `AskUserQuestion` 可用时用普通文本要求用户手打 `1/2` 或命令参数。结构化选择 UI / AskUserQuestion 不可用、调用失败或没有渲染出按钮时，停止初始化并提示用户改用带参数命令，不要继续用普通文本编号收集选项。
 
-```bash
-auto_goo_root="$(
-  python3 - <<'PY' 2>/dev/null || true
-import json
-from pathlib import Path
+底层写入仍由初始化脚本完成，但只有在用户已确认所有参数后才运行脚本。命令文档不得在交互前执行 root 解析；不得内联 heredoc / file redirection 的 Python 片段。最终落盘阶段先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-init.sh --user|--project --wiki-dir <已确认路径> ...`。
 
-home = Path.home()
-matches = []
+主 Agent 应优先自己提问，而不是要求用户进入 Bash 交互。必须先用 `AskUserQuestion` 问用户作用域和 wiki 路径，并在问题中展示默认路径 `~/workspace/Goo-wiki`；用户不输入路径时使用默认路径。随后显式传入 `--user/--project` 与 `--wiki-dir <路径>`；不得默认写入项目配置，也不得在未展示默认路径的情况下静默使用默认 wiki 路径。
 
-def usable(path):
-    return path.exists() and not (path / ".orphaned_at").exists()
+第一个问题必须优先通过 `AskUserQuestion` 提供完整可见选项：
 
-registry = home / ".claude/plugins/installed_plugins.json"
-if registry.exists():
-    data = json.loads(registry.read_text(encoding="utf-8"))
-    for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
-            continue
-        for entry in entries:
-            path = Path(entry.get("installPath", "")).expanduser()
-            if usable(path):
-                matches.append((entry.get("lastUpdated", ""), str(path)))
+- 项目级 `--project` (Recommended) - 写入当前项目 `.goo/config.json`
+- 用户级 `--user` - 写入 `~/.auto-goo/config.json`
 
-if not matches:
-    settings = home / ".claude/settings.json"
-    if settings.exists():
-        data = json.loads(settings.read_text(encoding="utf-8"))
-        enabled = data.get("enabledPlugins", {})
-        marketplaces = data.get("extraKnownMarketplaces", {})
-        for key, is_enabled in enabled.items():
-            if not is_enabled or "@" not in key:
-                continue
-            plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
-                continue
-            source = marketplaces.get(marketplace, {}).get("source", {})
-            if source.get("source") != "directory":
-                continue
-            path_text = source.get("path")
-            if not path_text:
-                continue
-            path = Path(path_text).expanduser()
-            if usable(path):
-                matches.append(("settings:" + marketplace, str(path)))
+如果交互控件不可用，停止并提示用户改用 `/auto-goo:goo-init --user` 或 `/auto-goo:goo-init --project`；不要输出纯文本编号列表。
 
-if matches:
-    print(sorted(matches)[-1][1])
-PY
-)"
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
-  exit 127
-fi
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh"
-```
+第二个问题必须优先通过 `AskUserQuestion` 提供完整可见选项：
 
-主 Agent 应优先自己提问，而不是要求用户进入 Bash 交互。必须先问用户作用域和 wiki 路径，并在问题中展示默认路径 `~/workspace/Goo-wiki`；用户不输入路径时使用默认路径。随后显式传入 `--user/--project` 与 `--wiki-dir <路径>`；不得默认写入项目配置，也不得在未展示默认路径的情况下静默使用默认 wiki 路径。
+- `~/workspace/Goo-wiki` (Recommended)
+- 自定义路径（选择后在 Other 输入）
+
+如果交互控件不可用，停止并提示用户改用带完整参数的命令，例如 `/auto-goo:goo-init --user --wiki-dir ~/workspace/Goo-wiki`；不要输出纯文本编号列表。
 
 如果用户确认或输入的 Goo-wiki 路径不存在，初始化脚本必须自动创建该目录，并补齐 `CLAUDE.md`、`log.md`、`wiki/projects/`、`wiki/concepts/`、`wiki/questions/`、`journal/daily/`、`journal/weekly/` 基础结构。路径不存在不是 fallback 条件；只有创建失败、权限不足或后续归档时 wiki 不可写，才使用 `.goo/obsidian/` fallback。
 
@@ -161,10 +121,22 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
     "enabled": true,
     "fallback_dir": ".goo/obsidian",
     "plan_history_dir": ".goo/plans/history",
+    "brainstorm_history_dir": ".goo/brainstorms/history",
     "project_slug": "<project-slug>",
     "project_dir": "wiki/projects/<project-slug>",
     "fallback_project_dir": ".goo/obsidian/<project-slug>",
     "git_remote_url": "https://github.com/<owner>/<repo>.git"
+  },
+  "publish": {
+    "enabled": true,
+    "site_dir": ".goo/site",
+    "index_file": ".goo/site/index.html",
+    "split_pages": false,
+    "host": "0.0.0.0",
+    "port": 9877,
+    "open_browser": true,
+    "include_activity_heatmap": true,
+    "include_dag": true
   },
   "execution": {
     "max_concurrent": 6,
@@ -219,66 +191,9 @@ config 中只记录 `servers[].{ip, port, user, type, purpose, secrets_file}`，
 sudo apt install sshpass
 ```
 
-不会自动安装，也不会中断初始化。自动连接脚本支持按服务器选择：
+不会自动安装，也不会中断初始化。自动连接脚本支持按服务器选择。使用时先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-ssh.sh`，例如传入 `--server <ip-or-host>`、`--server <ip-or-host>:<port>`、`--server <user>@<ip-or-host>:<port>`，或传入 `--host <ip-or-host> --user <user> --port <port>`。
 
-```bash
-auto_goo_root="$(
-  python3 - <<'PY' 2>/dev/null || true
-import json
-from pathlib import Path
-
-home = Path.home()
-matches = []
-
-def usable(path):
-    return path.exists() and not (path / ".orphaned_at").exists()
-
-registry = home / ".claude/plugins/installed_plugins.json"
-if registry.exists():
-    data = json.loads(registry.read_text(encoding="utf-8"))
-    for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
-            continue
-        for entry in entries:
-            path = Path(entry.get("installPath", "")).expanduser()
-            if usable(path):
-                matches.append((entry.get("lastUpdated", ""), str(path)))
-
-if not matches:
-    settings = home / ".claude/settings.json"
-    if settings.exists():
-        data = json.loads(settings.read_text(encoding="utf-8"))
-        enabled = data.get("enabledPlugins", {})
-        marketplaces = data.get("extraKnownMarketplaces", {})
-        for key, is_enabled in enabled.items():
-            if not is_enabled or "@" not in key:
-                continue
-            plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
-                continue
-            source = marketplaces.get(marketplace, {}).get("source", {})
-            if source.get("source") != "directory":
-                continue
-            path_text = source.get("path")
-            if not path_text:
-                continue
-            path = Path(path_text).expanduser()
-            if usable(path):
-                matches.append(("settings:" + marketplace, str(path)))
-
-if matches:
-    print(sorted(matches)[-1][1])
-PY
-)"
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
-  exit 127
-fi
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" --server <ip-or-host>
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" --server <ip-or-host>:<port>
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" --server <user>@<ip-or-host>:<port>
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" --host <ip-or-host> --user <user> --port <port>
-```
+注意：setup 文档不内联 root 解析 heredoc，避免 slash command 在交互前误执行 Bash。
 
 ### 自定义路径
 

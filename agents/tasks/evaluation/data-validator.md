@@ -1,7 +1,7 @@
 ---
 name: data-validator
 description: "AutoGoo 数据校验 Task Agent。检查 JSONL、数据集、标注、schema 和统计分布，输出异常样例。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 12

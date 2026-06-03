@@ -1,7 +1,7 @@
 ---
 name: traceability-auditor
 description: "AutoGoo 可追溯性审计 Task Agent。检查用户需求、plan step、产物、验证和归档之间是否可追溯。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 8

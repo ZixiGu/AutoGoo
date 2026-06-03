@@ -1,7 +1,7 @@
 ---
 name: doc-editor
 description: "AutoGoo 文档编辑 Task Agent。编辑 README、CLAUDE.md、规范文档和 agent 提示词，保持事实准确和命令可执行。"
-tools: Read, Grep, Glob, Bash, Edit, MultiEdit, Write
+tools: Read, Grep, Glob, Bash, Edit, MultiEdit, Write, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 10

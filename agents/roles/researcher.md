@@ -1,7 +1,7 @@
 ---
 name: researcher
 description: "AutoGoo 调研 Subagent。查资料、读文档、搜索代码库、整理约束和方案选项，不直接修改业务代码。"
-tools: Read, Grep, Glob, Bash, WebSearch
+tools: Read, Grep, Glob, Bash, WebSearch, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 8
@@ -36,6 +36,7 @@ color: blue
 - 需要时附关键行号引用。
 - 标注不确定性和需要跟进的点。
 - 非必要不贴原始日志。
+- 中间检索思路、下一步自我提示和未验证判断写入 `.goo/logs/`，不要直接刷到用户前台；前台只汇报启动、完成、失败、阻塞或需要确认的简短状态。
 
 ## Heartbeat
 

@@ -24,12 +24,26 @@ AutoGoo 的"并行"是 **task-level 并行**（多个独立 Subagent 同时执�
 6. 审核 Subagent 产物，判断是否满足用户目标和项目约束。
 7. 合并跨步骤结果，处理冲突，必要时要求局部返工。
 8. 维护当前 `.goo/plan.json`、`.goo/logs/`、`.goo/artifacts/` 和 Goo-wiki 归档的一致性。
+9. 聚合 Subagent 上报的权限阻塞，在前台向用户申请许可，并把批准/拒绝结果回写 plan。
 
 Subagent 只对被分配的步骤负责，不能改写整体计划、扩大任务范围、越权修改其他步骤文件，或自行决定跳过主 Agent 定义的验收条件。
 
 `goo-start` / `goo-continue` 执行阶段必须派发 Subagent：`research`、`exec`、`optimize`、`eval`、`review`、`audit`、`archive` 等步骤由对应 Subagent 执行。主 Agent 负责编排、上下文裁剪、派发、状态修复、产物审核和必要返工，不直接代做步骤产物。
 
 **Subagent 缺失处理**：当 plan step 的 `subagent` 字段缺失或不属于合法角色（`researcher`/`implementer`/`optimizer`/`evaluator`/`reviewer`/`auditor`/`recorder`）时，暂停派发并先修正 `.goo/plan.json` 或创建新的合法 Subagent 角色；不得由主 Agent 降级代执行该步骤。
+
+## 权限分层
+
+AutoGoo 的权限交互由主 Agent 统一处理，后台 Subagent 不做平凡 approval 弹窗。
+
+| 层级 | 判定 | 行为 |
+|------|------|------|
+| 普通权限 | plan 已声明 `allowed_read_paths` / `allowed_write_paths`，命令在项目 allowlist 内，`requires_user_confirm=false` | Subagent 在边界内直接执行，不询问用户 |
+| 可预见高成本权限 | 安装依赖、网络下载、远程执行、长跑任务、后台服务、端口监听、批量数据改写、跨机器同步、外部写入或不可逆成本 | 规划阶段标记 `requires_user_confirm=true`；主 Agent 派发前一次性说明命令类别、作用域、产物位置和风险，用户确认后再执行 |
+| 意外权限阻塞 | `PermissionDenied`、sandbox blocked、approval required、命令不在 allowlist、读写路径越界、需要额外目录或远程权限 | Subagent 写日志并回写 `blocked`/`needs_user_approval`，包含命令、原因、读写路径、风险和建议；主 Agent 聚合后前台询问 |
+| 危险操作 | 删除、覆盖配置、破坏性 Git、强推、改写历史、展开 secrets、远程删除或远程批量覆盖 | 必须前台单独确认；用户拒绝时标记 failed 或调整 plan，禁止自动重试 |
+
+`needs_user_approval` 不是普通失败。主 Agent 不得把它按失败重试，也不得在未获许可时直接代做步骤产物。用户批准后，只能在批准的命令类别、路径和风险范围内重派 Subagent 或由主 Agent 执行许可命令；用户拒绝后，回写 failed、deferred 或更新 plan 走替代路线。
 
 每个 plan step 必须显式声明 `subagent` 和 `task_agent` 字段。`type` 描述步骤性质，`subagent` 描述稳定 Role Agent，`task_agent` 描述该 role 下的细分 Task Agent。例如：
 
@@ -67,6 +81,16 @@ Subagent 默认隔离上下文。主 Agent 派发时只传：
 - 未完成并行步骤的中间状态
 
 Subagent 之间只通过 `.goo/plan.json`、`.goo/logs/`、Goo-wiki 项目笔记、`.goo/obsidian/` fallback、明确产物路径和最终归档摘要交接。需要共享大段上下文时，主 Agent 应先把它整理成 Goo-wiki 项目笔记或摘要，再显式传给下游步骤。若 Subagent 需要的信息只存在于主会话聊天记录中，必须暂停派发，由主 Agent 更新 plan 或创建 context artifact 后再继续。
+
+## 前台输出边界
+
+后台 Subagent 的代码阅读、根因猜测、下一步自我提示和未验证判断必须写入 `.goo/logs/` 或最终 step 报告，不直接刷到用户前台。前台只保留：
+
+- step 启动、完成、失败、阻塞或需要用户确认的简短状态；
+- 已验证的最终结论、变更文件、产物路径和验证结果；
+- 需要主 Agent 向用户申请的权限、风险和建议操作。
+
+例如 `"The issue is that ... Let me check ..."` 这类中间诊断应写入日志，等确认根因后再由主 Agent 汇总。Subagent 不应把内部检查过程写成面向用户的连续旁白。
 
 ## Subagent Skill 派发
 
@@ -131,6 +155,7 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
     2. 填充空槽位
        while len(running) < MAX_CONCURRENT 且 ready_queue 非空:
          step = ready_queue.pop(0)
+         若 step.requires_user_confirm=true 且尚未确认 → 主 Agent 前台询问，确认后再派发
          更新 status="running", progress=0, agent_id, started_at → plan.json
          启动 Agent (run_in_background, 间隔 3-5s 错峰)
          running.append(step)
@@ -139,7 +164,8 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
        任一 running agent 完成（或超时/失败）
          → 从 running 移除
          → 收集结果 → 写入 .goo/logs/
-         → 更新 status="completed"(progress=100)/"failed" → plan.json
+         → 更新 status="completed"(progress=100)/"failed"/"blocked" → plan.json
+         → 若 blocked/needs_user_approval，聚合权限需求并由主 Agent 前台询问
          → 立即回到步骤 1（该 agent 解锁的下游步骤可以马上入队）
 
     4. 心跳与进度巡检
@@ -190,6 +216,7 @@ for step in batch:
 | Agent 心跳（里程碑） | `heartbeat_at=now`, `progress=<N>`（见 Heartbeat 表） | — |
 | Agent 完成 | `status="completed"`, `completed_at=now`, `progress=100` | `goo-status.py --update-status` |
 | Agent 失败 | `status="failed"`, `completed_at=now` | `goo-status.py --update-status` |
+| 权限阻塞 | `status="blocked"`, `blocked_at=now`, `error="needs_user_approval: ..."` | 主 Agent 前台申请许可后再 `goo-status.py --update-status` |
 
 **Plan 顶层状态更新是强制的**，不是可选的"建议"。主 Agent 在每次 step 状态变更后必须立即调用：
 
@@ -249,7 +276,7 @@ fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.json --update-status
 ```
 
-这会更新 plan 顶层的 `status`（`pending` → `running` → `completed`/`failed`）、`started_at`（首次进入 running 时）和 `completed_at`（全部完成或失败时）。不调用此命令会导致 plan 顶层状态与实际 step 状态不同步。`/auto-goo:goo-status` 也会读取此字段渲染仪表盘。
+这会更新 plan 顶层的 `status`（`pending` → `running` → `blocked` → `completed`/`failed`）、`started_at`（首次进入 running 时）和 `completed_at`（全部完成或失败时）。不调用此命令会导致 plan 顶层状态与实际 step 状态不同步。`/auto-goo:goo-status` 也会读取此字段渲染仪表盘。
 
 状态回写必须使用插件脚本，避免多个 Agent 用临时 JSON 代码互相覆盖：
 
@@ -344,8 +371,15 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 ## 上下文边界
 - 允许读取: {allowed_read_paths}
 - 允许写入: {allowed_write_paths}
+- 是否需要用户确认: {requires_user_confirm}
 - 相关 wiki_context: {relevant_wiki_context}
 - 不要使用其他 Subagent 的未归档草稿作为依据
+
+## 权限处理
+- 普通读写和低风险命令只能在上述边界内执行。
+- 如果遇到 `PermissionDenied`、sandbox blocked、approval required、命令不在 allowlist、读写路径越界或需要额外权限，不要自行弹窗、不要循环重试、不要让主 Agent 未经许可直接代做。
+- 立即更新日志，调用 `update-step.py --block --error "needs_user_approval: <命令/原因/读写路径/风险>"`，并在日志中写清建议由主 Agent 前台询问用户。
+- 等用户批准后，主 Agent 会重派本 step 或执行批准范围内的命令。
 
 ## Heartbeat（强制）
 
@@ -504,8 +538,9 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 | 情况 | 处理方式 |
 |------|---------|
 | Agent 执行失败 | 记录错误日志，重试 1 次 |
+| 权限/沙箱/approval 阻塞 | 调用 `update-step.py --block --error "needs_user_approval: <命令/原因/读写路径/风险>"`，主 Agent 聚合后前台询问用户；不按普通失败重试 |
 | 重试仍失败 | 标记 status="failed"，继续执行不依赖它的步骤 |
-| 关键路径失败 | 通知用户，询问是否继续 |
+| 关键路径失败 | 通知用户，并优先用结构化选项询问：`重试该步骤`、`跳过并继续可执行的非依赖步骤`、`停止并保留当前现场`；纯文本编号只作为交互控件不可用时的 fallback |
 | Agent 超时（>15 分钟无心跳，可配置） | 视为失败，按失败流程处理 |
 | 会话中断（心跳停滞 >= 2min） | 恢复时检测到僵尸，重置为 pending 重新派发 |
 | 部分成功 | 合并已成功的结果，标注失败步骤 |

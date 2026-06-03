@@ -1,7 +1,7 @@
 ---
 name: optimizer
 description: "AutoGoo 优化 Subagent。性能测量、瓶颈分析和局部优化，没有基线不盲目优化。"
-tools: Read, Grep, Glob, Bash, Edit, Write
+tools: Read, Grep, Glob, Bash, Edit, Write, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 15
@@ -35,6 +35,7 @@ color: orange
 - 每轮：改了什么、优化后指标、变化量。
 - 最终对比表。
 - 残留风险或后续建议。
+- 中间排查过程、下一步自我提示和未验证判断写入 `.goo/logs/`，不要直接刷到用户前台；前台只汇报启动、完成、失败、阻塞或需要确认的简短状态。
 
 ## Heartbeat
 

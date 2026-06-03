@@ -1,7 +1,7 @@
 ---
 name: workflow-optimizer
 description: "AutoGoo 工作流优化 Task Agent。优化 plan DAG、并发顺序、阻塞点和有限反馈闭环。"
-tools: Read, Grep, Glob, Bash, Edit
+tools: Read, Grep, Glob, Bash, Edit, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 10

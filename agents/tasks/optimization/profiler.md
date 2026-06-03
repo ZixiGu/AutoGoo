@@ -1,7 +1,7 @@
 ---
 name: profiler
 description: "AutoGoo 性能画像 Task Agent。优化前建立基线、定位瓶颈和测量方法，不盲目改代码。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 10

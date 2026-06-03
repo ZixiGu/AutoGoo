@@ -115,12 +115,15 @@ def compute_plan_status(data: dict[str, Any], steps: list[dict[str, Any]]) -> st
 
     completed = sum(1 for s in steps if s.get("status") == "completed")
     failed = sum(1 for s in steps if s.get("status") == "failed")
+    blocked = sum(1 for s in steps if s.get("status") == "blocked")
     running = sum(1 for s in steps if s.get("status") == "running")
 
     if completed == total:
         return "completed"
     if failed > 0 and not running:
         return "failed"
+    if blocked > 0 and not running:
+        return "blocked"
     if running > 0 or completed > 0:
         return "running"
     return "pending"
@@ -157,28 +160,31 @@ def main() -> int:
     total = len(steps)
     completed = sum(1 for s in steps if s.get("status") == "completed")
     failed = sum(1 for s in steps if s.get("status") == "failed")
+    approval_blocked = [s for s in steps if status_of(s) == "blocked"]
     running = [s for s in steps if status_of(s) == "running"]
     pending = [s for s in steps if status_of(s) == "pending"]
     ready = [s for s in pending if deps_completed(s, steps_by_id)]
-    blocked = [s for s in pending if not deps_completed(s, steps_by_id)]
-    known_statuses = {"pending", "running", "completed", "failed"}
+    waiting = [s for s in pending if not deps_completed(s, steps_by_id)]
+    known_statuses = {"pending", "running", "completed", "failed", "blocked"}
     other = [s for s in steps if status_of(s) not in known_statuses]
     avg = round(sum(int(s.get("progress", 100 if s.get("status") == "completed" else 0) or 0) for s in steps) / total) if total else 0
     task = data.get("task", "AutoGoo")
     plan_status = data.get("status", compute_plan_status(data, steps))
     max_concurrent = data.get("max_concurrent", data.get("execution", {}).get("max_concurrent", 6))
 
-    status_icon = {"pending": "⏳", "running": "▶", "completed": "✅", "failed": "❌", "paused": "⏸"}.get(plan_status, "?")
+    status_icon = {"pending": "⏳", "running": "▶", "completed": "✅", "failed": "❌", "blocked": "⛔", "paused": "⏸"}.get(plan_status, "?")
     print("╔" + "═" * (WIDTH - 2) + "╗")
     print(f"║ {status_icon} AutoGoo [{plan_status}]  {shorten(task, WIDTH - 38):<{WIDTH - 38}} {completed}/{total:>2} {avg:>3}% ║")
     print("╚" + "═" * (WIDTH - 2) + "╝")
     other_text = f" · other {len(other)}" if other else ""
-    print(f"  {bar(avg, 30)}  completed {completed} · running {len(running)} · ready {len(ready)} · blocked {len(blocked)} · failed {failed}{other_text} · slots {len(running)}/{max_concurrent}")
+    print(f"  {bar(avg, 30)}  completed {completed} · running {len(running)} · ready {len(ready)} · waiting {len(waiting)} · blocked {len(approval_blocked)} · failed {failed}{other_text} · slots {len(running)}/{max_concurrent}")
 
     warnings = []
     for step in steps:
         if status_of(step) == "failed":
             warnings.append(f"{step_id(step)} {step.get('name')} failed: {step.get('error', '见日志')}")
+        if status_of(step) == "blocked":
+            warnings.append(f"{step_id(step)} {step.get('name')} needs approval: {step.get('error', '见日志')}")
         if status_of(step) == "running":
             hb = parse_time(step.get("heartbeat_at"))
             if not hb:
@@ -195,7 +201,9 @@ def main() -> int:
         names = " / ".join(f"{step_id(s)} {shorten(s.get('name'), 18)}" for s in ready[:3])
         more = f" +{len(ready) - 3}" if len(ready) > 3 else ""
         print(f"Next: 可立即执行 {names}{more}")
-    elif blocked:
+    elif approval_blocked:
+        print("Next: 存在权限阻塞，请由主 Agent 前台向用户申请许可。")
+    elif waiting:
         print("Next: 暂无就绪步骤，等待前置依赖完成。")
     elif other:
         print("Next: 存在非标准状态步骤，请先检查或规范化 status。")
@@ -220,13 +228,22 @@ def main() -> int:
         if len(ready) > 8:
             print(f"    ... {len(ready) - 8} more ready")
 
-    if blocked:
+    if approval_blocked:
         print_rule()
-        print(f"BLOCKED ({len(blocked)})")
-        for step in blocked[:8]:
+        print(f"NEEDS APPROVAL ({len(approval_blocked)})")
+        for step in approval_blocked[:8]:
+            detail = shorten(step.get("error", "等待用户授权"), 76)
+            print_step_line("⛔", step, detail)
+        if len(approval_blocked) > 8:
+            print(f"    ... {len(approval_blocked) - 8} more blocked")
+
+    if waiting:
+        print_rule()
+        print(f"WAITING ({len(waiting)})")
+        for step in waiting[:8]:
             print_step_line("⏳", step, dep_names(step, steps_by_id))
-        if len(blocked) > 8:
-            print(f"    ... {len(blocked) - 8} more blocked")
+        if len(waiting) > 8:
+            print(f"    ... {len(waiting) - 8} more waiting")
 
     done = [s for s in steps if status_of(s) == "completed"]
     if done:

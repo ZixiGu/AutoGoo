@@ -1,7 +1,7 @@
 ---
 name: compliance-auditor
 description: "AutoGoo 合规审计 Task Agent。检查任务是否遵守项目规范、用户约束、命令安全和归档要求。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 8

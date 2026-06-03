@@ -23,205 +23,37 @@ description: 初始化 AutoGoo 配置 — 支持用户级 ~/.auto-goo/config.jso
 
 ## 行为
 
-该命令使用 **Agent 交互模式 + 脚本落盘**：主 Agent 收到命令后直接开始交互提问，不预先检查环境；脚本内部自行处理已有配置的检测和覆盖确认。slash command 的当前工作目录通常是用户项目，不一定是插件目录；脚本执行前必须从 Claude Code 安装记录解析 AutoGoo 根目录，不能拼出 `/skills/...`：
+该命令使用 **Agent 交互模式 + 脚本落盘**：
 
-```bash
-auto_goo_root="$(
-  python3 - <<'PY' 2>/dev/null || true
-import json
-from pathlib import Path
+- 主 Agent 收到命令后必须先交互提问，不预先检查环境，不先运行 Bash，不先解析 AutoGoo root。
+- 所有缺失参数收集完成后，才进入脚本落盘阶段；脚本内部自行处理已有配置的检测和覆盖确认。
+- slash command 的当前工作目录通常是用户项目，不一定是插件目录；最终落盘前必须从 Claude Code 安装记录解析 AutoGoo 根目录，不能拼出 `/skills/...`。
+- 禁止在命令正文中直接执行含 heredoc / file redirection 的 root 解析片段。需要解析 root 时，使用插件内置 `skills/auto-goo/scripts/resolve-root.sh`，或等价的无 heredoc 命令封装。
 
-home = Path.home()
-matches = []
-
-def usable(path):
-    return path.exists() and not (path / ".orphaned_at").exists()
-
-registry = home / ".claude/plugins/installed_plugins.json"
-if registry.exists():
-    data = json.loads(registry.read_text(encoding="utf-8"))
-    for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
-            continue
-        for entry in entries:
-            path = Path(entry.get("installPath", "")).expanduser()
-            if usable(path):
-                matches.append((entry.get("lastUpdated", ""), str(path)))
-
-if not matches:
-    settings = home / ".claude/settings.json"
-    if settings.exists():
-        data = json.loads(settings.read_text(encoding="utf-8"))
-        enabled = data.get("enabledPlugins", {})
-        marketplaces = data.get("extraKnownMarketplaces", {})
-        for key, is_enabled in enabled.items():
-            if not is_enabled or "@" not in key:
-                continue
-            plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
-                continue
-            source = marketplaces.get(marketplace, {}).get("source", {})
-            if source.get("source") != "directory":
-                continue
-            path_text = source.get("path")
-            if not path_text:
-                continue
-            path = Path(path_text).expanduser()
-            if usable(path):
-                matches.append(("settings:" + marketplace, str(path)))
-
-if matches:
-    print(sorted(matches)[-1][1])
-PY
-)"
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
-  exit 127
-fi
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" <用户选择的作用域>
-```
-
-默认优先由主 Agent 提问，不要求用户进入 Bash 交互。用户没有在命令里显式给出参数时，主 Agent 至少先问两个问题：
+用户没有在命令里显式给出参数时，主 Agent 至少先问两个问题：
 
 1. 配置作用域：`--user` 还是 `--project`
 2. Goo-wiki 路径：向用户展示默认路径 `~/workspace/Goo-wiki`；用户不输入或选择默认时就使用该路径，也可输入自定义路径
 
-项目级初始化时，还应通过对话确认是否更新项目 `CLAUDE.md`；需要远程服务器配置时，由主 Agent 通过 `AskUserQuestion` 逐字段收集，每个问题提供 2 个选项（一个推荐默认值 + 一个常用备选），用户可通过系统自动提供的 "Other" 选项输入自定义值。服务器非敏感参数（类型、IP、端口、用户名、用途）全部收集完成后，再调用脚本进入密码录入。密码不得在聊天中明文输出。
+项目级初始化时，还应通过 `AskUserQuestion` 确认是否更新项目 `CLAUDE.md`；需要远程服务器配置时，由主 Agent 通过 `AskUserQuestion` 逐字段收集，每个问题提供 2 个选项（一个推荐默认值 + 一个常用备选），用户可通过系统自动提供的 "Other" 选项输入自定义值。服务器非敏感参数（类型、IP、端口、用户名、用途）全部收集完成后，再调用脚本进入密码录入。密码不得在聊天中明文输出。
 
-例如用户选择 `--user` 且不输入路径（使用默认路径）时，必须运行：
-
-```bash
-auto_goo_root="$(
-  python3 - <<'PY' 2>/dev/null || true
-import json
-from pathlib import Path
-
-home = Path.home()
-matches = []
-
-def usable(path):
-    return path.exists() and not (path / ".orphaned_at").exists()
-
-registry = home / ".claude/plugins/installed_plugins.json"
-if registry.exists():
-    data = json.loads(registry.read_text(encoding="utf-8"))
-    for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
-            continue
-        for entry in entries:
-            path = Path(entry.get("installPath", "")).expanduser()
-            if usable(path):
-                matches.append((entry.get("lastUpdated", ""), str(path)))
-
-if not matches:
-    settings = home / ".claude/settings.json"
-    if settings.exists():
-        data = json.loads(settings.read_text(encoding="utf-8"))
-        enabled = data.get("enabledPlugins", {})
-        marketplaces = data.get("extraKnownMarketplaces", {})
-        for key, is_enabled in enabled.items():
-            if not is_enabled or "@" not in key:
-                continue
-            plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
-                continue
-            source = marketplaces.get(marketplace, {}).get("source", {})
-            if source.get("source") != "directory":
-                continue
-            path_text = source.get("path")
-            if not path_text:
-                continue
-            path = Path(path_text).expanduser()
-            if usable(path):
-                matches.append(("settings:" + marketplace, str(path)))
-
-if matches:
-    print(sorted(matches)[-1][1])
-PY
-)"
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
-  exit 127
-fi
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --user --wiki-dir ~/workspace/Goo-wiki
-```
-
-例如用户选择 `--project` 且输入自定义路径时，必须运行：
-
-```bash
-auto_goo_root="$(
-  python3 - <<'PY' 2>/dev/null || true
-import json
-from pathlib import Path
-
-home = Path.home()
-matches = []
-
-def usable(path):
-    return path.exists() and not (path / ".orphaned_at").exists()
-
-registry = home / ".claude/plugins/installed_plugins.json"
-if registry.exists():
-    data = json.loads(registry.read_text(encoding="utf-8"))
-    for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
-            continue
-        for entry in entries:
-            path = Path(entry.get("installPath", "")).expanduser()
-            if usable(path):
-                matches.append((entry.get("lastUpdated", ""), str(path)))
-
-if not matches:
-    settings = home / ".claude/settings.json"
-    if settings.exists():
-        data = json.loads(settings.read_text(encoding="utf-8"))
-        enabled = data.get("enabledPlugins", {})
-        marketplaces = data.get("extraKnownMarketplaces", {})
-        for key, is_enabled in enabled.items():
-            if not is_enabled or "@" not in key:
-                continue
-            plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
-                continue
-            source = marketplaces.get(marketplace, {}).get("source", {})
-            if source.get("source") != "directory":
-                continue
-            path_text = source.get("path")
-            if not path_text:
-                continue
-            path = Path(path_text).expanduser()
-            if usable(path):
-                matches.append(("settings:" + marketplace, str(path)))
-
-if matches:
-    print(sorted(matches)[-1][1])
-PY
-)"
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
-  exit 127
-fi
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir /path/to/Goo-wiki
-```
-
-带参数示例：
-
-```bash
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --user
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~/workspace/Goo-wiki
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~/workspace/Goo-wiki --project-slug my-project
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~/workspace/Goo-wiki --update-claude-md
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~/workspace/Goo-wiki --skip-claude-md
-bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~/workspace/Goo-wiki
-```
+最终落盘阶段运行脚本时，只能在用户已确认参数后执行，形态如下：先解析 AutoGoo root，再运行 `bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --user|--project --wiki-dir <已确认路径> ...`。不得在交互前运行 root 解析命令。
 
 Agent 交互流程：
 
-1. **不要先检查环境，直接开始交互提问。** 收到 `/auto-goo:goo-init` 后，不要先跑 `ls`、`git remote`、`test -f` 等探测命令，而是直接用 AskUserQuestion 或对话方式询问用户偏好。
+1. **不要先检查环境，直接开始交互提问。** 收到 `/auto-goo:goo-init` 后，不要先跑 `ls`、`git remote`、`test -f` 等探测命令，而是直接调用 `AskUserQuestion` / 结构化选择 UI 询问用户偏好。不得在 `AskUserQuestion` 可用时用普通文本要求用户手打 `1/2` 或 `--project/--user`。
 2. 读取用户已给参数，缺什么问什么；不要一次性抛出长问卷。
-3. 第一个问题：配置作用域，选项：「项目级 --project (Recommended)」「用户级 --user」
-4. 第二个问题：Goo-wiki 路径，选项：「~/workspace/Goo-wiki (Recommended)」「自定义路径（选择后在下方 Other 输入）」
-5. 项目级初始化时，继续询问：
+3. 所有交互问题必须使用 `AskUserQuestion` / 结构化选择 UI 展示可点击选项；不得只输出“请选择配置作用域”这类问题标题后等待用户，也不得要求用户手打 `1/2` 或 `--project/--user`。如果结构化选择 UI / AskUserQuestion 不可用、调用失败或没有渲染出按钮，停止初始化并提示用户改用带参数命令 `/auto-goo:goo-init --user` 或 `/auto-goo:goo-init --project`，不要继续用普通文本收集选项。
+4. 第一个问题必须优先用 `AskUserQuestion` 呈现以下选项：
+   - 项目级 `--project` (Recommended) — 写入当前项目 `.goo/config.json`
+   - 用户级 `--user` — 写入 `~/.auto-goo/config.json`
+5. 如果无法渲染结构化选项，停止并提示用户改用 `/auto-goo:goo-init --user` 或 `/auto-goo:goo-init --project`；不要输出纯文本编号列表。
+6. 第二个问题必须优先用 `AskUserQuestion` 呈现以下选项：
+   - `~/workspace/Goo-wiki` (Recommended)
+   - 自定义路径（选择后在 Other 输入）
+7. 如果无法渲染结构化选项，停止并提示用户改用带完整参数的命令，例如 `/auto-goo:goo-init --user --wiki-dir ~/workspace/Goo-wiki`；不要输出纯文本编号列表。
+8. 后续二选一问题也必须用 `AskUserQuestion` 提供两个显式选项；不得用纯文本编号列表代替。
+9. 项目级初始化时，继续询问：
    - 是否更新项目 `CLAUDE.md`（`AskUserQuestion`，选项：「是 (Recommended)」「跳过」）
    - 是否需要配置远程服务器（`AskUserQuestion`，选项：「否 (Recommended)」「是」）
    - 如果用户选择配置服务器，逐字段使用 `AskUserQuestion` 收集非敏感参数。**每个问题必须至少 2 个显式选项**（系统的自动 Other 不算在内）。用户可直接选用预设值，或通过 "Other" 输入自定义值：
@@ -233,8 +65,8 @@ Agent 交互流程：
      - **密码**：「稍后手动填入 (Recommended)」「输入密码」— 用户可输入密码，也可选默认跳过。如果跳过，提示用户密码存储在 `<项目级 .goo/secrets.json 或用户级 ~/.auto-goo/secrets.json>`（chmod 600），可稍后编辑该文件补填 `password` 字段。
      - 每台服务器配置完后询问「是否添加另一台服务器？」
      - 所有服务器信息收集完后，汇总展示给用户确认，然后调用脚本落盘。
-6. 用户回答完所有问题后，把已确认的 `--user/--project`、`--wiki-dir`、`--project-slug`、`--update-claude-md/--skip-claude-md` 等参数传给脚本。脚本内部自行处理已存在配置的检测和覆盖确认。
-7. 脚本执行后读取结果摘要，向用户说明最终生效配置和 fallback 情况。
+10. 用户回答完所有问题后，把已确认的 `--user/--project`、`--wiki-dir`、`--project-slug`、`--update-claude-md/--skip-claude-md` 等参数传给脚本。脚本内部自行处理已存在配置的检测和覆盖确认。
+11. 脚本执行后读取结果摘要，向用户说明最终生效配置和 fallback 情况。
 
 脚本落盘行为：
 

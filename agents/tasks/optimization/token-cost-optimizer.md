@@ -1,7 +1,7 @@
 ---
 name: token-cost-optimizer
 description: "AutoGoo token 成本优化 Task Agent。分析上下文、文档读取和 subagent 输入过宽问题，给出降本方案。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 10

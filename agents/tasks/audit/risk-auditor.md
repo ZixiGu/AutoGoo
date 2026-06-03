@@ -1,7 +1,7 @@
 ---
 name: risk-auditor
 description: "AutoGoo 风险审计 Task Agent。聚焦交付风险、回归风险、环境风险和未验证假设。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 8

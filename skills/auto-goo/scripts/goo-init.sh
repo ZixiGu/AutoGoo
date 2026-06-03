@@ -528,6 +528,17 @@ config = {
         "plan_history_dir": ".goo/plans/history",
         "brainstorm_history_dir": ".goo/brainstorms/history",
     },
+    "publish": {
+        "enabled": True,
+        "site_dir": ".goo/site",
+        "index_file": ".goo/site/index.html",
+        "split_pages": False,
+        "host": "0.0.0.0",
+        "port": 9877,
+        "open_browser": True,
+        "include_activity_heatmap": True,
+        "include_dag": True,
+    },
     "execution": {
         "max_concurrent": 6,
         "heartbeat_seconds": 30,

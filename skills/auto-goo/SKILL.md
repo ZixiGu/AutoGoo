@@ -1,8 +1,8 @@
 ---
 name: goo-workflow
-description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', 'brainstorm', '找目标', '开始任务', 'run:', '读论文', '论文', 'paper', '日报', '周报', 'usage', 'token统计', 'token降本', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent tools."
-version: 0.3.0
-tools: [Read, Write, Edit, Bash, WebSearch, Agent]
+description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', '/auto-goo:goo-publish', 'brainstorm', '找目标', '开始任务', 'run:', '读论文', '论文', 'paper', '日报', '周报', 'usage', 'token统计', 'token降本', '发布HTML', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status, HTML publishing, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion tools."
+version: 0.3.1
+tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 ---
 
 # AutoGoo 自动化工作流
@@ -23,20 +23,130 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
 - `/auto-goo:goo-daily-report [日期|范围]`：扫描 Claude Code / Codex 会话，生成 Goo-wiki 日报或周报素材。
 - `/auto-goo:goo-usage [参数]`：扫描 Claude Code usage 日志，参考 Claude-Code-Usage-Monitor 的终端界面风格渲染今天总 token、项目分布、模型分布和可选 cost 面板。
 - `/auto-goo:goo-usage-analyse [项目|范围]`：结合 usage 热点和 Goo-wiki 项目知识，归因 token 开销并生成可落地节省方案。
+- `/auto-goo:goo-publish`：把 `.goo/` 工作流状态发布成静态单页 HTML，包含 activity 热力图、brainstorm、plan、任务流程图、DAG、运行状态和产物索引。
 
 **内容输出归档铁律**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令最终都必须归档到 Goo-wiki。包括 `/auto-goo:goo-brainstorm` 的候选 goals、`/auto-goo:goo-research paper` 的论文资料包和深度笔记、`/auto-goo:goo-usage-analyse` 的降本报告、`/auto-goo:goo-daily-report` 的日报/周报、`/auto-goo:goo-improve` 的改进建议、benchmark/plan/start/continue 的计划与执行经验。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。`goo-brainstorm` 和 `goo-plan` 必须先让用户审阅，用户确认前只写本地 `.goo/brainstorm.json` / `.goo/plan.json` 草案，不急着归档最终知识页。
 
 **同一任务归档根**：同一条任务链路的 brainstorm、plan 和 execution 知识归档默认放在同一个 `task_archive_root` 下，用子目录区分阶段：`brainstorm/` 保存候选目标、推荐顺序和选择依据；`plan/` 保存正式 DAG、上下文摘要和计划取舍；`execution/` 保存步骤证据、验证结果和最终经验。`task_archive_root` 优先位于 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-task-slug>/`；Goo-wiki 不可用时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/`。`.goo/brainstorm.json.archive.task_archive_root` 与 `.goo/plan.json.archive.task_archive_root` 必须保持一致，除非用户明确要求分开归档。注意：这不同于本地 JSON 历史快照；旧 `.goo/plan.json` 仍保存到 `.goo/plans/history/`，旧 `.goo/brainstorm.json` 保存到 `.goo/brainstorms/history/`。
+
+**HTML 发布层**：`/auto-goo:goo-publish` 是工作流的只读展示层，默认从 `.goo/brainstorm.json`、`.goo/plan.json`、`.goo/plans/history/`、`.goo/brainstorms/history/`、`.goo/logs/`、`.goo/artifacts/`、`.goo/reports/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/index.html` 单页站点。发布页面必须以 `skills/auto-goo/templates/publish/workflow-*.html` 为页面外壳和视觉契约来源，复用模板的 sidebar、工作区导航、topbar、主题切换、基础 CSS token、卡片/表格/详情块样式，脚本只负责填入 `.goo/` 实时数据，不另起独立 UI。默认内容完整保留在首页，工作区导航可切换 Status、Plan、Brainstorm、Subagents、Artifacts 等视图；Overview 包含可切换 Daily、Weekly 和 Cumulative 的 Token Activity 热力图，Status 展示运行状态，Activity 包含按 turn/session 聚合的 token 消耗，Subagents 内嵌架构图，其他视图仍在同一 HTML 内。配置 `publish.split_pages=true` 时才拆出独立页面。它会启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读取已生成的 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。发布 HTML 不替代 Goo-wiki 归档，也不得修改当前 plan 或 brainstorm；token 行只展示聚合 token、模型和记录数，不展示对话正文。
+
+**用户交互契约**：任何需要用户选择、确认、重试、跳过、合并、改写或授权的步骤，必须优先调用结构化选择 UI / `AskUserQuestion`，让用户通过交互控件选择；不得在工具可用时用普通文本要求用户手打 `1/2`、ID 或命令参数。每个问题至少给 2 个显式选项，推荐项放第一项并标注 Recommended；多候选问题必须把候选 ID/编号放进选项说明。只有结构化选择 UI / `AskUserQuestion` 不可用、调用失败或按钮没有渲染时，才允许降级为纯文本编号列表，并明确这是 fallback。用户未明确选择前，不得用推荐项静默继续。
+
+**AskUserQuestion 固定结构**：需要交互时必须按下面的字段组织，不得只写自然语言题目或自由改写选项。字段固定为 `header`、`id`、`question`、`options[].label`、`options[].description`；推荐项放第一项，label 必须包含 `(Recommended)`。系统自动提供的 Other 只用于自定义输入，不算显式选项。
+
+`/auto-goo:goo-init` 必须使用以下固定问题结构：
+
+```yaml
+- header: 配置作用域
+  id: config_scope
+  question: 请选择 AutoGoo 配置写入位置。
+  options:
+    - label: 项目级 --project (Recommended)
+      description: 写入当前项目 .goo/config.json，只影响当前项目。
+    - label: 用户级 --user
+      description: 写入 ~/.auto-goo/config.json，作为所有项目的默认配置。
+
+- header: Wiki 路径
+  id: wiki_dir
+  question: 请选择 Goo-wiki 路径。
+  options:
+    - label: ~/workspace/Goo-wiki (Recommended)
+      description: 使用默认 Goo-wiki 路径；不存在时初始化脚本会创建基础目录。
+    - label: 自定义路径
+      description: 选择后在 Other 中输入路径；必须把最终路径传给 --wiki-dir。
+
+- header: 项目说明
+  id: update_claude_md
+  question: 是否更新当前项目 CLAUDE.md 的 AutoGoo 归档说明？
+  options:
+    - label: 更新 CLAUDE.md (Recommended)
+      description: 只更新 AutoGoo marker 包裹段落，不覆盖已有项目指引。
+    - label: 跳过
+      description: 不改 CLAUDE.md；脚本参数传 --skip-claude-md。
+
+- header: 远程服务器
+  id: configure_servers
+  question: 是否需要配置远程服务器？
+  options:
+    - label: 不配置 (Recommended)
+      description: 只写本地 AutoGoo 配置。
+    - label: 配置服务器
+      description: 继续收集服务器类型、IP、端口、用户名、用途和密码处理方式。
+
+- header: 服务器类型
+  id: server_type
+  question: 请选择服务器类型。
+  options:
+    - label: GPU 服务器 (Recommended)
+      description: 用于模型训练、推理或其他 GPU 长任务。
+    - label: CPU 服务器
+      description: 用于数据处理、预处理或普通远程执行。
+
+- header: 服务器 IP
+  id: server_ip
+  question: 请输入或选择服务器 IP 地址。
+  options:
+    - label: 通过 Other 输入 (Recommended)
+      description: 在 Other 中输入真实 IP 或主机名；不要使用占位值落盘。
+    - label: 稍后手动补填
+      description: 先跳过 IP，配置落盘后手动编辑 config/secrets；不得连接服务器。
+
+- header: SSH 端口
+  id: server_port
+  question: 请选择 SSH 端口。
+  options:
+    - label: 22 (Recommended)
+      description: 使用默认 SSH 端口。
+    - label: 2222
+      description: 使用常见备用 SSH 端口；其他端口通过 Other 输入。
+
+- header: 用户名
+  id: server_user
+  question: 请选择 SSH 用户名。
+  options:
+    - label: ubuntu (Recommended)
+      description: 常见云服务器默认用户。
+    - label: root
+      description: 使用 root 用户；其他用户名通过 Other 输入。
+
+- header: 服务器用途
+  id: server_purpose
+  question: 请选择服务器用途说明。
+  options:
+    - label: 模型训练与推理 (Recommended)
+      description: 用于 GPU 训练、推理、评测或长跑任务。
+    - label: 数据处理与预处理
+      description: 用于数据转换、清洗、批处理或 CPU 任务。
+
+- header: 密码处理
+  id: server_password
+  question: 如何处理服务器密码？
+  options:
+    - label: 稍后手动填入 (Recommended)
+      description: 不在聊天中输入密码；稍后编辑 secrets 文件并保持 chmod 600。
+    - label: 现在输入
+      description: 仅在交互控件支持安全输入时使用；密码不得写入聊天日志或 config。
+
+- header: 继续添加
+  id: add_another_server
+  question: 是否继续添加另一台服务器？
+  options:
+    - label: 完成服务器配置 (Recommended)
+      description: 汇总已收集服务器信息并进入最终确认。
+    - label: 再添加一台
+      description: 重复服务器字段收集流程。
+```
 
 ## Phase -1: 项目初始化
 
 首次使用 AutoGoo 时，建议先运行 `/auto-goo:goo-init --user` 写入用户级默认配置；进入具体项目后，可运行 `/auto-goo:goo-init --project` 写入项目级覆盖配置。
 
 初始化要求：
-1. 使用主 Agent 交互模式：收到命令后直接开始交互提问，不预先检查环境。主 Agent 先用 `AskUserQuestion` 或对话问清作用域、wiki 路径、是否更新项目 `CLAUDE.md`、是否配置远程服务器等，再调用脚本落盘。不得派发 Subagent 代替初始化，也不得用临时代码写配置。
+1. 使用主 Agent 交互模式：收到命令后直接开始交互提问，不预先检查环境。主 Agent 必须用 `AskUserQuestion` 问清作用域、wiki 路径、是否更新项目 `CLAUDE.md`、是否配置远程服务器等，再调用脚本落盘；不得用普通文本要求用户手打 `1/2` 或 `--project/--user`。不得派发 Subagent 代替初始化，也不得用临时代码写配置。如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，停止初始化并提示用户改用带参数命令 `/auto-goo:goo-init --user` 或 `/auto-goo:goo-init --project`；不要继续用纯文本编号收集选项。
 2. 最终落盘前必须先解析 AutoGoo 根目录：优先读取 Claude Code 安装记录 `$HOME/.claude/plugins/installed_plugins.json` 中 `auto-goo@*` 的 `installPath`。该 `installPath` 通常位于 `$HOME/.claude/plugins/cache/<marketplace>/<plugin>/<version>`，是 Claude Code 实际加载的插件副本。如果 `installPath` 不存在或已 orphaned，再读取 `$HOME/.claude/settings.json`，只有 `enabledPlugins` 中启用了 `auto-goo@<marketplace>`，且 `extraKnownMarketplaces.<marketplace>.source` 是本地 `directory` 时，才使用该本地 marketplace 路径。当前工作目录可能是用户项目，不要假设相对路径存在；不得读取环境变量，不得扫描当前目录、上级目录或源码 checkout 路径来猜插件根目录；不得在根目录变量为空时拼出 `/skills/auto-goo/scripts/goo-init.sh`。安装记录和本地 marketplace 都不可用或目标脚本不存在时，必须 fail-fast 提示用户重新安装/启用 AutoGoo 插件。
-3. 根据参数或主 Agent 提问选择作用域：`--user` 写 `~/.auto-goo/config.json`，`--project` 写 `.goo/config.json`。如果用户只输入 `/auto-goo:goo-init`，必须先询问作用域，不得默认选择 project；用户回答后必须把 `--user` 或 `--project` 传给脚本。
-4. 必须询问 Goo-wiki 路径，提供默认值 `~/workspace/Goo-wiki`；如果用户不输入路径，就按默认值处理。每个 `AskUserQuestion` 至少 2 个选项（推荐默认值 + 备选），如「~/workspace/Goo-wiki (Recommended)」「自定义路径（选择后在下方 Other 输入）」。用户接受默认值或输入自定义路径后，都必须把 `--wiki-dir <路径>` 传给脚本，不得在未展示默认路径的情况下静默使用默认值。
+3. 根据参数或主 Agent 提问选择作用域：`--user` 写 `~/.auto-goo/config.json`，`--project` 写 `.goo/config.json`。如果用户只输入 `/auto-goo:goo-init`，必须先用 `AskUserQuestion` 询问作用域，不得默认选择 project；用户选择后必须把 `--user` 或 `--project` 传给脚本。作用域问题必须包含这两个结构化选项：「项目级 --project (Recommended) - 写入当前项目 .goo/config.json」「用户级 --user - 写入 ~/.auto-goo/config.json」。
+4. 必须用 `AskUserQuestion` 询问 Goo-wiki 路径，提供默认值 `~/workspace/Goo-wiki`；如果用户不输入路径，就按默认值处理。每个 `AskUserQuestion` 至少 2 个选项（推荐默认值 + 备选），如「~/workspace/Goo-wiki (Recommended)」「自定义路径（选择后在下方 Other 输入）」。如果交互控件不可用，停止并提示用户改用带完整参数的命令；不要输出纯文本编号列表。用户接受默认值或输入自定义路径后，都必须把 `--wiki-dir <路径>` 传给脚本，不得在未展示默认路径的情况下静默使用默认值。
 5. 询问用户是否有远程服务器需要配置。用户确认后，使用 `AskUserQuestion` 逐字段收集服务器信息。**每个问题必须至少 2 个显式选项**（系统的自动 Other 不算），用户可直接选用预设值或通过 Other 输入自定义值：服务器类型（GPU/CPU）、IP 地址、SSH 端口、用户名、用途说明、密码（可跳过，稍后手动填入 secrets 文件）。密码存储在独立 secrets 文件中（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限 `chmod 600`；项目级 secrets 文件自动加入 `.gitignore`。config 中只记录 `servers[].{ip, port, user, type, purpose, secrets_file}`，不存储密码。支持配置多个服务器。
 6. 配置远程服务器后，通过 `goo-ssh.sh` 连接。用法：`bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" [--config .goo/config.json] [--server INDEX|HOST]`。脚本从 `secrets.json` 读取密码，不暴露在命令行；需要 `sshpass`（首次使用前 `sudo apt install sshpass`）。
 7. 确保目标目录存在：用户级 `~/.auto-goo/`，项目级 `.goo/`。
@@ -78,8 +188,8 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
 4. 提炼共同前置条件 `global_prerequisites`，例如数据路径、账号权限、远程资源、评价指标、用户取舍和安全确认。
 5. 生成 3-7 个候选 goals，每个包含 `id`、`name`、`why`、`expected_output`、`acceptance_criteria`、`evidence`、`risk`、`prerequisites`、`readiness_checklist`、`first_step`、`priority_hint`。
 6. 写入 `.goo/brainstorm.json`，状态为 `pending_decision`。如果旧 `.goo/brainstorm.json` 已存在，先原样复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。
-7. 将候选 goals、共同前置条件、推荐顺序和关键证据归档到同一任务归档根的 `brainstorm/` 子目录；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/` fallback，并在 `.goo/brainstorm.json.archive` 记录 `task_archive_root` 和 `brainstorm_dir`。
-8. 向用户展示推荐顺序、共同前置条件和每个候选 goal 的 ready checklist，等待用户选择、合并、改写或要求继续 brainstorm。
+7. 向用户展示推荐顺序、共同前置条件和每个候选 goal 的 ready checklist，等待用户选择、合并、改写或要求继续 brainstorm；用户确认前只保留本地 `.goo/brainstorm.json` 草案，不写 Goo-wiki/fallback 最终归档。
+8. 用户确认最终候选目标后，再将候选 goals、共同前置条件、推荐顺序、用户选择/合并依据和关键证据归档到同一任务归档根的 `brainstorm/` 子目录；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/` fallback，并在 `.goo/brainstorm.json.archive` 记录 `task_archive_root` 和 `brainstorm_dir`。
 
 边界：
 - 不写 `.goo/plan.json`。
@@ -99,10 +209,10 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent]
 
 1. 如果 `.goo/plan.json` 不存在，正常生成新 plan。
 2. 如果存在旧 plan，读取 `steps[]` 和顶层 `status`，判断是否全部完成。只有所有 step 的 `status` 都是 `completed`，且顶层 `status` 为 `completed` 或可由 steps 推断为完成时，才允许直接归档旧 plan 并生成新 plan。
-3. 如果存在未完成 step，或顶层 `status` 是 `pending` / `running` / `paused` / `failed`，必须暂停规划，向用户展示未完成 step 数量和关键摘要，并询问用户选择：
+3. 如果存在未完成 step，或顶层 `status` 是 `pending` / `running` / `blocked` / `paused` / `failed`，必须暂停规划，向用户展示未完成 step 数量和关键摘要，并询问用户选择：
    - 修改当前 plan：把新需求合并进现有 `.goo/plan.json`，保留已完成步骤、日志、产物和执行证据。
    - 新建 plan：先把旧 `.goo/plan.json` 原样归档到 `.goo/plans/history/`，再写新的当前 plan。
-4. 用户未明确选择“修改当前 plan”或“新建 plan”前，不得覆盖、归档或重写 `.goo/plan.json`。
+4. 上述询问必须优先使用 `AskUserQuestion` / 结构化选择 UI 呈现；纯文本编号只作为交互控件不可用时的 fallback。用户未明确选择前，不得覆盖、归档或重写 `.goo/plan.json`。
 
 解析步骤：
 1. 识别输入形态 — 普通一句话、Markdown 任务包、已有 plan、issue/PR 描述、日志片段等要区别处理。
@@ -238,7 +348,7 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 - step 的 `description` 必须写清楚做什么、边界、输入、输出和验收点，不能依赖"刚才讨论的方案"。
 - 多 goal plan 中，非归档 step 必须包含 `goal_id` 或 `goal_ids`；归档 step 用 `goal_ids` 覆盖所有被归档目标。
 - step 应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths`、`validation`、`risk_level` 和 `requires_user_confirm`，让执行阶段不用猜读写范围、验收方式和是否需要用户确认。
-- `goo-start` / `goo-continue` 执行前默认执行 context sync：检查 plan 生成后当前对话是否新增方案、取舍、约束、验收标准、用户偏好或 open question。短内容写入 `context_digest.post_plan_updates`；长内容写入 Goo-wiki 项目路径 `context/` 并追加到 `context_artifacts`，Goo-wiki 不可用时写 `.goo/obsidian/<project-slug>/context/`。同步前必须先把旧 plan 复制到 `.goo/plans/history/`；只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才问用户确认。
+- `goo-start` / `goo-continue` 执行前默认执行 context sync：检查 plan 生成后当前对话是否新增方案、取舍、约束、验收标准、用户偏好或 open question。短内容写入 `context_digest.post_plan_updates`；长内容写入 Goo-wiki 项目路径 `context/` 并追加到 `context_artifacts`，Goo-wiki 不可用时写 `.goo/obsidian/<project-slug>/context/`。同步前必须先把旧 plan 复制到 `.goo/plans/history/`；只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才问用户确认。确认问题必须优先使用结构化选项：`同步并继续执行`、`先修改 plan`、`停止并保留当前 plan`。
 - `goo-start` / `goo-continue` 一旦准备把 plan 从待执行状态推进到执行状态，必须先检查 `.goo/brainstorm.json` 和 `.goo/plan.json` 的 `review.status`。如果仍是 `pending_user_review`，先停下来让用户审阅和确认；确认后如 brainstorm 还没有归档，再派发 `recorder` 归档最终版 brainstorm。该归档完成前，不启动业务 step 调度。
 - Subagent prompt 只允许使用当前 step、`context_digest`、相关 `wiki_context`、`context_artifacts` 路径和上游产物摘要；不传完整聊天记录。
 
@@ -246,7 +356,7 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 
 **当前 `.goo/plan.json` 是唯一状态源**。派发、完成、失败均实时回写当前 plan。历史 plan 只归档在 `.goo/plans/history/`，不得作为恢复来源，除非用户明确指定。执行时不得依赖主会话隐含上下文；所有执行必需信息必须在当前 plan、引用的 Markdown/context artifact、wiki 摘要或上游产物中。
 
-**Brainstorm/Plan 审阅闸门**：执行调度开始前必须确认 `.goo/brainstorm.json` 和 `.goo/plan.json` 不是待审草案。若 `review.status="pending_user_review"`，先让用户审阅、修改或确认，不能自动归档或执行。用户确认后，如果 `.goo/brainstorm.json` 存在且未能证明已归档，再归档最终版 brainstorm，然后开始执行 plan steps。归档内容至少包括候选 goals、推荐顺序、用户最终选择、未选原因或合并依据、前置条件、ready checklist、关键 wiki 证据，以及该 brainstorm 如何转成当前 `.goo/plan.json`；归档完成后回写 `archive.status="completed"`、`archive.task_archive_root`、`archive.brainstorm_dir`、fallback 状态和 `log.md` 更新状态。若当前 plan 已有 `archive.task_archive_root`，brainstorm 必须补写到同一个 root 的 `brainstorm/` 子目录；若没有，则创建 root 并同步写回 plan 与 brainstorm。
+**Brainstorm/Plan 审阅闸门**：执行调度开始前必须确认 `.goo/brainstorm.json` 和 `.goo/plan.json` 不是待审草案。若 `review.status="pending_user_review"`，先让用户审阅、修改或确认，并优先用结构化选项展示：`确认并继续`、`修改草案`、`停止/稍后再说`；不能自动归档或执行。用户确认后，如果 `.goo/brainstorm.json` 存在且未能证明已归档，再归档最终版 brainstorm，然后开始执行 plan steps。归档内容至少包括候选 goals、推荐顺序、用户最终选择、未选原因或合并依据、前置条件、ready checklist、关键 wiki 证据，以及该 brainstorm 如何转成当前 `.goo/plan.json`；归档完成后回写 `archive.status="completed"`、`archive.task_archive_root`、`archive.brainstorm_dir`、fallback 状态和 `log.md` 更新状态。若当前 plan 已有 `archive.task_archive_root`，brainstorm 必须补写到同一个 root 的 `brainstorm/` 子目录；若没有，则创建 root 并同步写回 plan 与 brainstorm。
 
 **槽位调度模型**：固定 6 个并发槽位 + 动态就绪队列 + 连续下发。agent 完成即释放槽位，其下游立即入队，不用等同层其他 agent。
 
@@ -259,6 +369,8 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 **Subagent 上下文隔离**：每个 Subagent 默认只拿当前 step、必要项目约束、相关 wiki_context 摘要、上游产物路径、允许读写边界和回写要求。Subagent 之间通过 `.goo/plan.json`、`.goo/logs/`、`.goo/artifacts/` 和产物路径交接，不共享完整会话历史或彼此的推理草稿。
 
 **Subagent 显式分工**：每个 step 必须包含 `subagent` 和 `task_agent` 字段。`subagent` 只允许稳定 Role Agent：`researcher`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`auditor`、`recorder`；`task_agent` 必须从对应 role 的 `agents/tasks/` 目录下选择，例如 `document-analyst`、`feature-builder`、`test-runner`、`code-reviewer`、`evidence-auditor`、`wiki-curator`。调度时先按 `subagent` 选择 role prompt，再按 `task_agent` 叠加细分任务 prompt。若缺失或不合法，先补 plan 或创建新角色/任务画像，不由主 Agent 代执行。
+
+**权限分层**：AutoGoo 不让后台 Subagent 做平凡权限交互。普通读写和低风险命令必须在 plan 的 `allowed_read_paths`、`allowed_write_paths`、`validation`、`requires_user_confirm=false` 与项目命令 allowlist 中提前声明，Subagent 在边界内直接执行。可预见的安装依赖、网络下载、远程执行、长跑任务、端口监听、批量数据改写、跨机器同步或高成本操作，规划阶段必须标记 `requires_user_confirm=true`，由主 Agent 在派发前一次性说明作用域、命令类别、产物位置和风险并取得确认。执行中遇到 `PermissionDenied`、sandbox blocked、approval required、路径越界或命令不在允许范围时，Subagent 不得自行弹窗、不得静默跳过、不得要求主 Agent 直接代做；必须写日志并回写当前 step 为 `blocked`/`needs_user_approval`，说明所需命令、原因、读写路径、风险和建议处理。主 Agent 聚合这些阻塞项后在前台向用户申请许可；用户批准后只在批准范围内重派 Subagent 或执行许可命令，用户拒绝后再标记 failed 或调整 plan。
 
 ```
 MAX_CONCURRENT = 6 (plan.json 顶层可覆盖)
@@ -286,62 +398,7 @@ MAX_CONCURRENT = 6 (plan.json 顶层可覆盖)
 | 完成 | 100 | `--complete` |
 | 失败 | - | `--fail --error "<reason>"` |
 
-先从 Claude Code 安装记录解析 AutoGoo 根目录；不要读取环境变量，也不要自动搜索插件目录：
-
-```bash
-auto_goo_root="$(
-  python3 - <<'PY' 2>/dev/null || true
-import json
-from pathlib import Path
-
-home = Path.home()
-matches = []
-
-def usable(path):
-    return path.exists() and not (path / ".orphaned_at").exists()
-
-registry = home / ".claude/plugins/installed_plugins.json"
-if registry.exists():
-    data = json.loads(registry.read_text(encoding="utf-8"))
-    for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
-            continue
-        for entry in entries:
-            path = Path(entry.get("installPath", "")).expanduser()
-            if usable(path):
-                matches.append((entry.get("lastUpdated", ""), str(path)))
-
-if not matches:
-    settings = home / ".claude/settings.json"
-    if settings.exists():
-        data = json.loads(settings.read_text(encoding="utf-8"))
-        enabled = data.get("enabledPlugins", {})
-        marketplaces = data.get("extraKnownMarketplaces", {})
-        for key, is_enabled in enabled.items():
-            if not is_enabled or "@" not in key:
-                continue
-            plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
-                continue
-            source = marketplaces.get(marketplace, {}).get("source", {})
-            if source.get("source") != "directory":
-                continue
-            path_text = source.get("path")
-            if not path_text:
-                continue
-            path = Path(path_text).expanduser()
-            if usable(path):
-                matches.append(("settings:" + marketplace, str(path)))
-
-if matches:
-    print(sorted(matches)[-1][1])
-PY
-)"
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/update-step.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
-  exit 127
-fi
-```
+先从 Claude Code 安装记录解析 AutoGoo 根目录；不要读取环境变量，也不要自动搜索插件目录。不要在 skill 文档中内联 heredoc / file redirection 的 Python 片段；需要回写 step 时，使用插件内置 `skills/auto-goo/scripts/resolve-root.sh` 或同等无 heredoc 封装来定位 root，再调用 `update-step.py`。
 
 `/auto-goo:goo-status` 必须调用 `skills/auto-goo/scripts/goo-status.py` 渲染进度条和心跳告警。
 
@@ -350,8 +407,9 @@ fi
 | 场景 | 处理 |
 |------|------|
 | 单个 Agent 失败 | 记录错误日志，回写 status="failed"，重试 1 次 |
+| 权限/沙箱/approval 阻塞 | 调用 `update-step.py --block --error "needs_user_approval: <命令/原因/读写路径/风险>"`，主 Agent 前台询问用户许可；不得按普通失败重试或主 Agent 直接代做 |
 | 重试仍失败 | 标记 ❌ failed，继续不依赖它的步骤 |
-| 关键路径失败 | 通知用户，询问是否继续 |
+| 关键路径失败 | 通知用户，并优先用结构化选项询问：重试、跳过并继续、停止并保留现场 |
 | Agent 超时（>5 分钟无心跳） | 视为失败，按失败流程处理 |
 | 会话中断（心跳停滞 >= 2min） | `/auto-goo:goo-continue` 恢复时检测僵尸，按产物文件判断真实状态 |
 
@@ -381,6 +439,7 @@ fi
 7. 使用远程服务器前必须确认任务确实需要远程/GPU/长时间运行，并在 plan step 中写清目标 host、用途、允许命令范围、读写路径和产物同步方式。禁止把 secrets 展开到命令行、日志或 Subagent prompt。
 8. Subagent 执行命令前必须遵守当前 step 的允许读写边界；如果 step 缺少 `allowed_read_paths`、`allowed_write_paths` 或危险操作说明，先补 `.goo/plan.json` 或 context artifact，再派发执行。
 9. 网络下载、安装依赖、启动长跑任务、后台服务、端口监听、批量数据改写、跨机器同步、`scp`/`rsync` 上传下载，都要在命令前说明作用域和输出位置；涉及外部写入、远程执行或不可逆成本时先确认。
+10. Subagent 遇到权限不足、沙箱拒绝、approval required、命令 allowlist 不足或路径边界不匹配时，只能上报 `needs_user_approval`，不得直接请求平凡交互、不得循环重试、不得让主 Agent 在未获许可时降级代执行。
 
 ```bash
 # ❌ 禁止：换行符后接 # 的安全警告
@@ -492,7 +551,7 @@ Phase 4 归档完成后，在任务日志末尾追加 `## 流程问题` 反思�
 2. **聚类** — 统计高频项（出现 >= 2 次标记为高频）
 3. **定位** — 对照修改范围决策表确定目标文件
 4. **方案** — 生成具体到文件+行的修改建议
-5. **确认** — 展示给用户，经确认后执行
+5. **确认** — 展示给用户，并优先用结构化选项询问：`应用修改`、`只保存建议`、`放弃本次改进`；经用户明确确认后执行
 6. **记录** — 写入 `.goo/improvements.log`
 
 ### 修改范围决策

@@ -1,7 +1,7 @@
 ---
 name: benchmark-runner
 description: "AutoGoo Benchmark Task Agent。按固定协议运行 benchmark，输出可比较指标和基线差异。"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 12

@@ -1,7 +1,7 @@
 ---
 name: lesson-extractor
 description: "AutoGoo 经验提取 Task Agent。从执行记录和失败案例中提取可复用经验、适用条件和反例。"
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 8

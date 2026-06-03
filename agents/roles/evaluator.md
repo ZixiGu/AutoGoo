@@ -1,7 +1,7 @@
 ---
 name: evaluator
 description: "AutoGoo 评测 Subagent。运行测试、benchmark、数据质量检查，不修代码除非主 Agent 明确授权。"
-tools: Read, Grep, Glob, Bash, WebSearch
+tools: Read, Grep, Glob, Bash, WebSearch, AskUserQuestion
 model: haiku
 permissionMode: default
 maxTurns: 10
@@ -36,6 +36,7 @@ color: yellow
 - 总结与解读。
 - 与基线或目标的对比（如适用）。
 - 残留风险或数据质量问题。
+- 中间排查过程、下一步自我提示和未验证判断写入 `.goo/logs/`，不要直接刷到用户前台；前台只汇报启动、完成、失败、阻塞或需要确认的简短状态。
 
 ## Heartbeat
 

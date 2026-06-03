@@ -20,6 +20,7 @@ AutoGoo 的核心交付包括：
 - **能并行就并行**：无依赖的步骤应进入就绪队列并行调度；有依赖的步骤必须通过产物和状态交接。
 - **状态写回 plan**：步骤开始、进度、心跳、完成、失败、重试和恢复判断都必须回写当前 `.goo/plan.json`。
 - **执行必留痕**：关键命令、输入、输出、产物路径、验证结果、失败原因和用户决策都要能在 `.goo/logs/`、plan 或 Goo-wiki 中追溯。
+- **HTML 可发布**：完整工作流应能通过 `/auto-goo:goo-publish` 生成 `.goo/site/` 多页面站点，分开展示 activity、brainstorm、plan、任务流程图、DAG、运行状态和产物索引。
 - **优化必有指标**：性能、效率、质量、准确率、成本等优化任务必须先定义指标和基线，再做改动和对比。
 - **归档不是收尾作文**：Goo-wiki 是启动时的记忆层，也是完成后的知识层；归档要记录可复用结论，而不是复制聊天流水。
 - **内容输出必须归档**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令最终都必须写入 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。`goo-brainstorm` 和 `goo-plan` 先写本地草案并等待用户审阅，确认后或执行前再归档最终候选目标、plan 摘要和关键取舍。
@@ -48,7 +49,8 @@ AutoGoo 不应强行覆盖：
 4. **执行调度**：按 DAG、槽位、心跳和依赖状态派发 Subagent，实时更新 plan。
 5. **优化迭代**：对 `type: "optimize"` 的步骤执行指标搜索、基线、瓶颈分析、优化对比和停止判断。
 6. **归档沉淀**：将目标、计划、关键证据、产物、验证结果、决策和复用经验写入 Goo-wiki 或 `.goo/obsidian/` fallback。
-7. **自改进**：任务后记录流程问题；高频问题经用户确认后更新对应规范、脚本或 allowlist。
+7. **HTML 发布**：需要项目主页或可浏览记录时，用 `goo-publish.py` 从 `.goo/` 只读生成 `.goo/site/` 多页面站点；它是展示层，不替代 Goo-wiki 归档。
+8. **自改进**：任务后记录流程问题；高频问题经用户确认后更新对应规范、脚本或 allowlist。
 
 内容输出类命令即使不进入完整执行 DAG，也必须完成归档沉淀。`goo-usage-analyse`、`goo-daily-report`、`goo-improve`、`goo-benchmark` 等只要产出可复用判断、报告、指标、规则或经验，就要写入 Goo-wiki 项目路径并更新项目入口或 `log.md`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback，并在对应 `.goo/*.json` 产物记录 `archive` 字段。`goo-brainstorm` 和 `goo-plan` 例外：先写本地草案并让用户审阅，用户可能会修改候选目标或 DAG；确认后或进入执行前，再归档最终版候选目标、计划摘要和关键取舍。
 
@@ -61,6 +63,7 @@ AutoGoo 不应强行覆盖：
 - 长对话方案、取舍原因、用户偏好和验收标准必须固化到 `context_digest` 或 `context_artifacts`。
 - 产物默认放在 `.goo/artifacts/`、任务指定输出路径或 plan 明确记录的位置；日志默认放在 `.goo/logs/`。
 - `/auto-goo:goo-status` 应读取 plan 渲染状态，不凭感觉汇报进度。
+- `/auto-goo:goo-publish` 应读取 `.goo/` 渲染静态 HTML，不修改 plan、brainstorm、logs 或 Goo-wiki 正文。
 
 ## Subagent 规范
 
@@ -88,6 +91,7 @@ AutoGoo 的行为不能只改一处。涉及命令、计划 schema、配置、�
 - `skills/auto-goo/SKILL.md`
 - `skills/auto-goo/references/*.md`
 - `skills/auto-goo/templates/*.json`
+- `skills/auto-goo/templates/publish/*.html`
 - `skills/auto-goo/examples/*.md`
 - `skills/auto-goo/scripts/*`
 - `skills/auto-goo/scripts/check-plugin.sh`
