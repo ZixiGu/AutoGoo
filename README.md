@@ -1,6 +1,6 @@
 # AutoGoo
 
-[![Release](https://img.shields.io/badge/release-v0.3.1-blue)](#版本)
+[![Release](https://img.shields.io/badge/release-v0.3.2-blue)](#版本)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-black)](#安装)
 [![Status](https://img.shields.io/badge/status-preview-orange)](#版本)
@@ -474,7 +474,7 @@ agents/                     Subagent 定义
 
 ## 版本
 
-当前版本：**v0.3.1**
+当前版本：**v0.3.2**
 
 这是一个 preview 版本，重点覆盖核心插件契约：
 
