@@ -15,13 +15,14 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 4. **目标明确性检查** — 判断输入是否已有明确 goal，或是否引用了 `.goo/brainstorm.json` 中的候选 goal；否则停止 plan 流程并改用 `/auto-goo:goo-brainstorm`
 5. **Goal 识别** — 目标明确时抽取一个或多个 `goals[]`，每个 goal 写清交付物、验收标准、优先级和依赖关系
 6. **任务解析** — 将任务拆解为 DAG 步骤；每个非归档步骤绑定 `goal_id` 或 `goal_ids`
-7. **对话方案固化** — 抽取当前对话中已经形成的方案、取舍、约束、验收标准和用户明确偏好，写入 `context_digest`；内容过长时写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md` 并在 plan 中引用
-8. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
-9. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
-10. **历史计划归档** — 如果 `.goo/plan.json` 已存在且用户选择新建 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`
-11. **计划落盘** — 输出或更新 `.goo/plan.json`，标记为待用户审阅。
-12. **等待确认** — 向用户展示计划摘要、并行组、主要风险和需要确认的点，并优先用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。用户确认前不要归档 plan 摘要。
-13. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
+7. **并行优先审计** — 对所有非归档 step 做依赖审计：没有真实数据依赖、控制依赖、共享写入冲突或高风险确认门槛的步骤，不得为了叙事顺序串行化；必须写成相同 `tier` 和空/相同 `depends_on`，让执行阶段可并行派发
+8. **对话方案固化** — 抽取当前对话中已经形成的方案、取舍、约束、验收标准和用户明确偏好，写入 `context_digest`；内容过长时写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md` 并在 plan 中引用
+9. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
+10. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
+11. **历史计划归档** — 如果 `.goo/plan.json` 已存在且用户选择新建 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`
+12. **计划落盘** — 输出或更新 `.goo/plan.json`，标记为待用户审阅。
+13. **等待确认** — 向用户展示计划摘要、并行组、主要风险和需要确认的点，并优先用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。用户确认前不要归档 plan 摘要。
+14. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
 
 ## 现有 plan 冲突处理
 
@@ -61,6 +62,19 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - "目标/约束/验收/风险/产物/下一步"等小节必须转成 plan 约束。
 
 不要把 Markdown 默认理解为"整理文本"。只有用户明确说要总结、润色、改写或重新排版 Markdown 时，才生成文本处理计划。
+
+## 并行优先规划
+
+`goo-plan` 生成的是可执行 DAG，不是线性 TODO。规划时默认寻找并行层：
+
+- 只有存在真实前置关系时才写 `depends_on`：下游必须读取上游产物、必须等待上游验收/用户确认、会写同一文件或共享状态、或存在资源/风险冲突。
+- 仅因为用户描述顺序、文档段落顺序、角色不同、同属一个 goal、或为了“看起来更稳”而串行化，都不算合法依赖。
+- 多个步骤如果只读同一输入、写不同产物、验收互不依赖，应使用相同 `tier`，并保持 `depends_on` 为空或相同，让执行阶段并行派发。
+- 共享准备 step 可以作为 `tier=1`；其后各分支只依赖该共享 step，并在同一后续 tier 并行展开。
+- 统一验证、审查和归档 step 依赖所有对应叶子步骤；不要让某个独立分支错误依赖另一个独立分支。
+- 如果某一步看似依赖上一步，必须在 `description` 或 `inputs` 中说明依赖的具体产物或决策；说不清具体依赖时，改成并行。
+
+计划摘要必须展示并行组，例如 `Tier 1: step 1,2,3 可并行`，并单独列出真正串行链及原因。
 
 ## 是否需要 Brainstorm
 
@@ -151,6 +165,8 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - 写入新的 `.goo/plan.json` 前，必须把已有 `.goo/plan.json` 原样归档到 `.goo/plans/history/`
 - 每个步骤必须包含 `output`，便于后续 `/auto-goo:goo-continue` 恢复
 - 每个非归档步骤必须包含 `goal_id` 或 `goal_ids`；共享准备、统一验证或统一归档步骤使用 `goal_ids`
+- 每个步骤必须包含 `tier`；同一 `tier` 内互不依赖的步骤应尽量并行，不能把可并行步骤写成逐个依赖的线性链
+- 每条 `depends_on` 都必须代表真实数据、验收、确认、共享写入或风险依赖；如果只是叙事顺序或文档顺序，必须移除依赖并放入同一并行层
 - 每个步骤应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths` 和 `validation`，让执行阶段不依赖聊天记录猜测读写范围和验收方式
 - 每个步骤必须包含 `subagent`，明确稳定 Role Agent：`researcher` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `auditor` / `recorder`
 - 每个步骤必须包含 `task_agent`，明确细分 Task Agent，例如 `codebase-scout`、`feature-builder`、`test-runner`、`code-reviewer`、`evidence-auditor`、`wiki-curator`；不确定时先选对应 role 下最通用的 task agent，不要留空
@@ -158,7 +174,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - `steps` 最后必须包含 Wiki 归档任务，默认名称为 `归档到 Goo-wiki`，依赖所有非归档叶子步骤
 - 初次 plan-only 只写入 archive step，不执行归档；计划摘要归档要等用户确认计划后再做
 - 如果没有找到相关 wiki 经验，写入 `wiki_context.found=false`
-- 最终向用户展示简洁计划摘要和主要风险
+- 最终向用户展示简洁计划摘要、并行组、必要串行链及主要风险
 
 ## 下一步
 

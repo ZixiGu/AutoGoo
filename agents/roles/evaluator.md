@@ -45,6 +45,6 @@ color: yellow
 ## 交付要求
 
 1. 调用 `update-step.py --start --progress 5` 启动
-2. 创建日志 `.goo/logs/{YYYY-MM-DDTHH-MM-SS}_step-{id}_{name}.md`
-3. 每个里程碑调用 `update-step.py --heartbeat --progress <N>`
+2. `update-step.py` 自动创建/追加 `.goo/logs/{timestamp}_step-{id}_{name}.md` 并写回 `log_path`
+3. 每个里程碑调用 `update-step.py --heartbeat --progress <N>`，必要时加 `--note "<短进展>"`
 4. 完成调用 `--complete`，失败调用 `--fail --error "<reason>"`

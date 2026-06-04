@@ -65,7 +65,7 @@ fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.json
 ```
 
-如果 `.goo/plan.json` 中的 running step 没有更新 `heartbeat_at` 或 `progress`，必须显示告警；不要假装仍在正常执行。
+如果 `.goo/plan.json` 中的 running step 没有更新 `heartbeat_at` 或 `progress`，必须显示告警；不要假装仍在正常执行。脚本还会检查 `.goo/logs/` 和 step log：running / blocked / failed 缺少对应日志是告警，completed 缺少日志只作为留痕提示。
 
 ## 信息密度原则
 
@@ -73,7 +73,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.
 - 第二行明确 `Next:`，直接告诉用户下一步该等、该跑还是该处理告警
 - Ready 和 Blocked 分开展示，不把所有 pending 混在一起
 - 执行中步骤：进度条 + output 预览 + heartbeat
-- 告警：只在有问题时才出现
+- 告警：只在 active step 有问题时才出现；历史 completed 留痕缺失放到 notices
 - 不展示无信息量的空面板
 
 ## 布局
@@ -146,7 +146,7 @@ status=completed 的步骤，紧凑横排，展示最近 6 个，多个用 `·` 
 
 ### 告警面板
 
-只在有 failed / zombie / stuck 时显示，一行一条：
+只在有 failed / zombie / stuck / active step 缺日志时显示，一行一条：
 
 ```
 ⚠️ {name} {原因}
@@ -157,6 +157,10 @@ status=completed 的步骤，紧凑横排，展示最近 6 个，多个用 `·` 
 - stuck → `进度停滞 {n}min`
 - failed → `失败，原因: {日志摘要}`
 - completed 但产物缺失 → `产物 {path} 不存在`
+
+### 留痕提示
+
+只在 `.goo/logs/` 缺失或 completed step 找不到日志时显示，不改变 `Next:` 判断。
 
 ## 示例
 

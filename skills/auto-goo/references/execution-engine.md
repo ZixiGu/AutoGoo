@@ -407,9 +407,9 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 ## 交付要求
 1. 在 {cwd} 目录下工作
 2. **第一步**：调用 `update-step.py --start --progress 5`
-3. **创建日志文件** `.goo/logs/{YYYY-MM-DDTHH-MM-SS}_step-{id}_{name}.md`，记录开始时间和任务概要
-4. **每到一个里程碑**调用 `update-step.py --heartbeat --progress <N>`（见上方 Heartbeat 表）
-5. 执行实现后**更新日志**，补充：关键决策、输出产物路径、耗时
+3. `update-step.py` 会自动创建并追加 `.goo/logs/{timestamp}_step-{id}_{name}.md`，并把 `log_path` 写回当前 step
+4. **每到一个里程碑**调用 `update-step.py --heartbeat --progress <N> --note "<短进展>"`（见上方 Heartbeat 表）
+5. 执行实现后用 `--note` 补充：关键决策、输出产物路径、耗时
 6. **完成后**调用 `update-step.py --complete`
 7. 失败时调用 `update-step.py --fail --error "<reason>"`，并在日志中记录失败原因
 8. 日志必须包含：做了什么、关键决策、输出产物路径、耗时

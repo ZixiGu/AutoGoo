@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 WIDTH = 88
 STALE_SECONDS = 120
+LOG_REQUIRED_STATUSES = {"running", "blocked", "failed"}
 
 
 def parse_time(value: str | None) -> datetime | None:
@@ -58,10 +60,14 @@ def step_id(step: dict[str, Any]) -> str:
     return f"#{value}" if value is not None else "#?"
 
 
-def dep_names(step: dict[str, Any], steps_by_id: dict[int, dict[str, Any]]) -> str:
+def id_key(value: Any) -> str:
+    return str(value)
+
+
+def dep_names(step: dict[str, Any], steps_by_id: dict[str, dict[str, Any]]) -> str:
     missing = []
     for dep in step.get("depends_on", []):
-        dep_step = steps_by_id.get(dep)
+        dep_step = steps_by_id.get(id_key(dep))
         if not dep_step or dep_step.get("status") != "completed":
             missing.append(dep_step.get("name", str(dep)) if dep_step else str(dep))
     if not missing:
@@ -71,9 +77,9 @@ def dep_names(step: dict[str, Any], steps_by_id: dict[int, dict[str, Any]]) -> s
     return "等待 " + " ".join(missing)
 
 
-def deps_completed(step: dict[str, Any], steps_by_id: dict[int, dict[str, Any]]) -> bool:
+def deps_completed(step: dict[str, Any], steps_by_id: dict[str, dict[str, Any]]) -> bool:
     for dep in step.get("depends_on", []):
-        dep_step = steps_by_id.get(dep)
+        dep_step = steps_by_id.get(id_key(dep))
         if not dep_step or dep_step.get("status") != "completed":
             return False
     return True
@@ -81,6 +87,26 @@ def deps_completed(step: dict[str, Any], steps_by_id: dict[int, dict[str, Any]])
 
 def status_of(step: dict[str, Any]) -> str:
     return str(step.get("status", "pending") or "pending")
+
+
+def collect_step_logs(logs_dir: Path) -> dict[str, list[Path]]:
+    if not logs_dir.exists() or not logs_dir.is_dir():
+        return {}
+    by_step: dict[str, list[Path]] = {}
+    for path in logs_dir.glob("*.md"):
+        match = re.search(r"_step-([^_]+)_", path.name)
+        if not match:
+            continue
+        by_step.setdefault(match.group(1), []).append(path)
+    return by_step
+
+
+def log_preview(step: dict[str, Any], logs_by_step: dict[str, list[Path]]) -> str:
+    paths = logs_by_step.get(id_key(step.get("id")), [])
+    if not paths:
+        return "log ..."
+    latest = max(paths, key=lambda item: item.stat().st_mtime)
+    return "log " + shorten(latest.name, 22)
 
 
 def age_text(dt: datetime | None, now: datetime) -> str:
@@ -106,7 +132,7 @@ def print_step_line(prefix: str, step: dict[str, Any], detail: str) -> None:
 
 def compute_plan_status(data: dict[str, Any], steps: list[dict[str, Any]]) -> str:
     """Compute plan status from steps if not explicitly set."""
-    if data.get("status") in ("completed", "failed", "paused"):
+    if data.get("status") == "paused":
         return data["status"]
 
     total = len(steps)
@@ -141,7 +167,9 @@ def main() -> int:
 
     data = json.loads(plan_path.read_text(encoding="utf-8"))
     steps = data.get("steps", [])
-    steps_by_id = {step.get("id"): step for step in steps if isinstance(step.get("id"), int)}
+    steps_by_id = {id_key(step.get("id")): step for step in steps if step.get("id") is not None}
+    logs_dir = plan_path.parent / "logs"
+    logs_by_step = collect_step_logs(logs_dir)
     now = datetime.now(timezone.utc)
 
     # Auto-update plan status if requested
@@ -169,7 +197,8 @@ def main() -> int:
     other = [s for s in steps if status_of(s) not in known_statuses]
     avg = round(sum(int(s.get("progress", 100 if s.get("status") == "completed" else 0) or 0) for s in steps) / total) if total else 0
     task = data.get("task", "AutoGoo")
-    plan_status = data.get("status", compute_plan_status(data, steps))
+    stored_plan_status = data.get("status")
+    plan_status = compute_plan_status(data, steps)
     max_concurrent = data.get("max_concurrent", data.get("execution", {}).get("max_concurrent", 6))
 
     status_icon = {"pending": "⏳", "running": "▶", "completed": "✅", "failed": "❌", "blocked": "⛔", "paused": "⏸"}.get(plan_status, "?")
@@ -180,17 +209,34 @@ def main() -> int:
     print(f"  {bar(avg, 30)}  completed {completed} · running {len(running)} · ready {len(ready)} · waiting {len(waiting)} · blocked {len(approval_blocked)} · failed {failed}{other_text} · slots {len(running)}/{max_concurrent}")
 
     warnings = []
+    notices = []
+    if stored_plan_status and stored_plan_status != plan_status:
+        notices.append(f"plan 顶层 status={stored_plan_status} 与步骤状态推导={plan_status} 不一致；可用 --update-status 修正")
+    missing_completed_logs = 0
+    if not logs_dir.exists():
+        active_traceable = [s for s in steps if status_of(s) in LOG_REQUIRED_STATUSES]
+        completed_traceable = [s for s in steps if status_of(s) == "completed"]
+        if active_traceable:
+            warnings.append(f"{logs_dir} 不存在；当前 plan 的执行留痕可能缺失")
+        elif completed_traceable:
+            notices.append(f"{logs_dir} 不存在；已完成步骤可能没有留存 step log")
     for step in steps:
         if status_of(step) == "failed":
             warnings.append(f"{step_id(step)} {step.get('name')} failed: {step.get('error', '见日志')}")
         if status_of(step) == "blocked":
             warnings.append(f"{step_id(step)} {step.get('name')} needs approval: {step.get('error', '见日志')}")
+        if status_of(step) in LOG_REQUIRED_STATUSES and not logs_by_step.get(id_key(step.get("id"))):
+            warnings.append(f"{step_id(step)} {step.get('name')} {status_of(step)} 但没有对应 step log")
+        if status_of(step) == "completed" and not logs_by_step.get(id_key(step.get("id"))):
+            missing_completed_logs += 1
         if status_of(step) == "running":
             hb = parse_time(step.get("heartbeat_at"))
             if not hb:
                 warnings.append(f"{step_id(step)} {step.get('name')} running 但没有 heartbeat_at")
             elif (now - hb).total_seconds() >= STALE_SECONDS:
                 warnings.append(f"{step_id(step)} {step.get('name')} 无心跳 {age_text(hb, now)}，可能已停止")
+    if missing_completed_logs:
+        notices.append(f"{missing_completed_logs} 个 completed step 没有对应 step log")
 
     print_rule()
     if warnings:
@@ -216,7 +262,7 @@ def main() -> int:
         for step in running:
             progress = int(step.get("progress", 0) or 0)
             hb = parse_time(step.get("heartbeat_at"))
-            detail = f"{bar(progress, 16)} {progress:>3}% · output {output_preview(step.get('output'))} · hb {age_text(hb, now)}"
+            detail = f"{bar(progress, 16)} {progress:>3}% · output {output_preview(step.get('output'))} · hb {age_text(hb, now)} · {log_preview(step, logs_by_step)}"
             print_step_line("▶", step, detail)
 
     if ready:
@@ -268,6 +314,12 @@ def main() -> int:
         print(f"WARNINGS ({len(warnings)})")
         for item in warnings:
             print(f"  ! {item}")
+
+    if notices:
+        print_rule()
+        print(f"NOTICES ({len(notices)})")
+        for item in notices:
+            print(f"  - {item}")
 
     return 0
 

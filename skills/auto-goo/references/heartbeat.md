@@ -10,6 +10,7 @@
 - 之后每 30 秒更新：`heartbeat_at` + `progress (0-100)`
 - 进度估算：agent 在任务开头拆 3-5 个里程碑，每过一个里程碑更新进度
 - 心跳通过 `update-step.py` 更新 plan.json，不要手写临时 JSON 修改代码
+- `update-step.py` 会自动创建并追加 `.goo/logs/{timestamp}_step-{id}_{name}.md`，并把 `log_path` 写回当前 step
 
 ## 命令模板
 
@@ -68,7 +69,7 @@ if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/upd
   echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
-python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --heartbeat --progress <0-100>
+python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --heartbeat --progress <0-100> --note "<短进展>"
 ```
 
 ## 里程碑模板
@@ -83,7 +84,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 | 产物接近完成 | `85` | 写完输出、自查前 |
 | 完成/失败 | `100` + `--complete` 或 `--fail` | 最终状态 |
 
-**启动和完成必须分别用 `--start --progress 5` 和 `--complete`，中间里程碑用 `--heartbeat --progress <N>`。**
+**启动和完成必须分别用 `--start --progress 5` 和 `--complete`，中间里程碑用 `--heartbeat --progress <N>`。** 需要记录关键决策、产物路径或耗时时，加 `--note "<短进展>"`；不要另写一套临时日志创建逻辑。
 
 ## 进度判断
 

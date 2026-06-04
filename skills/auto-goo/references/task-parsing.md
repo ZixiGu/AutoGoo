@@ -12,10 +12,11 @@
 7. **对话方案固化** — 将当前对话中已确认的方案、取舍、用户偏好、约束、验收标准和未决问题写入 `context_digest`；长文本优先写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/` 并在 `context_artifacts` 引用，Goo-wiki 不可用时降级到 `.goo/obsidian/<project-slug>/context/`
 8. **逆向拆解** — 从每个 goal 倒推："要交付这个，需要先有什么？" 持续追问直到拆成原子步骤
 9. **标注依赖关系** — 步骤 A 必须在 B 之前完成 → B `depends_on` A；每个非归档 step 必须绑定 `goal_id` 或 `goal_ids`
-10. **识别优化标记** — 包含"性能/速度/延迟/吞吐/效率/内存/GPU/耗时" → `type: "optimize"`
-11. **范围约束** — 每个步骤目标严格取自任务描述，不添加未要求的功能
-12. **归档历史 plan** — 如果 `.goo/plan.json` 已存在，先复制到 `.goo/plans/history/plan-<timestamp>.json`
-13. **输出 plan.json**
+10. **并行优先审计** — 移除仅由叙事顺序、文档顺序或保守习惯造成的伪依赖；能独立读输入、独立写产物、独立验收的步骤放入同一 `tier`
+11. **识别优化标记** — 包含"性能/速度/延迟/吞吐/效率/内存/GPU/耗时" → `type: "optimize"`
+12. **范围约束** — 每个步骤目标严格取自任务描述，不添加未要求的功能
+13. **归档历史 plan** — 如果 `.goo/plan.json` 已存在，先复制到 `.goo/plans/history/plan-<timestamp>.json`
+14. **输出 plan.json**
 
 ## 多 Goal 任务
 
@@ -188,7 +189,7 @@ Wiki 经验召回：
 
 DAG 结构总结：
 - 串行链：<哪些必须逐个做>
-- 并行组：<哪些可以同时做>
+- 并行组：<按 tier 列出哪些可以同时做；没有并行组时说明为什么所有步骤都是真依赖链>
 - 优化任务：<是否含性能优化>
 ```
 
@@ -328,6 +329,44 @@ DAG 结构总结：
 - 验收：archive step 不能只检查“文件存在”。必须检查连接关系存在：任务页 → 项目入口/复用知识/上下文/关键概念，项目入口与 `log.md` → 任务页，新增经验页 → 任务页或项目入口。缺少链接时保持 `status=running` 或 `failed`，补齐后才可 `completed`
 - plan-only 模式只把该步骤写入 `.goo/plan.json`，不实际执行归档；计划摘要和 brainstorm 候选目标要等用户审阅确认后再归档最终版
 
+## 并行优先规划规则
+
+`goo-plan` 生成的是可执行 DAG，不是按叙事顺序排列的线性 TODO。规划时必须先找可并行层，再标注必要串行链。
+
+### 合法依赖
+
+只有以下情况才写 `depends_on`：
+
+- 下游步骤必须读取上游步骤产物、指标、报告或决策。
+- 下游步骤必须等待上游验收、人工确认或风险批准。
+- 两个步骤会写同一文件、同一目录中的同一类产物、同一远程状态或同一配置，需要避免冲突。
+- 资源互斥，例如同一 GPU、同一端口、同一长跑训练槽位或同一发布目标。
+- 安全、合规或回滚要求明确规定必须先后执行。
+
+### 非法依赖
+
+以下情况不得单独作为 `depends_on` 理由：
+
+- 用户在自然语言里先说了 A 再说 B。
+- Markdown 或 issue 中 A 出现在 B 前面。
+- A 和 B 属于同一个 goal，但产物互不依赖。
+- A 和 B 使用不同 Role Agent 或 Task Agent。
+- 为了“稳妥”“方便检查”“符合习惯”而人为串行。
+
+### Tier 分配
+
+- `tier` 表示执行轮次，同一 `tier` 内的 step 应当可并行派发。
+- `depends_on=[]` 且互不冲突的非归档 step 默认都是 `tier=1`。
+- 共享准备 step 可以是 `tier=1`；依赖它的多个分支应进入同一个后续 `tier`，不要让分支之间相互依赖。
+- 统一验证、审查、发布和归档 step 依赖对应叶子步骤，并使用更高 `tier`。
+- 如果某条依赖无法写清具体上游产物、验收结果、确认门槛或冲突资源，就应删除该依赖，并把两个步骤放在同一可并行层。
+
+计划审阅摘要必须列出：
+
+- `并行组`：按 tier 展示可同时执行的 step ID。
+- `必要串行链`：只列真实依赖链，并说明依赖原因。
+- `并发上限`：使用 `max_concurrent`，默认 6；如果因为资源限制低于 6，说明限制来源。
+
 ## Plan-only 模式
 
 `/auto-goo:goo-plan <任务>` 只执行 Wiki 经验召回和任务解析，不派发 Subagent。
@@ -341,6 +380,8 @@ DAG 结构总结：
 - 填充 `goals[]`；单目标任务也写一个默认 goal，多目标任务必须为每个交付目标写清验收标准和产物
 - 每个步骤包含 `output`，便于后续恢复和验收
 - 每个非归档步骤必须包含 `goal_id` 或 `goal_ids`；共享步骤用 `goal_ids`
+- 每个步骤必须包含 `tier`；同一 `tier` 中的步骤应能并行执行，不能把可并行步骤写成逐个依赖的线性链
+- 每条 `depends_on` 都必须是合法依赖；仅由叙事顺序或文档顺序造成的依赖必须移除
 - 每个步骤应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths`、`validation`、`risk_level` 和 `requires_user_confirm`，让 Subagent 能明确知道输入、输出、读写范围、验收方式和是否需要用户确认
 - 每个步骤必须包含合法 `subagent`，明确稳定 Role Agent：`researcher` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `auditor` / `recorder`。缺失或不合法时执行阶段先补 plan 或创建新角色，不由主 Agent 代执行
 - 每个步骤必须包含合法 `task_agent`，从该 Role Agent 旗下选择细分 Task Agent，例如 `document-analyst`、`feature-builder`、`benchmark-runner`、`code-reviewer`、`evidence-auditor`、`obsidian-recorder`。`task_agent` 用于选择更精确的 agent 文件和提示词，不替代 `subagent` 的调度角色
@@ -389,7 +430,7 @@ DAG 结构总结：
 | `review` | 用户审阅状态。初次 `goo-plan` 生成后写 `{"status": "pending_user_review", "summary": "..."}`；用户确认后改为 `confirmed`；用户要求修改时保持 `pending_user_review` 并记录修改要求 |
 | `id` | 全局唯一数字 ID |
 | `goal_id` / `goal_ids` | 本步骤服务的目标。单目标 step 用 `goal_id`；共享步骤、统一验证、统一归档用 `goal_ids` |
-| `tier` | 执行轮次，同一轮内无依赖的步骤可并行 |
+| `tier` | 执行轮次，同一轮内无依赖、无共享写入冲突且验收互不依赖的步骤必须尽量并行 |
 | `name` | 简短动词短语 |
 | `description` | 做什么，含完整上下文。必须能脱离聊天记录执行，不使用"按上面方案/参考前文"等隐含引用。需要外部包时末尾标注 `[dep: <包名>]` |
 | `depends_on` | 前置步骤 ID 列表，空数组表示无依赖 |
@@ -424,14 +465,17 @@ DAG 结构总结：
 | `depends_on` 相同 | 前驱完成后并行 |
 | `depends_on` 有传递链 | 按拓扑序串行 |
 | 一个步骤的输出是另一个的输入 | 串行（即使忘记标注也要推断） |
+| 只读同一输入、写不同产物、验收互不依赖 | 同 tier 并行 |
+| 只是文档顺序或自然语言顺序 | 不得串行，除非能说明合法依赖 |
 
 ### 执行顺序提取算法
 
 ```
-1. 找出所有 status=pending 且 depends_on 全部 completed 的步骤 → 当前轮
-2. 当前轮内步骤 → 并行分发；跨轮 → 串行
-3. 每完成一轮，更新 plan.json 中对应步骤的 status
-4. 重复直到所有步骤 completed 或无可执行的 pending 步骤
+1. 找出所有 status=pending 且 depends_on 全部 completed 的步骤 → 当前候选集
+2. 按 tier 和共享资源约束分组；同 tier 且无冲突的步骤 → 并行分发
+3. 当前候选集内如果存在可并行步骤，不要等待同组其他步骤完成才启动后续空槽
+4. 每完成一个步骤，更新 plan.json 中对应步骤的 status，并重新扫描候选集
+5. 重复直到所有步骤 completed 或无可执行的 pending 步骤
 ```
 
 ### 步骤状态生命周期

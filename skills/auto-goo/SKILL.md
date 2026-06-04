@@ -203,6 +203,8 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 
 **必须先解析为 DAG，不得跳过规划直接动手编码。**
 
+**并行优先**：DAG 规划默认最大化可安全并行的执行层。只有真实数据依赖、验收/用户确认门槛、共享写入冲突、资源冲突或高风险顺序要求，才允许写 `depends_on`。不要因为用户描述顺序、文档段落顺序、同属一个 goal 或“看起来更稳”把可并行步骤串成线性链。
+
 ### 规划前现有 plan 检查
 
 每次进入 `/auto-goo:goo-plan`、`/auto-goo:goo-start` 中的自动规划阶段，或任何会写入新 `.goo/plan.json` 的流程前，必须先检查当前 `.goo/plan.json`：
@@ -227,16 +229,18 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 8. 固化对话方案 — 把当前对话里已经形成的方案、备选路线、取舍原因、用户偏好、验收标准和仍未解决的问题写入 `context_digest`；大段材料优先写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md` 并在 `context_artifacts` 引用，Goo-wiki 不可用时降级到 `.goo/obsidian/<project-slug>/context/`。
 9. 逆向拆解 — 从每个 goal 倒推，追问到"不可再分"的原子步骤。如果任务本身就是单步的（如"把这个文件转成 PDF"），直接执行，不走此流程。
 10. 标注依赖关系 — 识别前置条件，推导拓扑顺序。原始数据准备 → 处理 → 输出，每一步依赖前一步的输出；每个非归档 step 必须绑定 `goal_id` 或 `goal_ids`。
-11. 识别优化标记 — 含"性能、速度、延迟、吞吐、效率、内存、GPU、耗时"关键词 → 标记 `type: "optimize"`
-12. 追加默认归档步骤 — DAG 最后必须有 `归档到 Goo-wiki`，依赖所有非归档叶子步骤；除非用户明确禁止归档或配置 `archive.enabled=false`
-13. 归档历史 plan — 仅当旧 plan 已完成，或用户明确选择“新建 plan”时，才把 `.goo/plan.json` 复制到 `.goo/plans/history/plan-<timestamp>.json`；不得静默覆盖未完成 plan。
-14. 输出 `.goo/plan.json`
+11. 并行优先审计 — 遍历所有非归档 step，移除仅由叙事顺序、文档顺序或保守习惯造成的依赖；只读同一输入、写不同产物、验收互不依赖的步骤应放入同一 `tier`，并保持空/相同 `depends_on`。每条依赖都要能说明具体上游产物、验收结果、确认门槛或冲突资源。
+12. 识别优化标记 — 含"性能、速度、延迟、吞吐、效率、内存、GPU、耗时"关键词 → 标记 `type: "optimize"`
+13. 追加默认归档步骤 — DAG 最后必须有 `归档到 Goo-wiki`，依赖所有非归档叶子步骤；除非用户明确禁止归档或配置 `archive.enabled=false`
+14. 归档历史 plan — 仅当旧 plan 已完成，或用户明确选择“新建 plan”时，才把 `.goo/plan.json` 复制到 `.goo/plans/history/plan-<timestamp>.json`；不得静默覆盖未完成 plan。
+15. 输出 `.goo/plan.json`，并在审阅摘要中展示并行组、必要串行链及主要风险。
 
 ### 步骤粒度原则
 
 - 每步应产出可验证的中间结果（文件、指标、报告）
 - 步骤过多（>10）说明拆分过细，考虑合并
 - 步骤过少（<2）说明拆分不够，需要继续追问"还需要什么"
+- 步骤粒度服务于并行调度：能独立读输入、独立写产物、独立验收的工作不要合并成一个大步骤，也不要串成逐步依赖
 
 ### Plan 拆分决策
 
