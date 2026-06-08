@@ -9,7 +9,7 @@
 - Agent 启动后立即写第一次 `heartbeat_at` + `progress=5`
 - 之后每 30 秒更新：`heartbeat_at` + `progress (0-100)`
 - 进度估算：agent 在任务开头拆 3-5 个里程碑，每过一个里程碑更新进度
-- 心跳通过 `update-step.py` 更新 plan.json，不要手写临时 JSON 修改代码
+- 心跳通过 `skills/auto-goo/scripts/resolve-root.sh` 调用 `update-step.py` 更新 plan.json，不要手写临时 JSON 修改代码，也不要在命令文档里内联 root 解析 heredoc。
 - `update-step.py` 会自动创建并追加 `.goo/logs/{timestamp}_step-{id}_{name}.md`，并把 `log_path` 写回当前 step
 
 ## 命令模板
@@ -17,60 +17,15 @@
 将 `<id>` 和 `<0-100>` 替换为实际值：
 
 ```bash
-auto_goo_root="$(
-  python3 - <<'PY' 2>/dev/null || true
-import json
-from pathlib import Path
-
-home = Path.home()
-matches = []
-
-def usable(path):
-    return path.exists() and not (path / ".orphaned_at").exists()
-
-registry = home / ".claude/plugins/installed_plugins.json"
-if registry.exists():
-    data = json.loads(registry.read_text(encoding="utf-8"))
-    for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
-            continue
-        for entry in entries:
-            path = Path(entry.get("installPath", "")).expanduser()
-            if usable(path):
-                matches.append((entry.get("lastUpdated", ""), str(path)))
-
-if not matches:
-    settings = home / ".claude/settings.json"
-    if settings.exists():
-        data = json.loads(settings.read_text(encoding="utf-8"))
-        enabled = data.get("enabledPlugins", {})
-        marketplaces = data.get("extraKnownMarketplaces", {})
-        for key, is_enabled in enabled.items():
-            if not is_enabled or "@" not in key:
-                continue
-            plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
-                continue
-            source = marketplaces.get(marketplace, {}).get("source", {})
-            if source.get("source") != "directory":
-                continue
-            path_text = source.get("path")
-            if not path_text:
-                continue
-            path = Path(path_text).expanduser()
-            if usable(path):
-                matches.append(("settings:" + marketplace, str(path)))
-
-if matches:
-    print(sorted(matches)[-1][1])
-PY
-)"
-if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/update-step.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
-  exit 127
-fi
-python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --heartbeat --progress <0-100> --note "<短进展>"
+bash "$auto_goo_root/skills/auto-goo/scripts/resolve-root.sh" \
+  --plan .goo/plan.json \
+  --step-id <id> \
+  --heartbeat \
+  --progress <0-100> \
+  --note "<短进展>"
 ```
+
+上面的 `auto_goo_root` 必须由主 Agent 在派发前通过 Claude Code 安装记录或本地 directory marketplace 解析并注入；Subagent 不要自己扫描当前目录或猜 checkout 路径。如果 prompt 中没有已解析的 `auto_goo_root`，必须先报告 blocked，而不是手写一段新的 root 解析代码。
 
 ## 里程碑模板
 
@@ -97,13 +52,15 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 | 100 | 完成（与 status=completed 同步） |
 | 停滞 >= 3 轮心跳（约 90s） | 可能卡住，发出警告 |
 
-## 心跳判断（恢复时使用）
+## 心跳判断（跨会话恢复时使用）
 
 | heartbeat_at 状态 | 判断 |
 |-------------------|------|
 | 距今 < 2 分钟 | Agent 可能仍在运行（如果会话还在） |
 | 距今 >= 2 分钟 | Agent 已死亡（僵尸进程），可重新派发 |
 | 为空（从未启动） | 步骤从未被执行 |
+
+这 2 分钟判断只用于 `/auto-goo:goo-continue` 的跨会话恢复。正常执行中的失败超时使用 `heartbeat_timeout_min`，默认 15 分钟；不要把运行中超过 2 分钟未更新心跳直接标记为 failed。
 
 ## 超时配置
 

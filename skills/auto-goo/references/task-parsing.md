@@ -491,7 +491,7 @@ pending ──→ running ──→ completed
   └── 跳过（depends_on 中有 failed 且非关键路径）
 
 心跳保活：running 状态的步骤在 5 个里程碑点更新 heartbeat_at（启动→15→50→85→完成/失败）。
-恢复时如果 heartbeat_at 超过 2 分钟未更新 → 视为僵尸进程，可重新派发。
+跨会话恢复时如果 heartbeat_at 超过 2 分钟未更新 → 视为僵尸进程，可按产物状态修复或重新派发。正常执行中的失败超时使用 `heartbeat_timeout_min`（默认 15 分钟），不要把 2 分钟恢复阈值当成运行时失败阈值。
 ```
 
 ### 恢复时完成度判断优先级

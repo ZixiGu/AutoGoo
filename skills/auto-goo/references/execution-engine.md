@@ -530,7 +530,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 
   4. 心跳巡检（每 30s）
      → 检查 running 中每个 agent 的 heartbeat_at
-     → 超时 >= 5min → 标记 failed，释放槽位
+     → 超时 >= heartbeat_timeout_min（默认 15min）→ 标记 failed，释放槽位
 ```
 
 ## 心跳机制
@@ -557,13 +557,15 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 | 100 | 完成（与 status=completed 同步） |
 | 停滞 >= 3 轮心跳 | 可能卡住，发出警告 |
 
-### 心跳判断（恢复时使用）
+### 心跳判断（跨会话恢复时使用）
 
 | heartbeat_at 状态 | 判断 |
 |-------------------|------|
 | 距今 < 2 分钟 | Agent 可能仍在运行（如果会话还在） |
 | 距今 >= 2 分钟 | Agent 已死亡（僵尸进程），可重新派发 |
 | 为空（从未启动） | 步骤从未被执行 |
+
+这 2 分钟判断只用于 `/auto-goo:goo-continue` 的跨会话恢复。正常执行中的失败超时使用 `heartbeat_timeout_min`，默认 15 分钟；不要把运行中超过 2 分钟未更新心跳直接标记为 failed。
 
 ## 错误处理
 

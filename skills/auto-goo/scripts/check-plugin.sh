@@ -93,6 +93,7 @@ echo "── 3. Reference 文件 ──"
 
 REFS=(
   "execution-engine.md"
+  "heartbeat.md"
   "interaction-templates.md"
   "obsidian-archive.md"
   "optimization-loop.md"
