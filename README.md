@@ -1,6 +1,6 @@
 # AutoGoo
 
-[![Release](https://img.shields.io/badge/release-v0.3.2-blue)](#版本)
+[![Release](https://img.shields.io/badge/release-v0.3.3-blue)](#版本)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-black)](#安装)
 [![Status](https://img.shields.io/badge/status-preview-orange)](#版本)
@@ -73,7 +73,7 @@ AutoGoo 是一个 Claude Code 插件，用于把开放式任务转成可追踪�
 /auto-goo:goo-init --project
 ```
 
-`goo-init` 由本地交互脚本驱动。它会询问配置作用域和 Goo-wiki 路径，默认提供 `~/workspace/Goo-wiki`；如果用户选择的 Goo-wiki 路径不存在，会自动创建 vault 目录和基础文件，而不是改用 fallback。项目级初始化会创建项目归档根目录，并询问是否把 Goo-wiki 召回与归档要求写入项目 `CLAUDE.md` 的 AutoGoo marker 块。
+`goo-init` 由本地交互脚本驱动。它会询问配置作用域和 Goo-wiki 路径，默认提供 `~/workspace/Goo-wiki`；如果用户选择的 Goo-wiki 路径不存在，会自动创建 vault 目录和基础文件，而不是改用 fallback。项目级初始化会创建项目归档根目录，并询问是否把 Goo-wiki 召回、远程服务器使用方式与归档要求写入项目 `CLAUDE.md` 的 AutoGoo marker 块。远程服务器配置只保存非敏感参数到 config，密码存入独立 secrets 文件；slash command 落盘时通过可重复的 `--server 'ip=<host>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'` 传入非敏感参数。
 
 只想先审阅 DAG，不立即执行时：
 
@@ -111,7 +111,7 @@ AutoGoo 会：
 | `/auto-goo:goo-daily-report [日期\|范围]` | 扫描 Claude Code 与 Codex 会话，生成 Goo-wiki 日报/周报素材。 |
 | `/auto-goo:goo-usage [参数]` | 显示 Claude Code token / usage 监控面板。 |
 | `/auto-goo:goo-usage-analyse [项目\|范围]` | 结合 usage 热点和 Goo-wiki 经验，找出项目 token 开销节省方式。 |
-| `/auto-goo:goo-publish` | 生成 `.goo/site/index.html` 单页站点，发布 activity 热力图、brainstorm、plan、任务流程图、DAG、运行状态和产物索引。 |
+| `/auto-goo:goo-publish` | 无需 config，生成 `.goo/site/` 多页站点，发布活动热力图、头脑风暴、计划、任务流程图、DAG、运行状态和产物索引。 |
 | `/auto-goo:goo-benchmark` | 执行指标发现、基线测量、profiling、优化和对比。 |
 | `/auto-goo:goo-improve` | 回顾近期流程摩擦，生成插件改进建议。 |
 
@@ -125,21 +125,23 @@ AutoGoo 的 HTML 发布层用于把整个工作流变成一个可浏览的项目
 /auto-goo:goo-publish
 ```
 
-默认输出 `.goo/site/index.html` 单页站点，并启动 server 预览 `http://127.0.0.1:9877/` 与 `http://<server-ip>:9877/`；如果端口被占用，会自动尝试后续端口并打印实际地址。server 默认读取已生成的 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时可传 `--live`。页面会读取 `.goo/brainstorm.json`、`.goo/plan.json`、本地 history、logs、artifacts、reports 和 `.goo/obsidian/` fallback，并以 `skills/auto-goo/templates/publish/workflow-*.html` 为页面外壳和视觉契约来源生成 HTML。首页使用模板同款左侧工作区导航，Overview 是整体概述，其余视图仍保留在同一个 `index.html` 中：
+无需运行 `goo-init` 或创建 `.goo/config.json`，默认输出 `.goo/site/` 多页站点；已有 publish 配置仅作为可选高级覆盖。命令会启动 server 预览 `http://127.0.0.1:9877/` 与 `http://<server-ip>:9877/`；如果端口被占用，会自动尝试后续端口并打印实际地址。server 默认读取已生成的 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时可传 `--live`。页面会读取 `.goo/brainstorm.json`、`.goo/plan.json`、本地 history、logs、artifacts、reports 和 `.goo/obsidian/` fallback，并以 `skills/auto-goo/templates/publish/workflow-shell.html` 为唯一运行时页面外壳、`skills/auto-goo/templates/publish/workflow-theme.css` 为唯一正式视觉主题。关键页面标签默认使用中文：
 
-- Overview：Token Activity 热力图、activity 热力图、核心指标、最近活动入口和整体状态概述。
-- Status：当前 plan 的运行状态、完成比例、状态分布和步骤状态列表。
-- Plan：当前 plan 的状态、完成比例、goals、任务流程图和 DAG 分层。
-- Brainstorm：当前 `.goo/brainstorm.json` 或最新历史 brainstorm 的候选目标、推荐优先级、原因和预期输出。
-- Activity：完整 Contribution Activity，包含当前项目 Claude Code usage 日志聚合出的 token 消耗行。
-- Subagents：内嵌 subagent 架构图，展示 `subagent` role 与 `task_agent` profile 的关系。
-- Artifacts：最近产物索引，便于跳到报告、日志和本地 fallback 笔记。
+- 总览：Token 活动热力图、文本型工作流活动、核心指标、最近活动入口和整体状态概述；悬浮格子显示 Token 消耗，点击或聚焦格子会在下方说明所选日期或周期实际完成的工作。
+- 运行状态：当前计划的运行状态、完成比例、状态分布和步骤状态列表。
+- 计划：当前计划的状态、完成比例、目标、任务流程图和 DAG 分层。
+- 头脑风暴：当前 `.goo/brainstorm.json` 或最新历史头脑风暴的候选目标、推荐优先级、原因和预期输出。
+- 活动：完整活动记录，包含当前项目 Claude Code usage 日志聚合出的 token 消耗行；列表显示用户任务摘要，点击后展开完整用户任务原文和使用详情。
+- 代理执行：从当前计划与步骤日志展示实际代理分配、负责步骤、状态、耗时、产出和执行日志；缺失的旧运行字段明确标记为未记录。
+- 产物归档：最近产物索引，便于跳到报告、日志和本地 fallback 笔记。
 
-首页中的指标卡、activity 行、brainstorm goal、subagent 架构入口和 artifact 行都是可点击入口，点击后跳转到同页对应视图查看，不在原位置展开内容。
+首页中的指标卡、活动行、头脑风暴目标、代理执行入口和产物行都是可点击入口。默认生成 `index.html`、`plan.html`、`activity.html`、`brainstorm.html`、`status.html`、`agents.html` 和 `artifacts.html`。
 
-如果需要拆页，把 `publish.split_pages` 设置为 `true`，脚本会额外生成 `plan.html`、`activity.html`、`brainstorm.html` 和 `artifacts.html`。
+发布站点的正式视觉主题位于 `skills/auto-goo/templates/publish/workflow-theme.css`，构建时自动复制到 `.goo/site/workflow-theme.css`。所有页面直接使用该主题，无需发布后手工注入样式。
 
-`goo-publish` 是只读展示层：它不修改 `.goo/plan.json`、`.goo/brainstorm.json`、logs 或 Goo-wiki 正文。Activity 中的 token 消耗来自 `~/.claude/projects/**/*.jsonl` 里 `cwd` 等于当前项目的 `message.usage`，只展示聚合 token、模型和记录数，不发布对话正文。HTML 发布也不替代 Goo-wiki 归档；归档仍负责把可复用知识写入 wiki/fallback，HTML 负责把当前项目活动和运行状态集中展示出来。浏览器无法自动弹出时，直接打开脚本输出的本地 URL。
+桌面端固定左侧导航，并将页面标题、生成时间、实时状态和主题按钮固定在顶部；移动端使用自然滚动，避免遮挡正文。
+
+`goo-publish` 是只读展示层：它不修改 `.goo/plan.json`、`.goo/brainstorm.json`、logs 或 Goo-wiki 正文。活动页中的 token 消耗来自 `~/.claude/projects/**/*.jsonl` 里 `cwd` 等于当前项目的 `message.usage`，列表展示聚合 token、模型、记录数和用户任务摘要，点击记录后展开完整用户任务原文和使用详情；不发布 assistant 回复或完整对话正文。HTML 发布也不替代 Goo-wiki 归档；归档仍负责把可复用知识写入 wiki/fallback，HTML 负责把当前项目活动和运行状态集中展示出来。浏览器无法自动弹出时，直接打开脚本输出的本地 URL。
 
 ## 研究资料归档
 
@@ -333,11 +335,10 @@ AutoGoo 同时读取用户级和项目级配置。项目配置覆盖用户配置
     "enabled": true,
     "site_dir": ".goo/site",
     "index_file": ".goo/site/index.html",
-    "split_pages": false,
     "host": "0.0.0.0",
     "port": 9877,
     "open_browser": true,
-    "include_activity_heatmap": true,
+    "include_workflow_activity": true,
     "include_dag": true
   },
   "execution": {
@@ -373,13 +374,14 @@ AutoGoo 同时读取用户级和项目级配置。项目配置覆盖用户配置
 | `publish.enabled` | 是否启用 HTML 工作流发布。 |
 | `publish.site_dir` | 静态 HTML 站点输出目录，默认 `.goo/site`。 |
 | `publish.index_file` | HTML 首页路径，默认 `.goo/site/index.html`。 |
-| `publish.split_pages` | 是否把 plan/activity/brainstorm/artifacts 拆成独立页面，默认 `false`；默认内容完整保留在 `index.html`。 |
 | `publish.host` | 预览 server 监听地址，默认 `0.0.0.0`，便于远程开发环境访问。 |
 | `publish.port` | 预览 server 默认端口，默认 `9877`；占用时自动尝试后续端口。 |
 | `publish.open_browser` | 预览 server 启动后是否尝试弹出浏览器。 |
 | `execution.max_concurrent` | 最大并行 Agent 槽位数。 |
 | `execution.heartbeat_seconds` | Agent 心跳间隔。 |
 | `execution.stale_after_seconds` | 恢复时判定 running step 过期的阈值。 |
+| `servers[]` | 可选远程服务器列表；每项包含 `ip`、`port`、`user`、`type`、`purpose`、`secrets_file`。 |
+| `servers[].secrets_file` | 密码文件路径，项目级默认 `.goo/secrets.json`，用户级默认 `~/.auto-goo/secrets.json`；密码不写入 config、计划、日志或 prompt。 |
 | `planning.recall_wiki` | 规划时是否复用 wiki 知识。 |
 | `planning.require_wiki_context` | 缺少 wiki 上下文时是否阻塞规划。 |
 | `init.prompt_for_scope` | 初始化时是否询问 user/project 作用域。 |
@@ -451,8 +453,11 @@ skills/auto-goo/            goo-workflow skill 和参考文档
   references/               执行、解析、归档、优化等详细说明
   examples/                 工作流示例
   scripts/                  校验、状态、图谱上下文和辅助脚本
-  templates/                项目配置模板和 publish HTML 参考模板
-    publish/              goo-publish 页面参考模板
+  templates/                项目配置模板和 publish HTML 模板
+    publish/
+      workflow-shell.html   goo-publish 唯一运行时页面外壳
+      workflow-theme.css    goo-publish 正式视觉主题
+      workflow-*.html       内容与视觉参考页
 agents/                     Subagent 定义
   roles/                    稳定 Role Agent，写入 plan.json 的 subagent
   tasks/                    细分 Task Agent，写入 task_agent 或步骤说明
@@ -474,7 +479,7 @@ agents/                     Subagent 定义
 
 ## 版本
 
-当前版本：**v0.3.2**
+当前版本：**v0.3.3**
 
 这是一个 preview 版本，重点覆盖核心插件契约：
 

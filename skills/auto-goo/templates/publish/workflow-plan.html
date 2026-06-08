@@ -1084,6 +1084,7 @@ code {
       </div>
     </aside>
     <main class="main">
+      <header class="page-header">
       <div class="topbar compact-topbar">
         <button class="top-action theme-toggle" id="themeToggle" type="button" aria-label="切换深色模式" title="切换深色模式">☾</button>
       </div>
@@ -1092,8 +1093,9 @@ code {
           <h2>计划</h2>
           <p>计划页需要完整承载当前安排：目标、上下文、步骤依赖、状态、subagent/task_agent、输入输出、权限边界、验收与阻塞都要可直接查看。</p>
         </div>
-        <div class="live-pill"><span class="live-dot"></span><span id="liveClock">仅模板展示</span></div>
+        <div class="live-pill"><span class="live-dot"></span><span id="liveClock">状态加载中</span></div>
       </section>
+      </header>
       <div class="stack">
 <section class="panel">
   <div class="panel-head">
@@ -1101,7 +1103,7 @@ code {
       <h3>计划上下文</h3>
       <span>对应 <code>.goo/plan.json</code> 顶层字段，避免执行时依赖会话记忆。</span>
     </div>
-    <span class="tag ok">status: running</span>
+    <span class="tag ok">状态：运行中</span>
   </div>
   <dl class="detail-grid">
     <dt>task_name</dt><dd>PIN LIST</dd>
@@ -1193,7 +1195,7 @@ code {
   </div>
   <div class="step-detail-list">
     <article class="step-detail success searchable">
-      <div class="panel-head"><h4>#1 分析数据结构与参考格式</h4><span class="status success">completed</span></div>
+      <div class="panel-head"><h4>#1 分析数据结构与参考格式</h4><span class="status success">已完成</span></div>
       <p>读取 compact JSON 结构和参考 QA 格式，确认 pin 坐标提取逻辑和输出格式。</p>
       <div class="step-meta"><span><strong>goal</strong>g1</span><span><strong>agent</strong>researcher / codebase-scout</span><span><strong>progress</strong>100%</span><span><strong>depends_on</strong>none</span></div>
       <dl class="detail-grid">
@@ -1207,7 +1209,7 @@ code {
       </dl>
     </article>
     <article class="step-detail running searchable">
-      <div class="panel-head"><h4>#3 运行脚本生成 QA 数据</h4><span class="status running">running</span></div>
+      <div class="panel-head"><h4>#3 运行脚本生成 QA 数据</h4><span class="status running">运行中</span></div>
       <p>执行生成脚本，生成 JSONL，并检查输出条目数和格式正确性。</p>
       <div class="step-meta"><span><strong>goal</strong>g1</span><span><strong>agent</strong>evaluator / test-runner</span><span><strong>progress</strong>15%</span><span><strong>depends_on</strong>2</span></div>
       <dl class="detail-grid">
@@ -1218,7 +1220,7 @@ code {
       </dl>
     </article>
     <article class="step-detail pending searchable">
-      <div class="panel-head"><h4>#5 归档到 Goo-wiki</h4><span class="status pending">pending</span></div>
+      <div class="panel-head"><h4>#5 归档到 Goo-wiki</h4><span class="status pending">待处理</span></div>
       <p>归档目标、执行摘要、产物路径和关键经验，并维护 wiki 链接图谱。</p>
       <div class="step-meta"><span><strong>goal</strong>g1</span><span><strong>agent</strong>recorder / wiki-curator</span><span><strong>progress</strong>0%</span><span><strong>depends_on</strong>4</span></div>
       <dl class="detail-grid">

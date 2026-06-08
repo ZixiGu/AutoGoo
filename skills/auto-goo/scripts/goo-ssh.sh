@@ -19,8 +19,9 @@ Examples:
 Notes:
   --server accepts a configured server index, name, host/IP, host:port,
   user@host, or user@host:port.
-  Requires sshpass for password-based login. The password is read from the configured
-  secrets file and passed to sshpass through a temporary chmod 600 file.
+  Password-based login uses sshpass when a password exists in the configured
+  secrets file. If no password is configured, the helper falls back to plain ssh
+  so key-based login and manual SSH auth still work.
 EOF
 }
 
@@ -84,7 +85,7 @@ if [[ ! -f "$CONFIG" ]]; then
   exit 2
 fi
 
-if ! mapfile -t SSH_INFO < <(python3 - "$CONFIG" "$SERVER_SELECTOR" "$HOST_OVERRIDE" "$USER_OVERRIDE" "$PORT_OVERRIDE" <<'PY'
+if ! mapfile -t SSH_INFO < <(python3 - "$CONFIG" "$SERVER_SELECTOR" "$HOST_OVERRIDE" "$USER_OVERRIDE" "$PORT_OVERRIDE" "$DRY_RUN" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -94,6 +95,7 @@ selector = sys.argv[2]
 host_override = sys.argv[3]
 user_override = sys.argv[4]
 port_override = sys.argv[5]
+dry_run = sys.argv[6] == "1"
 project_root = config_path.parent.parent
 
 def fail(message, code=2):
@@ -211,46 +213,47 @@ if not host or not user:
 secrets_path = Path(secrets_file)
 if not secrets_path.is_absolute():
     secrets_path = project_root / secrets_path
-if not secrets_path.exists():
+if not secrets_path.exists() and not dry_run:
     fail(f"secrets file not found: {secrets_path}")
 
-try:
-    secrets = json.loads(secrets_path.read_text(encoding="utf-8"))
-except (json.JSONDecodeError, OSError) as exc:
-    fail(f"cannot read secrets: {exc}")
-
-entries = secrets
-if isinstance(secrets, dict):
-    entries = secrets.get("servers", [])
-
 password = None
-if isinstance(entries, list):
-    for item in entries:
-        if not isinstance(item, dict):
-            continue
-        if str(item.get("ip") or item.get("host") or "") == str(host) and str(item.get("user") or "") == str(user):
-            password = item.get("password")
-            break
-elif isinstance(entries, dict):
-    candidate_keys = [
-        str(host),
-        f"{host}:{port}",
-        f"{user}@{host}",
-        f"{user}@{host}:{port}",
-    ]
-    for key in candidate_keys:
-        item = entries.get(key)
-        if isinstance(item, dict) and item.get("password"):
-            password = item.get("password")
-            break
-        if isinstance(item, str) and item:
-            password = item
-            break
-else:
-    fail("secrets file must contain a server list, a {'servers': [...]} object, or a {'servers': {'host:port': ...}} object")
+if secrets_path.exists():
+    try:
+        secrets = json.loads(secrets_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        fail(f"cannot read secrets: {exc}")
 
-if not password:
-    fail(f"password not found in {secrets_path} for {user}@{host}")
+    entries = secrets
+    if isinstance(secrets, dict):
+        entries = secrets.get("servers", [])
+
+    if isinstance(entries, list):
+        for item in entries:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("ip") or item.get("host") or "") == str(host) and str(item.get("user") or "") == str(user):
+                password = item.get("password")
+                break
+    elif isinstance(entries, dict):
+        candidate_keys = [
+            str(host),
+            f"{host}:{port}",
+            f"{user}@{host}",
+            f"{user}@{host}:{port}",
+        ]
+        for key in candidate_keys:
+            item = entries.get(key)
+            if isinstance(item, dict) and item.get("password"):
+                password = item.get("password")
+                break
+            if isinstance(item, str) and item:
+                password = item
+                break
+    else:
+        fail("secrets file must contain a server list, a {'servers': [...]} object, or a {'servers': {'host:port': ...}} object")
+
+if password is None:
+    password = ""
 
 print(host)
 print(user)
@@ -279,14 +282,20 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "ssh target: $SSH_TARGET"
   echo "ssh port:   $PORT"
   echo "secrets:    $SECRETS_PATH"
+  if [[ -n "$PASSWORD" ]]; then
+    echo "auth:       password via sshpass"
+  else
+    echo "auth:       plain ssh (key/manual auth; no password loaded)"
+  fi
   echo "command:    ssh -p $PORT $SSH_TARGET $*"
   exit 0
 fi
 
-if ! command -v sshpass >/dev/null 2>&1; then
-  echo "error: sshpass is required for password-based scripted SSH." >&2
-  echo "Install it first, or connect manually with: ssh -p $PORT $SSH_TARGET" >&2
-  exit 127
+if [[ -z "$PASSWORD" ]]; then
+  if [[ ! -t 0 ]]; then
+    exec ssh -o BatchMode=yes -p "$PORT" "$SSH_TARGET" "$@"
+  fi
+  exec ssh -p "$PORT" "$SSH_TARGET" "$@"
 fi
 
 PASS_FILE="$(mktemp "${TMPDIR:-/tmp}/autogoo-ssh-pass.XXXXXX")"
@@ -303,5 +312,11 @@ trap cleanup EXIT
 chmod 600 "$PASS_FILE"
 printf '%s\n' "$PASSWORD" > "$PASS_FILE"
 unset PASSWORD
+
+if ! command -v sshpass >/dev/null 2>&1; then
+  echo "error: sshpass is required for password-based scripted SSH." >&2
+  echo "Install it first, or connect manually with: ssh -p $PORT $SSH_TARGET" >&2
+  exit 127
+fi
 
 exec sshpass -f "$PASS_FILE" ssh -p "$PORT" "$SSH_TARGET" "$@"

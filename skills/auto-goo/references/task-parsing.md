@@ -96,7 +96,7 @@
 
 如果 `.goo/brainstorm.json` 存在，但用户没有明确选择 candidate goal，`goo-plan` 不能默认选推荐项直接执行。可以展示 `recommended_goal_ids`，但必须等待用户确认。
 
-确认问题必须优先使用 `AskUserQuestion` / 结构化选择 UI；不得在交互控件可用时要求用户手打编号或 goal ID。仅当交互控件不可用时，才使用纯文本 fallback：
+确认问题必须优先使用 `AskUserQuestion` / 结构化选择 UI，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=existing_brainstorm_goal` 的 JSON 模板；不得在交互控件可用时要求用户手打编号或 goal ID。动态 `<goal_id>` 必须替换为真实推荐 ID；其他 goal 或合并指令通过 Other 输入，并校验能匹配候选 goals。仅当交互控件不可用时，才使用纯文本 fallback：
 
 ```text
 检测到已有 brainstorm 候选目标。请选择用于 plan 的目标：
@@ -443,6 +443,9 @@ DAG 结构总结：
 | `allowed_read_paths` | Subagent 允许读取的路径边界；缺失时执行前先补 plan |
 | `allowed_write_paths` | Subagent 允许写入的路径边界；缺失时执行前先补 plan |
 | `validation` | 本步骤完成后的验收方式，可以是命令、文件存在性、人工检查点或指标阈值 |
+| `execution_target` | 执行位置，默认 `local`；需要远程服务器时写 `remote` |
+| `remote_server` | 远程服务器选择器，仅 `execution_target=remote` 时使用；必须匹配 config `servers[]` 的 index、`ip`、`ip:port`、`user@ip` 或 `user@ip:port` |
+| `remote_reason` | 为什么必须远程执行，例如需要 GPU、远程依赖、长跑环境或用户明确要求 |
 | `risk_level` | 风险等级，建议 `low` / `medium` / `high`；涉及覆盖、远程、批量改写、发布等通常不应为 low |
 | `requires_user_confirm` | 是否需要用户确认后才能执行；高风险或不可逆步骤必须为 `true` |
 | `status` | `pending` → `running` → `blocked` / `completed` / `failed`。主会话派发、检测到权限阻塞或完成时更新 |

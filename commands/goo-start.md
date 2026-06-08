@@ -15,9 +15,10 @@ description: 启动 AutoGoo 完整工作流 — 召回 wiki 经验、生成 DAG�
 4. **执行前上下文同步** — 如果当前 `.goo/plan.json` 已存在，默认检查 plan 生成后新增的对话方案、约束、验收标准和用户偏好；有增量时先把旧 plan 复制到 `.goo/plans/history/`，再写入 `context_digest.post_plan_updates` 或 `context_artifacts`，然后再执行
 5. **审阅与归档闸门** — 一旦 plan 准备开始执行，先检查 `.goo/brainstorm.json` 和 `.goo/plan.json` 的 `review.status`。如果仍是 `pending_user_review`，先展示摘要并优先用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改或停止，不自动归档或执行。确认后，如果 brainstorm 存在且 `archive` 缺失、`archive.status` 不是 `completed`，或归档路径不可验证，必须先派发 `recorder` 归档最终版 brainstorm；归档完成并回写 `.goo/brainstorm.json.archive` 后，才能进入业务 step 调度
 6. **执行前自检** — 确认每个待执行 step 不依赖主会话隐含上下文，只依赖 plan、Markdown/context artifact、wiki 摘要和上游产物；检查每个 step 的 `subagent` 是否合法，并检查 `available_skills` 是否只包含本步骤需要且实际可用的 skill；不合法时先补 plan 或创建角色，不直接降级主 Agent 执行
-7. **执行** — 按轮次并行/串行分发 Subagent；除生成 plan 本身外，主 Agent 不得直接代做 `research` / `exec` / `optimize` / `eval` / `review` / `audit` / `archive` 步骤。**每个 Subagent prompt 必须包含 `references/execution-engine.md` 中对应的 Heartbeat 强制分段**，否则 Subagent 不更新 `heartbeat_at`，会被误判为僵尸进程。**每次 step 状态变更后，必须立即调用 `goo-status.py --update-status` 更新 plan 顶层 `status`、`started_at`、`completed_at`**，确保 plan 顶层状态与实际 step 状态一致
-8. **优化**（如需要）— 指标搜索 → Baseline → 优化 → 评测对比
-9. **归档** — 执行记录和新增经验写入 Goo-wiki
+7. **远程执行自检** — 对 `execution_target="remote"` 的 step，先从 `.goo/config.json` 或 `~/.auto-goo/config.json` 读取 `servers[]`，确认 `remote_server` 能唯一匹配配置项、secrets 文件存在且不展开密码；派发前用结构化确认向用户说明远程命令类别、目标服务器、远程路径、产物位置和风险。未获确认时标记 `blocked` / `needs_user_approval`，不得自动改成本地执行。
+8. **执行** — 按轮次并行/串行分发 Subagent；除生成 plan 本身外，主 Agent 不得直接代做 `research` / `exec` / `optimize` / `eval` / `review` / `audit` / `archive` 步骤。远程 step 通过 `skills/auto-goo/scripts/goo-ssh.sh --config <config> --server <remote_server> -- <remote command>` 执行；命令只能引用 plan 中已声明的远程路径和产物，不把密码写入 prompt、日志或命令行。**每个 Subagent prompt 必须包含 `references/execution-engine.md` 中对应的 Heartbeat 强制分段**，否则 Subagent 不更新 `heartbeat_at`，会被误判为僵尸进程。**每次 step 状态变更后，必须立即调用 `goo-status.py --update-status` 更新 plan 顶层 `status`、`started_at`、`completed_at`**，确保 plan 顶层状态与实际 step 状态一致
+9. **优化**（如需要）— 指标搜索 → Baseline → 优化 → 评测对比
+10. **归档** — 执行记录和新增经验写入 Goo-wiki
 
 ## 参数
 
@@ -25,7 +26,7 @@ description: 启动 AutoGoo 完整工作流 — 召回 wiki 经验、生成 DAG�
 
 如果当前目录已经存在 `.goo/plan.json`，且用户没有提供新的任务描述，优先从当前 plan 执行。执行前默认做一次 context sync：若当前对话在 plan 生成后新增了方案、取舍、约束、验收标准、用户偏好或 open question，先把旧 plan 复制到 `.goo/plans/history/`，再把短内容写入 `context_digest.post_plan_updates`，长内容写入 Goo-wiki/Markdown 并追加到 `context_artifacts` 后执行。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认；该询问必须优先使用结构化选项：`同步并继续执行`、`先修改 plan`、`停止并保留当前 plan`。
 
-审阅或冲突确认必须优先使用 `AskUserQuestion` / 结构化选择 UI。仅当交互控件不可用时，才使用纯文本 fallback：
+审阅或冲突确认必须优先使用 `AskUserQuestion` / 结构化选择 UI，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=start_plan_review` 的 JSON 模板。新增约束或修改要求通过 Other 输入，输入后必须写入 `context_digest` 或更新 plan。如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
 
 ```text
 执行前需要确认当前 plan。请选择处理方式：
@@ -33,7 +34,7 @@ description: 启动 AutoGoo 完整工作流 — 召回 wiki 经验、生成 DAG�
 2. 修改 plan / 同步新增约束
 3. 停止并保留当前现场
 
-请回复 1/2/3，或直接写修改要求。
+这是 fallback；请回复 1/2/3，或直接写修改要求。
 ```
 
 ## 示例
@@ -54,6 +55,7 @@ description: 启动 AutoGoo 完整工作流 — 召回 wiki 经验、生成 DAG�
 - 如果 `.goo/brainstorm.json` 存在且已经被用户确认，执行开始前必须确认 brainstorm 已归档；未归档时先归档最终确认版 brainstorm，再启动业务 step
 - 执行阶段必须使用 plan step 中声明的 `subagent`；若 `subagent` 缺失或不合法，先补 plan 或创建角色，不由主 Agent 直接代执行
 - 执行阶段把 plan step 中的 `available_skills` 作为 Subagent prompt 的 skill allowlist；没有额外 skill 时传空数组，不把全部 skill 默认塞给 Subagent
+- 执行阶段尊重 plan step 的 `execution_target`；远程 step 必须使用配置中的 `remote_server` 和 `goo-ssh.sh`，并在用户授权后执行，不从聊天记录猜默认服务器
 - 优化迭代默认最多 3 轮
 - 日志保存在 `.goo/logs/`
 - Plan 顶层 `status`（`pending` → `running` → `blocked` → `completed`/`failed`）由 `goo-status.py --update-status` 自动计算更新，主 Agent 在每次 step 状态变更后必须调用

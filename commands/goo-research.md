@@ -74,14 +74,14 @@ description: 研究资料归档命令，当前支持 paper 子命令，用于论
 - `access_limitations[]`：付费墙、登录、审批、许可证或失效链接说明。
 - `followups[]`：需要用户确认的下载、申请、复现或后续计划。
 
-需要用户确认的大文件下载、登录申请、受限数据集获取或复现实验，必须优先用 `AskUserQuestion` / 结构化选择 UI 呈现，不得只写“需要用户确认”或要求用户手打编号。推荐结构化选项：
+需要用户确认的大文件下载、登录申请、受限数据集获取或复现实验，必须优先用 `AskUserQuestion` / 结构化选择 UI 呈现，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=research_followup` 的 JSON 模板；不得只写“需要用户确认”或要求用户手打编号。其他处理要求通过 Other 输入，输入后必须先记录风险和边界。推荐结构化选项：
 
 - 只记录下载/申请步骤，不执行
 - 执行小型元数据或可访问性检查
 - 进入 `/auto-goo:goo-plan` 规划下载/复现任务
 - 跳过这些受限资源
 
-仅当交互控件不可用时，才使用纯文本 fallback：
+如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
 
 ```text
 检测到需要确认的后续动作：
@@ -90,7 +90,7 @@ description: 研究资料归档命令，当前支持 paper 子命令，用于论
 3. 进入 /auto-goo:goo-plan 规划下载/复现任务
 4. 跳过这些受限资源
 
-请回复 1/2/3/4，或直接写你的选择。
+这是 fallback；请回复 1/2/3/4，或直接写你的选择。
 ```
 
 ## 输出摘要

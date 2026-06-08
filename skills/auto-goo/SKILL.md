@@ -1,7 +1,7 @@
 ---
 name: goo-workflow
 description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', '/auto-goo:goo-publish', 'brainstorm', '找目标', '开始任务', 'run:', '读论文', '论文', 'paper', '日报', '周报', 'usage', 'token统计', 'token降本', '发布HTML', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status, HTML publishing, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion tools."
-version: 0.3.2
+version: 0.3.3
 tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 ---
 
@@ -23,132 +23,31 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 - `/auto-goo:goo-daily-report [日期|范围]`：扫描 Claude Code / Codex 会话，生成 Goo-wiki 日报或周报素材。
 - `/auto-goo:goo-usage [参数]`：扫描 Claude Code usage 日志，参考 Claude-Code-Usage-Monitor 的终端界面风格渲染今天总 token、项目分布、模型分布和可选 cost 面板。
 - `/auto-goo:goo-usage-analyse [项目|范围]`：结合 usage 热点和 Goo-wiki 项目知识，归因 token 开销并生成可落地节省方案。
-- `/auto-goo:goo-publish`：把 `.goo/` 工作流状态发布成静态单页 HTML，包含 activity 热力图、brainstorm、plan、任务流程图、DAG、运行状态和产物索引。
+- `/auto-goo:goo-publish`：无需 config，把 `.goo/` 工作流状态发布成静态多页 HTML，包含活动热力图、头脑风暴、计划、任务流程图、DAG、运行状态和产物索引。
 
 **内容输出归档铁律**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令最终都必须归档到 Goo-wiki。包括 `/auto-goo:goo-brainstorm` 的候选 goals、`/auto-goo:goo-research paper` 的论文资料包和深度笔记、`/auto-goo:goo-usage-analyse` 的降本报告、`/auto-goo:goo-daily-report` 的日报/周报、`/auto-goo:goo-improve` 的改进建议、benchmark/plan/start/continue 的计划与执行经验。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。`goo-brainstorm` 和 `goo-plan` 必须先让用户审阅，用户确认前只写本地 `.goo/brainstorm.json` / `.goo/plan.json` 草案，不急着归档最终知识页。
 
 **同一任务归档根**：同一条任务链路的 brainstorm、plan 和 execution 知识归档默认放在同一个 `task_archive_root` 下，用子目录区分阶段：`brainstorm/` 保存候选目标、推荐顺序和选择依据；`plan/` 保存正式 DAG、上下文摘要和计划取舍；`execution/` 保存步骤证据、验证结果和最终经验。`task_archive_root` 优先位于 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-task-slug>/`；Goo-wiki 不可用时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/`。`.goo/brainstorm.json.archive.task_archive_root` 与 `.goo/plan.json.archive.task_archive_root` 必须保持一致，除非用户明确要求分开归档。注意：这不同于本地 JSON 历史快照；旧 `.goo/plan.json` 仍保存到 `.goo/plans/history/`，旧 `.goo/brainstorm.json` 保存到 `.goo/brainstorms/history/`。
 
-**HTML 发布层**：`/auto-goo:goo-publish` 是工作流的只读展示层，默认从 `.goo/brainstorm.json`、`.goo/plan.json`、`.goo/plans/history/`、`.goo/brainstorms/history/`、`.goo/logs/`、`.goo/artifacts/`、`.goo/reports/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/index.html` 单页站点。发布页面必须以 `skills/auto-goo/templates/publish/workflow-*.html` 为页面外壳和视觉契约来源，复用模板的 sidebar、工作区导航、topbar、主题切换、基础 CSS token、卡片/表格/详情块样式，脚本只负责填入 `.goo/` 实时数据，不另起独立 UI。默认内容完整保留在首页，工作区导航可切换 Status、Plan、Brainstorm、Subagents、Artifacts 等视图；Overview 包含可切换 Daily、Weekly 和 Cumulative 的 Token Activity 热力图，Status 展示运行状态，Activity 包含按 turn/session 聚合的 token 消耗，Subagents 内嵌架构图，其他视图仍在同一 HTML 内。配置 `publish.split_pages=true` 时才拆出独立页面。它会启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读取已生成的 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。发布 HTML 不替代 Goo-wiki 归档，也不得修改当前 plan 或 brainstorm；token 行只展示聚合 token、模型和记录数，不展示对话正文。
+**HTML 发布层**：`/auto-goo:goo-publish` 是工作流的只读展示层，无需运行 `goo-init` 或创建 `.goo/config.json`，默认从 `.goo/brainstorm.json`、`.goo/plan.json`、`.goo/plans/history/`、`.goo/brainstorms/history/`、`.goo/logs/`、`.goo/artifacts/`、`.goo/reports/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/` 多页站点。`skills/auto-goo/templates/publish/workflow-shell.html` 是唯一运行时页面外壳，`skills/auto-goo/templates/publish/workflow-theme.css` 是唯一正式视觉主题；脚本填充标题、活动导航链接、正文、路径和交互脚本，并把主题复制到站点目录，禁止依赖发布后手工注入 CSS 或 `/tmp` 概念稿。正式主题采用紧凑工作台布局、浅色/暗色模式和页面语义色：计划/流程为蓝色、完成状态为绿色、代理执行为青色、头脑风暴为琥珀色、活动与归档为紫色、失败与风险为红色。默认生成总览、计划、活动、头脑风暴、运行状态、代理执行和产物归档页面，关键页面标签优先使用中文；桌面端固定左侧导航，移动端恢复自然滚动。Token 格子悬浮时显示消耗明细，点击或聚焦后由下方文本型工作流活动说明所选时间段实际完成的工作；活动记录列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情，但不发布 assistant 回复或完整对话正文。它会启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读取已生成的 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。发布 HTML 不替代 Goo-wiki 归档，也不得修改当前 plan 或 brainstorm。
 
-**用户交互契约**：任何需要用户选择、确认、重试、跳过、合并、改写或授权的步骤，必须优先调用结构化选择 UI / `AskUserQuestion`，让用户通过交互控件选择；不得在工具可用时用普通文本要求用户手打 `1/2`、ID 或命令参数。每个问题至少给 2 个显式选项，推荐项放第一项并标注 Recommended；多候选问题必须把候选 ID/编号放进选项说明。只有结构化选择 UI / `AskUserQuestion` 不可用、调用失败或按钮没有渲染时，才允许降级为纯文本编号列表，并明确这是 fallback。用户未明确选择前，不得用推荐项静默继续。
+**用户交互契约**：任何需要用户选择、确认、重试、跳过、合并、改写或授权的步骤，必须优先调用结构化选择 UI / `AskUserQuestion`，让 Claude Code 渲染可用方向键移动、Enter 确认的选择控件；不得在工具可用时用普通文本要求用户手打 `1/2`、ID 或命令参数。每个问题至少给 2 个显式选项，推荐项放第一项并标注 Recommended；多候选问题必须把候选 ID/编号放进选项说明。只有结构化选择 UI / `AskUserQuestion` 不可用、调用失败或按钮没有渲染时，才允许降级为纯文本编号列表，并明确这是 fallback。用户未明确选择前，不得用推荐项静默继续。
 
-**AskUserQuestion 固定结构**：需要交互时必须按下面的字段组织，不得只写自然语言题目或自由改写选项。字段固定为 `header`、`id`、`question`、`options[].label`、`options[].description`；推荐项放第一项，label 必须包含 `(Recommended)`。系统自动提供的 Other 只用于自定义输入，不算显式选项。
+**远程服务器机制**：`goo-init` 收集到远程服务器非敏感参数后，最终脚本调用必须追加 `--server 'ip=<host>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`，可重复传多台；密码不得进入聊天、命令行、plan、日志或 prompt，只能由用户填入 chmod 600 的 secrets 文件。`goo-plan` / `goo-start` 只有在步骤确实需要远程算力、远程依赖、长跑环境或用户明确要求时，才写入并执行 `execution_target="remote"`、`remote_server` 和 `remote_reason`；远程 step 必须 `requires_user_confirm=true`，并通过 `skills/auto-goo/scripts/goo-ssh.sh --config <config> --server <remote_server> -- <remote command>` 执行，不默认使用第一台服务器。
 
-`/auto-goo:goo-init` 必须使用以下固定问题结构：
-
-```yaml
-- header: 配置作用域
-  id: config_scope
-  question: 请选择 AutoGoo 配置写入位置。
-  options:
-    - label: 项目级 --project (Recommended)
-      description: 写入当前项目 .goo/config.json，只影响当前项目。
-    - label: 用户级 --user
-      description: 写入 ~/.auto-goo/config.json，作为所有项目的默认配置。
-
-- header: Wiki 路径
-  id: wiki_dir
-  question: 请选择 Goo-wiki 路径。
-  options:
-    - label: ~/workspace/Goo-wiki (Recommended)
-      description: 使用默认 Goo-wiki 路径；不存在时初始化脚本会创建基础目录。
-    - label: 自定义路径
-      description: 选择后在 Other 中输入路径；必须把最终路径传给 --wiki-dir。
-
-- header: 项目说明
-  id: update_claude_md
-  question: 是否更新当前项目 CLAUDE.md 的 AutoGoo 归档说明？
-  options:
-    - label: 更新 CLAUDE.md (Recommended)
-      description: 只更新 AutoGoo marker 包裹段落，不覆盖已有项目指引。
-    - label: 跳过
-      description: 不改 CLAUDE.md；脚本参数传 --skip-claude-md。
-
-- header: 远程服务器
-  id: configure_servers
-  question: 是否需要配置远程服务器？
-  options:
-    - label: 不配置 (Recommended)
-      description: 只写本地 AutoGoo 配置。
-    - label: 配置服务器
-      description: 继续收集服务器类型、IP、端口、用户名、用途和密码处理方式。
-
-- header: 服务器类型
-  id: server_type
-  question: 请选择服务器类型。
-  options:
-    - label: GPU 服务器 (Recommended)
-      description: 用于模型训练、推理或其他 GPU 长任务。
-    - label: CPU 服务器
-      description: 用于数据处理、预处理或普通远程执行。
-
-- header: 服务器 IP
-  id: server_ip
-  question: 请输入或选择服务器 IP 地址。
-  options:
-    - label: 通过 Other 输入 (Recommended)
-      description: 在 Other 中输入真实 IP 或主机名；不要使用占位值落盘。
-    - label: 稍后手动补填
-      description: 先跳过 IP，配置落盘后手动编辑 config/secrets；不得连接服务器。
-
-- header: SSH 端口
-  id: server_port
-  question: 请选择 SSH 端口。
-  options:
-    - label: 22 (Recommended)
-      description: 使用默认 SSH 端口。
-    - label: 2222
-      description: 使用常见备用 SSH 端口；其他端口通过 Other 输入。
-
-- header: 用户名
-  id: server_user
-  question: 请选择 SSH 用户名。
-  options:
-    - label: ubuntu (Recommended)
-      description: 常见云服务器默认用户。
-    - label: root
-      description: 使用 root 用户；其他用户名通过 Other 输入。
-
-- header: 服务器用途
-  id: server_purpose
-  question: 请选择服务器用途说明。
-  options:
-    - label: 模型训练与推理 (Recommended)
-      description: 用于 GPU 训练、推理、评测或长跑任务。
-    - label: 数据处理与预处理
-      description: 用于数据转换、清洗、批处理或 CPU 任务。
-
-- header: 密码处理
-  id: server_password
-  question: 如何处理服务器密码？
-  options:
-    - label: 稍后手动填入 (Recommended)
-      description: 不在聊天中输入密码；稍后编辑 secrets 文件并保持 chmod 600。
-    - label: 现在输入
-      description: 仅在交互控件支持安全输入时使用；密码不得写入聊天日志或 config。
-
-- header: 继续添加
-  id: add_another_server
-  question: 是否继续添加另一台服务器？
-  options:
-    - label: 完成服务器配置 (Recommended)
-      description: 汇总已收集服务器信息并进入最终确认。
-    - label: 再添加一台
-      description: 重复服务器字段收集流程。
-```
+**AskUserQuestion 固定结构**：需要 Enter-select 交互时必须按 `skills/auto-goo/references/interaction-templates.md` 中的 JSON 模板组织并实际调用 `AskUserQuestion`，不得只把结构写成自然语言题目或自由改写选项。字段固定为 `header`、`id`、`question`、`options[].label`、`options[].description`；推荐项放第一项，label 必须包含 `(Recommended)`。系统自动提供的 Other 只用于自定义输入，不算显式选项。凡能固定的问题必须复用模板；涉及路径、IP、端口、用户名、goal ID、分支目录、用户修改要求等输入时，模板必须提供默认选项并说明 Other 输入如何落盘、校验或继续追问。
 
 ## Phase -1: 项目初始化
 
 首次使用 AutoGoo 时，建议先运行 `/auto-goo:goo-init --user` 写入用户级默认配置；进入具体项目后，可运行 `/auto-goo:goo-init --project` 写入项目级覆盖配置。
 
 初始化要求：
-1. 使用主 Agent 交互模式：收到命令后直接开始交互提问，不预先检查环境。主 Agent 必须用 `AskUserQuestion` 问清作用域、wiki 路径、是否更新项目 `CLAUDE.md`、是否配置远程服务器等，再调用脚本落盘；不得用普通文本要求用户手打 `1/2` 或 `--project/--user`。不得派发 Subagent 代替初始化，也不得用临时代码写配置。如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，停止初始化并提示用户改用带参数命令 `/auto-goo:goo-init --user` 或 `/auto-goo:goo-init --project`；不要继续用纯文本编号收集选项。
+1. 使用主 Agent 交互模式：收到命令后直接开始交互提问，不预先检查环境。主 Agent 必须用 `AskUserQuestion` 问清作用域、wiki 路径、是否更新项目 `CLAUDE.md`、是否配置远程服务器等，再调用脚本落盘；不得在结构化选择 UI 可用时用普通文本要求用户手打 `1/2` 或 `--project/--user`。不得派发 Subagent 代替初始化，也不得用临时代码写配置。如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，才允许降级为明确标注 fallback 的纯文本列表选项，继续收集用户选择。
 2. 最终落盘前必须先解析 AutoGoo 根目录：优先读取 Claude Code 安装记录 `$HOME/.claude/plugins/installed_plugins.json` 中 `auto-goo@*` 的 `installPath`。该 `installPath` 通常位于 `$HOME/.claude/plugins/cache/<marketplace>/<plugin>/<version>`，是 Claude Code 实际加载的插件副本。如果 `installPath` 不存在或已 orphaned，再读取 `$HOME/.claude/settings.json`，只有 `enabledPlugins` 中启用了 `auto-goo@<marketplace>`，且 `extraKnownMarketplaces.<marketplace>.source` 是本地 `directory` 时，才使用该本地 marketplace 路径。当前工作目录可能是用户项目，不要假设相对路径存在；不得读取环境变量，不得扫描当前目录、上级目录或源码 checkout 路径来猜插件根目录；不得在根目录变量为空时拼出 `/skills/auto-goo/scripts/goo-init.sh`。安装记录和本地 marketplace 都不可用或目标脚本不存在时，必须 fail-fast 提示用户重新安装/启用 AutoGoo 插件。
 3. 根据参数或主 Agent 提问选择作用域：`--user` 写 `~/.auto-goo/config.json`，`--project` 写 `.goo/config.json`。如果用户只输入 `/auto-goo:goo-init`，必须先用 `AskUserQuestion` 询问作用域，不得默认选择 project；用户选择后必须把 `--user` 或 `--project` 传给脚本。作用域问题必须包含这两个结构化选项：「项目级 --project (Recommended) - 写入当前项目 .goo/config.json」「用户级 --user - 写入 ~/.auto-goo/config.json」。
-4. 必须用 `AskUserQuestion` 询问 Goo-wiki 路径，提供默认值 `~/workspace/Goo-wiki`；如果用户不输入路径，就按默认值处理。每个 `AskUserQuestion` 至少 2 个选项（推荐默认值 + 备选），如「~/workspace/Goo-wiki (Recommended)」「自定义路径（选择后在下方 Other 输入）」。如果交互控件不可用，停止并提示用户改用带完整参数的命令；不要输出纯文本编号列表。用户接受默认值或输入自定义路径后，都必须把 `--wiki-dir <路径>` 传给脚本，不得在未展示默认路径的情况下静默使用默认值。
+4. 必须用 `AskUserQuestion` 询问 Goo-wiki 路径，提供默认值 `~/workspace/Goo-wiki`；如果用户不输入路径，就按默认值处理。每个 `AskUserQuestion` 至少 2 个选项（推荐默认值 + 备选），如「~/workspace/Goo-wiki (Recommended)」「自定义路径（选择后在下方 Other 输入）」。如果交互控件不可用，使用明确标注 fallback 的纯文本列表选项继续收集路径；用户接受默认值或输入自定义路径后，都必须把 `--wiki-dir <路径>` 传给脚本，不得在未展示默认路径的情况下静默使用默认值。
 5. 询问用户是否有远程服务器需要配置。用户确认后，使用 `AskUserQuestion` 逐字段收集服务器信息。**每个问题必须至少 2 个显式选项**（系统的自动 Other 不算），用户可直接选用预设值或通过 Other 输入自定义值：服务器类型（GPU/CPU）、IP 地址、SSH 端口、用户名、用途说明、密码（可跳过，稍后手动填入 secrets 文件）。密码存储在独立 secrets 文件中（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限 `chmod 600`；项目级 secrets 文件自动加入 `.gitignore`。config 中只记录 `servers[].{ip, port, user, type, purpose, secrets_file}`，不存储密码。支持配置多个服务器。
-6. 配置远程服务器后，通过 `goo-ssh.sh` 连接。用法：`bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" [--config .goo/config.json] [--server INDEX|HOST]`。脚本从 `secrets.json` 读取密码，不暴露在命令行；需要 `sshpass`（首次使用前 `sudo apt install sshpass`）。
+6. 配置远程服务器后，通过 `goo-ssh.sh` 连接。用法：`bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" [--config .goo/config.json] [--server INDEX|HOST]`。脚本从 `secrets.json` 读取密码，不暴露在命令行；如果没有配置密码，则退回普通 `ssh`，支持 SSH key 或手动认证。有密码自动登录时才需要 `sshpass`（首次使用前 `sudo apt install sshpass`）。
 7. 确保目标目录存在：用户级 `~/.auto-goo/`，项目级 `.goo/`。
 8. 如果目标配置已存在，脚本内部自行检测并询问是否覆盖。用户保留 config 但传了 `--update-claude-md` 或交互确认更新 `CLAUDE.md` 时，仍必须继续更新项目 `CLAUDE.md`。
 9. 按优先级解析 wiki 路径：`AUTO_GOO_WIKI_DIR` → `.goo/config.json.wiki_dir` → `~/.auto-goo/config.json.wiki_dir` → `~/workspace/Goo-wiki`。
@@ -599,7 +498,7 @@ Phase 4 归档完成后，在任务日志末尾追加 `## 流程问题` 反思�
 - **`skills/auto-goo/scripts/init-plan.sh`** — 初始化 plan.json 模板；调用前先解析 AutoGoo 根目录
 - **`skills/auto-goo/scripts/wiki-graph-assist.py`** — 生成紧凑 Goo-wiki 关联图谱上下文，并可维护项目 index/log 链接；调用前先解析 AutoGoo 根目录
 - **`skills/auto-goo/scripts/check-plugin.sh`** — 插件结构完整性自检脚本（安装后运行确认所有组件就绪）；调用前先解析 AutoGoo 根目录
-- **`skills/auto-goo/scripts/goo-ssh.sh`** — 连接已配置的远程服务器；从 `secrets.json` 读取密码，不暴露在命令行。调用前先解析 AutoGoo 根目录
+- **`skills/auto-goo/scripts/goo-ssh.sh`** — 连接已配置的远程服务器；有密码时从 `secrets.json` 读取并用 `sshpass`，无密码时走普通 `ssh`。调用前先解析 AutoGoo 根目录
 
 ### Agents
 - **`../../agents/roles/researcher.md`** — 调研 Role Agent（查资料、读文档、整理约束和方案选项）

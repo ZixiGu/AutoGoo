@@ -56,7 +56,7 @@ description: 基于 Goo-wiki 和当前项目上下文 brainstorm 候选 goals，
 
 ## 审阅提问格式
 
-展示候选目标后，必须优先用 `AskUserQuestion` / 结构化选择 UI 收尾，选项至少包含：
+展示候选目标后，必须优先用 `AskUserQuestion` / 结构化选择 UI 收尾，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=brainstorm_review` 的 JSON 模板。动态 `<goal_id>` 必须替换为本次推荐候选的真实 ID；其他 goal、合并列表和修改要求通过 Other 输入，输入后必须校验或复述确认。选项至少包含：
 
 - 选择推荐目标 `<goal_id>`
 - 选择其他目标

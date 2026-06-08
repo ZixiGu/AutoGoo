@@ -37,22 +37,36 @@ description: 初始化 AutoGoo 配置 — 支持用户级 ~/.auto-goo/config.jso
 
 项目级初始化时，还应通过 `AskUserQuestion` 确认是否更新项目 `CLAUDE.md`；需要远程服务器配置时，由主 Agent 通过 `AskUserQuestion` 逐字段收集，每个问题提供 2 个选项（一个推荐默认值 + 一个常用备选），用户可通过系统自动提供的 "Other" 选项输入自定义值。服务器非敏感参数（类型、IP、端口、用户名、用途）全部收集完成后，再调用脚本进入密码录入。密码不得在聊天中明文输出。
 
-最终落盘阶段运行脚本时，只能在用户已确认参数后执行，形态如下：先解析 AutoGoo root，再运行 `bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --user|--project --wiki-dir <已确认路径> ...`。不得在交互前运行 root 解析命令。
+最终落盘阶段运行脚本时，只能在用户已确认参数后执行，形态如下：先解析 AutoGoo root，再运行 `bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --user|--project --wiki-dir <已确认路径> ...`。远程服务器非敏感参数必须通过可重复的 `--server 'ip=<host>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'` 传入；密码不得作为命令参数传入。不得在交互前运行 root 解析命令。
 
 Agent 交互流程：
 
 1. **不要先检查环境，直接开始交互提问。** 收到 `/auto-goo:goo-init` 后，不要先跑 `ls`、`git remote`、`test -f` 等探测命令，而是直接调用 `AskUserQuestion` / 结构化选择 UI 询问用户偏好。不得在 `AskUserQuestion` 可用时用普通文本要求用户手打 `1/2` 或 `--project/--user`。
 2. 读取用户已给参数，缺什么问什么；不要一次性抛出长问卷。
-3. 所有交互问题必须使用 `AskUserQuestion` / 结构化选择 UI 展示可点击选项；不得只输出“请选择配置作用域”这类问题标题后等待用户，也不得要求用户手打 `1/2` 或 `--project/--user`。如果结构化选择 UI / AskUserQuestion 不可用、调用失败或没有渲染出按钮，停止初始化并提示用户改用带参数命令 `/auto-goo:goo-init --user` 或 `/auto-goo:goo-init --project`，不要继续用普通文本收集选项。
+3. 所有交互问题必须使用 `AskUserQuestion` / 结构化选择 UI 展示可点击选项；不得只输出“请选择配置作用域”这类问题标题后等待用户，也不得要求用户手打 `1/2` 或 `--project/--user`。如果结构化选择 UI / AskUserQuestion 不可用、调用失败或没有渲染出按钮，才允许降级为明确标注 fallback 的纯文本列表选项，继续收集用户选择。
 4. 第一个问题必须优先用 `AskUserQuestion` 呈现以下选项：
    - 项目级 `--project` (Recommended) — 写入当前项目 `.goo/config.json`
    - 用户级 `--user` — 写入 `~/.auto-goo/config.json`
-5. 如果无法渲染结构化选项，停止并提示用户改用 `/auto-goo:goo-init --user` 或 `/auto-goo:goo-init --project`；不要输出纯文本编号列表。
+5. 如果无法渲染结构化选项，使用以下纯文本 fallback：
+   ```text
+   这是 fallback：结构化选择 UI 不可用。请选择配置作用域：
+   1. 项目级 --project (Recommended) - 写入当前项目 .goo/config.json
+   2. 用户级 --user - 写入 ~/.auto-goo/config.json
+
+   请回复 1/2，或直接回复“项目级”/“用户级”。
+   ```
 6. 第二个问题必须优先用 `AskUserQuestion` 呈现以下选项：
    - `~/workspace/Goo-wiki` (Recommended)
    - 自定义路径（选择后在 Other 输入）
-7. 如果无法渲染结构化选项，停止并提示用户改用带完整参数的命令，例如 `/auto-goo:goo-init --user --wiki-dir ~/workspace/Goo-wiki`；不要输出纯文本编号列表。
-8. 后续二选一问题也必须用 `AskUserQuestion` 提供两个显式选项；不得用纯文本编号列表代替。
+7. 如果无法渲染结构化选项，使用以下纯文本 fallback：
+   ```text
+   这是 fallback：结构化选择 UI 不可用。请选择 Goo-wiki 路径：
+   1. ~/workspace/Goo-wiki (Recommended)
+   2. 自定义路径
+
+   请回复 1/2；如果选择自定义路径，请直接写完整路径。
+   ```
+8. 后续二选一问题也必须优先用 `AskUserQuestion` 提供两个显式选项；只有交互控件不可用时，才允许使用明确标注 fallback 的纯文本列表。
 9. 项目级初始化时，继续询问：
    - 是否更新项目 `CLAUDE.md`（`AskUserQuestion`，选项：「是 (Recommended)」「跳过」）
    - 是否需要配置远程服务器（`AskUserQuestion`，选项：「否 (Recommended)」「是」）
@@ -78,7 +92,7 @@ Agent 交互流程：
    - 项目级 `.goo/config.json` 的 `wiki_dir`
    - 用户级 `~/.auto-goo/config.json` 的 `wiki_dir`
    - 默认 `~/workspace/Goo-wiki`
-5. **配置远程服务器** — Wiki 路径配置后，询问用户是否有远程服务器需要配置；用户确认后逐个交互输入服务器类型（cpu/gpu）、IP、端口（默认 22）、用户名、用途说明和密码（密码隐藏输入）。密码存储在独立的 secrets 文件中（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限设为 `chmod 600`；项目级 secrets 文件自动加入 `.gitignore`。config 中只记录 `servers[].{ip, port, user, type, purpose, secrets_file}`，不存储密码。支持配置多个服务器。配置服务器后必须检查本机是否安装 `sshpass`；缺失时提醒用户运行 `sudo apt install sshpass`，但不中断初始化。
+5. **配置远程服务器** — Wiki 路径配置后，询问用户是否有远程服务器需要配置；用户确认后逐个交互输入服务器类型（cpu/gpu）、IP、端口（默认 22）、用户名、用途说明和密码处理方式。主 Agent 已通过 `AskUserQuestion` 收集到非敏感参数时，调用脚本必须传 `--server 'ip=<host>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`，可重复传入多台服务器。密码不得在聊天或命令行中明文传递；脚本会创建独立 secrets 文件占位（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限设为 `chmod 600`，用户稍后手动填入密码。项目级 secrets 文件自动加入 `.gitignore`。config 中只记录 `servers[].{ip, port, user, type, purpose, secrets_file}`，不存储密码。支持配置多个服务器。配置服务器后必须检查本机是否安装 `sshpass`；缺失时提醒用户运行 `sudo apt install sshpass`，但不中断初始化。
 6. **确保 Goo-wiki 存在** — 如果用户确认或输入的 `<wiki_dir>` 不存在，自动创建该目录，并补齐 `CLAUDE.md`、`log.md`、`wiki/projects/`、`wiki/concepts/`、`wiki/questions/`、`journal/daily/`、`journal/weekly/` 基础结构；不得因为路径不存在而改用 `.goo/obsidian/` fallback
 7. **确定项目归档根路径** — `--project` 时默认用项目根目录名生成 `project_slug`，也可传 `--project-slug <slug>`；创建 `<wiki_dir>/wiki/projects/<project_slug>/`
 8. **记录 Git 地址** — `--project` 且当前项目是 Git repo 时，读取 `origin` remote（没有 origin 时读取第一个 remote），写入 `.goo/config.json.archive.git_remote_url`，并同步到 Goo-wiki 项目页 `wiki/projects/<project_slug>/<project_slug>.md`
@@ -157,5 +171,5 @@ Agent 交互流程：
 - 用户确认或输入 wiki 路径后，必须把 `--wiki-dir <路径>` 传给脚本
 - 如果用户输入的 Goo-wiki 路径不存在，自动创建该路径和基础 vault 文件；只有创建失败或后续归档时 wiki 不可写，才提示使用 `.goo/obsidian/` fallback
 - 最终输出用户级、项目级和最终生效配置摘要
-- 有远程服务器时，密码必须存储在独立 secrets 文件中（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限 `chmod 600`；config 中只记录 `{ip, user, secrets_file}`，不存储密码；如果本机未安装 `sshpass`，必须提示用户安装后才能使用自动填密码的 `goo-ssh.sh`
+- 有远程服务器时，密码必须存储在独立 secrets 文件中（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限 `chmod 600`；config 中只记录 `{ip, port, user, type, purpose, secrets_file}`，不存储密码；非敏感参数通过 `--server` 写入，密码由用户稍后手动填入 secrets；如果本机未安装 `sshpass`，必须提示用户安装后才能使用自动填密码的 `goo-ssh.sh`
 - 项目级 secrets 文件必须自动加入 `.gitignore`，防止密码泄露到版本控制

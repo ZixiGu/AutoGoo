@@ -18,7 +18,7 @@ description: 启动 AutoGoo 插件自改进流程 — 汇总近期执行问题�
 
 ## 确认提问格式
 
-展示改进方案后，必须优先使用 `AskUserQuestion` / 结构化选择 UI，选项为：
+展示改进方案后，必须优先使用 `AskUserQuestion` / 结构化选择 UI，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=improve_confirm` 的 JSON 模板。其他修改约束通过 Other 输入，输入后先更新改进方案，不直接编辑插件文件。选项为：
 
 - 应用修改
 - 只保存建议
@@ -27,6 +27,7 @@ description: 启动 AutoGoo 插件自改进流程 — 汇总近期执行问题�
 仅当交互控件不可用时，才使用纯文本 fallback：
 
 ```text
+这是 fallback：结构化选择 UI 不可用。
 请选择如何处理本次 AutoGoo 改进方案：
 1. 应用修改 - 按上面的方案编辑插件文件
 2. 只保存建议 - 记录到 .goo/improvements.log，不改插件文件
@@ -35,7 +36,7 @@ description: 启动 AutoGoo 插件自改进流程 — 汇总近期执行问题�
 请回复 1/2/3，或回复“应用修改”/“只保存建议”/“放弃”。
 ```
 
-用户未明确选择 `1. 应用修改` 前，不得编辑插件文件。
+用户未明确选择“应用修改”或 fallback 中的 `1` 前，不得编辑插件文件。
 
 ## 示例
 

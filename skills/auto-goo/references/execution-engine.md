@@ -25,6 +25,7 @@ AutoGoo 的"并行"是 **task-level 并行**（多个独立 Subagent 同时执�
 7. 合并跨步骤结果，处理冲突，必要时要求局部返工。
 8. 维护当前 `.goo/plan.json`、`.goo/logs/`、`.goo/artifacts/` 和 Goo-wiki 归档的一致性。
 9. 聚合 Subagent 上报的权限阻塞，在前台向用户申请许可，并把批准/拒绝结果回写 plan。
+10. 对远程执行 step 解析 `remote_server`、校验配置和 secrets 文件存在性，并在用户授权后通过 `goo-ssh.sh` 派发远程命令。
 
 Subagent 只对被分配的步骤负责，不能改写整体计划、扩大任务范围、越权修改其他步骤文件，或自行决定跳过主 Agent 定义的验收条件。
 
@@ -57,6 +58,37 @@ AutoGoo 的权限交互由主 Agent 统一处理，后台 Subagent 不做平凡 
 `task_agent` 用于选择 `agents/tasks/` 下的细分 agent 文件和 prompt 重点；它不是 skill 名称，也不写入 `available_skills`。
 
 `available_skills` 是 step 级 skill allowlist，用来告诉主 Agent 在派发 Subagent 时哪些 skill 可以作为本步骤上下文。它不替代 `subagent` 角色，不自动授予额外工具权限，也不允许 Subagent 越过 `allowed_read_paths` / `allowed_write_paths`。
+
+## 远程服务器执行
+
+远程服务器是显式执行目标，不是隐含偏好。规划阶段只有在任务需要远程算力、远程依赖、长跑环境或用户明确要求时，才把 step 标成：
+
+```json
+{
+  "execution_target": "remote",
+  "remote_server": "ubuntu@10.0.0.8:22",
+  "remote_reason": "需要 GPU 训练环境",
+  "requires_user_confirm": true,
+  "risk_level": "medium"
+}
+```
+
+默认本地执行时写 `execution_target="local"` 或省略该字段。远程 step 必须同时写清远程命令类别、远程工作目录、产物路径、回传/验收方式和风险；不得把密码、token 或 secrets 文件内容写入 plan、Subagent prompt、日志或聊天。
+
+派发远程 step 前，主 Agent 必须：
+
+- 读取项目 `.goo/config.json`；缺失时再读取用户级 `~/.auto-goo/config.json`。
+- 确认 `remote_server` 能唯一匹配 `servers[]` 的 index、`ip`、`ip:port`、`user@ip` 或 `user@ip:port`。
+- 确认配置项包含 `secrets_file`，且 secrets 文件存在；只检查存在性和权限，不打印密码内容。
+- 用结构化确认向用户说明目标服务器、命令类别、远程路径、产物位置和风险；未获确认时回写 `blocked` / `needs_user_approval`。
+
+用户确认后，远程命令通过现有 helper 执行：
+
+```bash
+bash "$auto_goo_root/skills/auto-goo/scripts/goo-ssh.sh" --config .goo/config.json --server "<remote_server>" -- <remote command>
+```
+
+如果使用用户级配置，则把 `--config ~/.auto-goo/config.json` 传给 helper。`goo-ssh.sh` 负责从 `secrets_file` 读取密码并调用 `sshpass`；Subagent 不得自行拼接 `sshpass -p`，不得把密码展开到命令行。
 
 ## Subagent 上下文隔离
 

@@ -991,6 +991,7 @@ code {
       </div>
     </aside>
     <main class="main">
+      <header class="page-header">
       <div class="topbar compact-topbar">
         <button class="top-action theme-toggle" id="themeToggle" type="button" aria-label="切换深色模式" title="切换深色模式">☾</button>
       </div>
@@ -999,15 +1000,16 @@ code {
           <h2>产物归档</h2>
           <p>集中展示 artifacts、reports、fallback obsidian 和 Goo-wiki archive 的槽位。</p>
         </div>
-        <div class="live-pill"><span class="live-dot"></span><span id="liveClock">仅模板展示</span></div>
+        <div class="live-pill"><span class="live-dot"></span><span id="liveClock">状态加载中</span></div>
       </section>
+      </header>
       
 <div class="layout-two">
   <div class="stack">
     <section class="queue-grid">
-      <article class="data-card searchable"><h4>.goo/artifacts/index.html</h4><p>工作流看板发布入口，指向多页模板。</p><footer><span class="tag ok">ready</span></footer></article>
-      <article class="data-card searchable"><h4>.goo/reports/status.md</h4><p>运行状态报告，来自 goo-status.py 汇总。</p><footer><span class="tag">report</span></footer></article>
-      <article class="data-card searchable"><h4>task_archive_root</h4><p>brainstorm、plan、execution 归档目标路径。</p><footer><span class="tag warn">pending</span></footer></article>
+      <article class="data-card searchable"><h4>.goo/artifacts/index.html</h4><p>工作流看板发布入口，指向多页模板。</p><footer><span class="tag ok">已就绪</span></footer></article>
+      <article class="data-card searchable"><h4>.goo/reports/status.md</h4><p>运行状态报告，来自 goo-status.py 汇总。</p><footer><span class="tag">报告</span></footer></article>
+      <article class="data-card searchable"><h4>task_archive_root</h4><p>brainstorm、plan、execution 归档目标路径。</p><footer><span class="tag warn">待处理</span></footer></article>
     </section>
     <section class="panel">
       <div class="panel-head"><h3>产物趋势</h3><span>.goo/artifacts · .goo/reports</span></div>

@@ -5,20 +5,25 @@ description: 显示 Claude Code token 和 usage 监控面板 — 多色可视化
 
 ## 执行流程
 
-加载此命令后，**必须优先使用 AskUserQuestion / 结构化选择 UI 询问用户**；不得在交互控件可用时用普通文本要求用户手打 `1/2`：
+加载此命令后，**必须优先调用 AskUserQuestion / 结构化选择 UI 询问用户**，让 Claude Code 渲染可用方向键移动、Enter 确认的选择控件；必须复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=usage_view` 的 JSON 模板，不得在交互控件可用时用普通文本要求用户手打 `1/2`：
 
-- 问题: "How do you want to view the usage dashboard?"
-- 选项 1: "Browser popup with auto-refresh" — 浏览器 HTML 仪表盘，自动刷新
-- 选项 2: "Inline (interactive TUI)" — 当前终端内交互式 TUI
+- header: Usage 视图
+- id: usage_view
+- question: 请选择 usage 面板打开方式。
+- options:
+  - label: 浏览器面板 (Recommended)
+    description: 启动 HTML 仪表盘并自动刷新，适合持续观察 token 消耗。
+  - label: 内联快照
+    description: 在当前终端打印一次 usage 快照，不进入交互式 watch 模式。
 
-如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，才用纯文本编号选项降级：
+如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
 
 ```text
-How do you want to view the usage dashboard?
-1. Browser popup with auto-refresh
-2. Inline (interactive TUI)
+这是 fallback：结构化选择 UI 不可用。请选择 usage 面板打开方式：
+1. 浏览器面板 (Recommended) - 启动 HTML 仪表盘并自动刷新
+2. 内联快照 - 在当前终端打印一次 usage 快照
 
-Please reply 1/2, or reply with the option text.
+请回复 1/2，或直接回复“浏览器面板”/“内联快照”。
 ```
 
 不要提示用户手动进入插件目录或直跑内部脚本；本命令必须优先从 Claude Code 安装记录解析 `installPath`，路径不可用时 fallback 到已启用的本地 directory marketplace，再调用脚本。

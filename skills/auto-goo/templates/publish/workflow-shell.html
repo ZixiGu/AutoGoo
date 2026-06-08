@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AutoGoo 运行状态</title>
+  <title>{{DOCUMENT_TITLE}}</title>
   <style>
 :root {
   color-scheme: light;
@@ -21,6 +21,12 @@
   --green: #2da44e;
   --amber: #9a6700;
   --red: #cf222e;
+  --violet: #7656a6;
+  --blue-soft: #edf5ff;
+  --green-soft: #edf8f2;
+  --cyan-soft: #eaf8f8;
+  --amber-soft: #fff7e6;
+  --violet-soft: #f5f0fb;
   --shadow: 0 10px 28px rgba(27, 31, 36, 0.08);
   --radius: 8px;
   --sidebar: 248px;
@@ -400,6 +406,9 @@ code {
 }
 .activity-panel {
   padding: 16px 16px 14px;
+  background: var(--token-panel-bg);
+  border-color: var(--token-panel-border);
+  color: var(--token-text);
 }
 .activity-toolbar {
   display: flex;
@@ -415,8 +424,26 @@ code {
 .activity-title span {
   display: block;
   margin-top: 3px;
-  color: var(--muted);
+  color: var(--token-muted);
   font-size: 12px;
+}
+.activity-tabs {
+  display: inline-flex;
+  gap: 4px;
+}
+.activity-tabs button {
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  background: var(--token-control-bg);
+  color: var(--token-muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.activity-tabs button.active {
+  background: var(--token-control-active);
+  color: var(--token-control-active-text);
 }
 .activity-board {
   display: grid;
@@ -428,39 +455,63 @@ code {
 .activity-months {
   grid-column: 2;
   display: grid;
-  grid-template-columns: repeat(5, 44px);
+  grid-template-columns: repeat(14, 18px);
   gap: 3px;
-  color: var(--muted);
+  color: var(--token-muted);
   font-size: 12px;
 }
 .activity-month {
-  width: 44px;
+  width: 18px;
   text-align: center;
   white-space: nowrap;
+  font-size: 11px;
 }
 .activity-weekdays {
   display: grid;
   grid-template-rows: repeat(7, 14px);
   gap: 3px;
   padding-top: 20px;
-  color: var(--muted);
+  color: var(--token-muted);
   font-size: 12px;
   text-align: right;
 }
 .activity-grid {
   display: grid;
-  grid-template-columns: repeat(5, 44px);
+  grid-template-columns: repeat(14, 18px);
   grid-template-rows: repeat(7, 14px);
   grid-auto-flow: column;
   gap: 3px;
   padding-top: 20px;
 }
+.activity-panel[data-activity-mode="weekly"] .activity-weekdays,
+.activity-panel[data-activity-mode="cumulative"] .activity-weekdays {
+  display: none;
+}
+.activity-panel[data-activity-mode="weekly"] .activity-board,
+.activity-panel[data-activity-mode="cumulative"] .activity-board {
+  grid-template-columns: minmax(0, 1fr);
+}
+.activity-panel[data-activity-mode="weekly"] .activity-months,
+.activity-panel[data-activity-mode="cumulative"] .activity-months {
+  grid-column: 1;
+}
+.activity-panel[data-activity-mode="weekly"] .activity-grid,
+.activity-panel[data-activity-mode="cumulative"] .activity-grid {
+  grid-column: 1;
+  grid-template-columns: repeat(14, 18px);
+  grid-template-rows: 32px;
+  grid-auto-flow: column;
+}
+.activity-panel[data-activity-mode="weekly"] .activity-day,
+.activity-panel[data-activity-mode="cumulative"] .activity-day {
+  height: 32px;
+}
 .activity-day {
   width: 14px;
   height: 14px;
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--token-border);
   border-radius: 3px;
-  background: #ebedf0;
+  background: var(--token-empty);
   cursor: pointer;
 }
 .activity-day:hover,
@@ -469,10 +520,10 @@ code {
   outline: 2px solid #0969da;
   outline-offset: 1px;
 }
-.activity-day[data-level="1"] { background: #dafbe1; border-color: #aceebb; }
-.activity-day[data-level="2"] { background: #aceebb; border-color: #6fdd8b; }
-.activity-day[data-level="3"] { background: #2da44e; border-color: #1f883d; }
-.activity-day[data-level="4"] { background: #1f6f3d; border-color: #1a5d33; }
+.activity-day[data-level="1"] { background: var(--token-1); border-color: var(--token-1); }
+.activity-day[data-level="2"] { background: var(--token-2); border-color: var(--token-2); }
+.activity-day[data-level="3"] { background: var(--token-3); border-color: var(--token-3); }
+.activity-day[data-level="4"] { background: var(--token-4); border-color: var(--token-4); }
 .activity-day:disabled {
   opacity: .45;
   cursor: default;
@@ -483,26 +534,26 @@ code {
   justify-content: flex-end;
   gap: 5px;
   margin-top: 10px;
-  color: var(--muted);
+  color: var(--token-muted);
   font-size: 12px;
 }
 .legend-box {
   width: 12px;
   height: 12px;
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--token-border);
   border-radius: 3px;
-  background: #ebedf0;
+  background: var(--token-empty);
 }
-.legend-box.level-1 { background: #dafbe1; border-color: #aceebb; }
-.legend-box.level-2 { background: #aceebb; border-color: #6fdd8b; }
-.legend-box.level-3 { background: #2da44e; border-color: #1f883d; }
-.legend-box.level-4 { background: #1f6f3d; border-color: #1a5d33; }
+.legend-box.level-1 { background: var(--token-1); border-color: var(--token-1); }
+.legend-box.level-2 { background: var(--token-2); border-color: var(--token-2); }
+.legend-box.level-3 { background: var(--token-3); border-color: var(--token-3); }
+.legend-box.level-4 { background: var(--token-4); border-color: var(--token-4); }
 .activity-detail {
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--token-panel-border);
   border-radius: 8px;
-  background: #f6f8fa;
+  background: var(--token-control-bg);
 }
 .activity-detail strong {
   display: block;
@@ -514,6 +565,14 @@ code {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
+}
+.activity-detail li {
+  margin: 4px 0;
+}
+.activity-token {
+  color: #1f883d;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
 }
 .panel { padding: 16px; }
 .panel-head {
@@ -818,6 +877,19 @@ code {
   --heat-3: #2da44e;
   --heat-4: #1f6f3d;
   --heat-border: #d0d7de;
+  --token-panel-bg: rgba(255, 255, 255, 0.86);
+  --token-panel-border: #d0d7de;
+  --token-text: #24292f;
+  --token-muted: #57606a;
+  --token-control-bg: #f6f8fa;
+  --token-control-active: #eaf6ef;
+  --token-control-active-text: #1f883d;
+  --token-empty: #edf2f7;
+  --token-1: #dff7e8;
+  --token-2: #9be7b3;
+  --token-3: #46b86f;
+  --token-4: #1f883d;
+  --token-border: #d8e2dc;
 }
 
 :root[data-theme="dark"] {
@@ -836,6 +908,12 @@ code {
   --green: #3fb950;
   --amber: #d29922;
   --red: #f85149;
+  --violet: #b39adc;
+  --blue-soft: #1b2733;
+  --green-soft: #1b2b25;
+  --cyan-soft: #192b2d;
+  --amber-soft: #30291c;
+  --violet-soft: #282333;
   --shadow: 0 16px 36px rgba(1, 4, 9, 0.34);
   --page-background:
     radial-gradient(circle at 18% 0%, rgba(88, 166, 255, 0.12), transparent 34%),
@@ -859,6 +937,19 @@ code {
   --heat-3: #26a641;
   --heat-4: #39d353;
   --heat-border: #30363d;
+  --token-panel-bg: #252733;
+  --token-panel-border: #303342;
+  --token-text: #f3f4f7;
+  --token-muted: #a7abb8;
+  --token-control-bg: rgba(255,255,255,.04);
+  --token-control-active: rgba(255,255,255,.08);
+  --token-control-active-text: #ffffff;
+  --token-empty: #303342;
+  --token-1: #0e4429;
+  --token-2: #006d32;
+  --token-3: #26a641;
+  --token-4: #39d353;
+  --token-border: rgba(255,255,255,.04);
 }
 
 body {
@@ -960,6 +1051,32 @@ code {
 .activity-day[data-level="4"],
 .legend-box.level-4 { background: var(--heat-4); }
 
+.activity-panel .activity-day,
+.activity-panel .legend-box {
+  border-color: var(--token-border);
+  background: var(--token-empty);
+}
+
+.panel.activity-panel {
+  background: var(--token-panel-bg);
+  border-color: var(--token-panel-border);
+  color: var(--token-text);
+}
+
+.panel.activity-panel .activity-detail {
+  background: var(--token-control-bg);
+  border-color: var(--token-panel-border);
+}
+
+.activity-panel .activity-day[data-level="1"],
+.activity-panel .legend-box.level-1 { background: var(--token-1); }
+.activity-panel .activity-day[data-level="2"],
+.activity-panel .legend-box.level-2 { background: var(--token-2); }
+.activity-panel .activity-day[data-level="3"],
+.activity-panel .legend-box.level-3 { background: var(--token-3); }
+.activity-panel .activity-day[data-level="4"],
+.activity-panel .legend-box.level-4 { background: var(--token-4); }
+
 .theme-toggle {
   width: 42px;
   min-width: 42px;
@@ -968,101 +1085,75 @@ code {
   line-height: 1;
 }
 
-</style>
+.sidebar {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.page-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: -18px -22px 18px;
+  padding: 18px 22px 1px;
+  border-bottom: 1px solid var(--line);
+  background: var(--page-background, var(--panel-bg));
+  box-shadow: 0 8px 20px rgba(31, 35, 40, .06);
+  backdrop-filter: blur(22px);
+}
+.page-header .topbar { margin-bottom: 6px; }
+.page-header .page-title { margin-bottom: 14px; }
+@media (max-width: 860px) {
+  .page-header {
+    position: static;
+    margin: -16px -16px 16px;
+    padding: 16px 16px 1px;
+  }
+}
+{{DYNAMIC_CSS}}
+  </style>
+  <link rel="stylesheet" href="workflow-theme.css">
 </head>
-<body data-page="status">
+<body data-page="{{ACTIVE_PAGE}}">
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark"></div>
         <div>
           <h1>AutoGoo</h1>
-          <span>工作流发布模板</span>
+          <span>工作流发布</span>
         </div>
       </div>
       <div class="nav-section">
         <div class="nav-label">工作区</div>
-        <a class="nav-item" href="workflow-dashboard-prototype.html"><span class="nav-icon"></span><span class="nav-text">总览</span></a>
-        <a class="nav-item" href="workflow-brainstorm.html"><span class="nav-icon"></span><span class="nav-text">头脑风暴</span></a>
-        <a class="nav-item" href="workflow-plan.html"><span class="nav-icon"></span><span class="nav-text">计划</span></a>
-        <a class="nav-item active" href="workflow-status.html"><span class="nav-icon"></span><span class="nav-text">运行状态</span><span class="nav-badge live">实时</span></a>
-        <a class="nav-item" href="workflow-subagents.html"><span class="nav-icon"></span><span class="nav-text">子代理</span></a>
-        <a class="nav-item" href="workflow-artifacts.html"><span class="nav-icon"></span><span class="nav-text">产物归档</span></a>
+        <a class="{{NAV_INDEX_CLASS}}" href="{{NAV_INDEX_HREF}}"><span class="nav-icon"></span><span class="nav-text">总览</span></a>
+        <a class="{{NAV_BRAINSTORM_CLASS}}" href="{{NAV_BRAINSTORM_HREF}}"><span class="nav-icon"></span><span class="nav-text">头脑风暴</span></a>
+        <a class="{{NAV_PLAN_CLASS}}" href="{{NAV_PLAN_HREF}}"><span class="nav-icon"></span><span class="nav-text">计划</span></a>
+        <a class="{{NAV_STATUS_CLASS}}" href="{{NAV_STATUS_HREF}}"><span class="nav-icon"></span><span class="nav-text">运行状态</span><span class="nav-badge live">实时</span></a>
+        <a class="{{NAV_SUBAGENTS_CLASS}}" href="{{NAV_SUBAGENTS_HREF}}"><span class="nav-icon"></span><span class="nav-text">代理执行</span></a>
+        <a class="{{NAV_ARTIFACTS_CLASS}}" href="{{NAV_ARTIFACTS_HREF}}"><span class="nav-icon"></span><span class="nav-text">产物归档</span></a>
+      </div>
+      <div class="sidebar-card">
+        <strong>{{OUTPUT_NAME}}</strong>
+        <p>{{OUTPUT_PATH}}</p>
+        <div class="mini-progress"><span></span></div>
       </div>
     </aside>
     <main class="main">
       <header class="page-header">
-      <div class="topbar compact-topbar">
-        <button class="top-action theme-toggle" id="themeToggle" type="button" aria-label="切换深色模式" title="切换深色模式">☾</button>
-      </div>
-      <section class="page-title">
-        <div>
-          <h2>运行状态</h2>
-          <p>集中查看 step.status、progress、heartbeat_at 和前台日志摘要。</p>
+        <div class="topbar compact-topbar">
+          <button class="top-action theme-toggle" id="themeToggle" type="button" aria-label="切换深色模式" title="切换深色模式">☾</button>
         </div>
-        <div class="live-pill"><span class="live-dot"></span><span id="liveClock">状态加载中</span></div>
-      </section>
+        <section class="page-title">
+          <div>
+            <h2>{{PAGE_TITLE}}</h2>
+            <p>{{PAGE_SUBTITLE}}</p>
+          </div>
+          <div class="live-pill"><span class="live-dot"></span><span id="liveClock">状态加载中</span></div>
+        </section>
       </header>
-      
-<div class="layout-two">
-  <div class="stack">
-    <section class="panel">
-      <div class="panel-head"><h3>运行状态时间线</h3><span>来自步骤状态、进度和心跳时间</span></div>
-      <div class="history-list">
-        <div class="history-item searchable"><strong>步骤 #1 运行中</strong><p>researcher 正在补齐上下文产物，进度 72%。</p></div>
-        <div class="history-item searchable"><strong>步骤 #2 成功</strong><p>implementer 已写入发布脚本和模板。</p></div>
-        <div class="history-item searchable"><strong>步骤 #3 失败</strong><p>evaluator 检出 missing_artifact_link，需要重新补链。</p></div>
-        <div class="history-item searchable"><strong>计划顶层状态</strong><p>running → blocked → completed/failed 由 goo-status.py 同步。</p></div>
-      </div>
-    </section>
-  </div>
-  <aside class="right-rail">
-    <section class="panel">
-      <div class="panel-head"><h3>心跳告警</h3><span>heartbeat_timeout_min</span></div>
-      <div class="alert-list">
-        <div class="alert danger searchable"><strong>步骤 #3 心跳过期</strong><p>超过 15 分钟未写入 heartbeat_at。</p></div>
-        <div class="alert searchable"><strong>步骤 #5 缺少 task_agent</strong><p>只有 subagent=recorder，无法加载具体任务画像。</p></div>
-      </div>
-    </section>
-    <section class="panel">
-      <div class="panel-head"><h3>日志尾部</h3><span>前台摘要</span></div>
-      <div class="log-list" id="logList">
-        <div class="log searchable"><strong>goo-status.py</strong><p>同步 plan 顶层状态和每步 progress。</p></div>
-        <div class="log searchable"><strong>update-step.py</strong><p>写入 heartbeat、error 和 artifact_refs。</p></div>
-      </div>
-    </section>
-  </aside>
-</div>
+{{PAGE_BODY}}
     </main>
   </div>
-  <script>
-    const clock = document.getElementById("liveClock");
-
-    const themeToggle = document.getElementById("themeToggle");
-    function applyTheme(theme) {
-      document.documentElement.dataset.theme = theme;
-      localStorage.setItem("autogoo-workflow-theme", theme);
-      if (themeToggle) {
-        const isDark = theme === "dark";
-        themeToggle.textContent = isDark ? "☼" : "☾";
-        themeToggle.setAttribute("aria-label", isDark ? "切换浅色模式" : "切换深色模式");
-        themeToggle.setAttribute("title", isDark ? "切换浅色模式" : "切换深色模式");
-      }
-    }
-    applyTheme(localStorage.getItem("autogoo-workflow-theme") || "light");
-    function tick() {
-      const now = new Date();
-      clock.textContent = `实时 · ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
-    }
-
-    if (themeToggle) {
-      themeToggle.addEventListener("click", () => {
-        const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
-        applyTheme(next);
-      });
-    }
-    tick();
-    setInterval(tick, 1000);
-  </script>
+{{PAGE_SCRIPT}}
 </body>
 </html>

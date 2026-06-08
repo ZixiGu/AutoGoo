@@ -17,12 +17,13 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 6. **任务解析** — 将任务拆解为 DAG 步骤；每个非归档步骤绑定 `goal_id` 或 `goal_ids`
 7. **并行优先审计** — 对所有非归档 step 做依赖审计：没有真实数据依赖、控制依赖、共享写入冲突或高风险确认门槛的步骤，不得为了叙事顺序串行化；必须写成相同 `tier` 和空/相同 `depends_on`，让执行阶段可并行派发
 8. **对话方案固化** — 抽取当前对话中已经形成的方案、取舍、约束、验收标准和用户明确偏好，写入 `context_digest`；内容过长时写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md` 并在 plan 中引用
-9. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
-10. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
-11. **历史计划归档** — 如果 `.goo/plan.json` 已存在且用户选择新建 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`
-12. **计划落盘** — 输出或更新 `.goo/plan.json`，标记为待用户审阅。
-13. **等待确认** — 向用户展示计划摘要、并行组、主要风险和需要确认的点，并优先用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。用户确认前不要归档 plan 摘要。
-14. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
+9. **远程执行目标标注** — 读取项目 `.goo/config.json` 和用户级 `~/.auto-goo/config.json` 中的 `servers[]`。只有当任务确实需要远程算力、远程依赖、长跑后台环境或用户明确要求远程时，才在对应 step 写入 `execution_target="remote"` 和 `remote_server`；否则默认 `execution_target="local"`。
+10. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
+11. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
+12. **历史计划归档** — 如果 `.goo/plan.json` 已存在且用户选择新建 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`
+13. **计划落盘** — 输出或更新 `.goo/plan.json`，标记为待用户审阅。
+14. **等待确认** — 向用户展示计划摘要、并行组、主要风险和需要确认的点，并优先用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。用户确认前不要归档 plan 摘要。
+15. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
 
 ## 现有 plan 冲突处理
 
@@ -35,21 +36,21 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
   - 新建 plan：先把旧 `.goo/plan.json` 原样归档到 `.goo/plans/history/`，再写入新的 `.goo/plan.json`。
 - 用户未明确选择“修改当前 plan”或“新建 plan”前，不得覆盖、归档或重写 `.goo/plan.json`。
 
-提问必须优先使用 `AskUserQuestion` / 结构化选择 UI，选项为：
+提问必须优先使用 `AskUserQuestion` / 结构化选择 UI，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=existing_plan_action` 的 JSON 模板。选项为：
 
 - 修改当前 plan
 - 新建 plan
 - 取消
 
-仅当交互控件不可用时，才使用纯文本 fallback：
+如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
 
 ```text
 当前 .goo/plan.json 还未完成。请选择处理方式：
-1. 修改当前 plan - 合并新需求，保留已完成步骤和执行证据
-2. 新建 plan - 先归档旧 plan 到 .goo/plans/history/，再写入新 plan
-3. 取消 - 暂不改动当前 plan
+1. 修改当前 plan - 把新需求合并到现有计划
+2. 新建 plan - 归档旧计划后生成新计划
+3. 取消 - 保留当前计划不变
 
-请回复 1/2/3，或回复“修改当前 plan”/“新建 plan”。
+这是 fallback；请回复 1/2/3，或直接回复“修改当前 plan”“新建 plan”或“取消”。
 ```
 
 ## Markdown 任务输入
@@ -168,6 +169,8 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - 每个步骤必须包含 `tier`；同一 `tier` 内互不依赖的步骤应尽量并行，不能把可并行步骤写成逐个依赖的线性链
 - 每条 `depends_on` 都必须代表真实数据、验收、确认、共享写入或风险依赖；如果只是叙事顺序或文档顺序，必须移除依赖并放入同一并行层
 - 每个步骤应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths` 和 `validation`，让执行阶段不依赖聊天记录猜测读写范围和验收方式
+- 每个步骤应包含 `execution_target`，默认 `"local"`；需要远程执行时写 `"remote"`，并同时写 `remote_server`（匹配 `servers[]` 的 `ip` / `host:port` / `user@host:port` / index）和 `remote_reason`
+- 远程执行 step 必须设置 `requires_user_confirm=true`，`risk_level` 至少为 `"medium"`，并在 `description` 或 `validation` 中写清远程命令类别、远程路径、预期产物和回传/验收方式；不得把 secrets 写入 plan
 - 每个步骤必须包含 `subagent`，明确稳定 Role Agent：`researcher` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `auditor` / `recorder`
 - 每个步骤必须包含 `task_agent`，明确细分 Task Agent，例如 `codebase-scout`、`feature-builder`、`test-runner`、`code-reviewer`、`evidence-auditor`、`wiki-curator`；不确定时先选对应 role 下最通用的 task agent，不要留空
 - 每个步骤应包含 `available_skills` 数组，列出本步骤允许或建议 Subagent 使用的 skill；没有额外 skill 时写 `[]`。该字段只放 Codex/Claude skill 名称，不放 agent 名称、文件路径或项目 reference
@@ -188,23 +191,23 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 
 ## 计划审阅提问格式
 
-生成或更新 `.goo/plan.json` 后，必须优先用 `AskUserQuestion` / 结构化选择 UI 收尾，选项为：
+生成或更新 `.goo/plan.json` 后，必须优先用 `AskUserQuestion` / 结构化选择 UI 收尾，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=plan_review` 的 JSON 模板。修改要求、拆分/合并说明通过 Other 输入，输入后必须同步进 plan 或再次展示审阅。选项为：
 
 - 确认计划
 - 修改计划
 - 拆分/合并步骤
 - 回到 brainstorm
 
-仅当交互控件不可用时，才使用纯文本 fallback：
+如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
 
 ```text
 请审阅计划：
-1. 确认计划 - 保持当前 .goo/plan.json，后续可执行 /auto-goo:goo-start
-2. 修改计划 - 回复需要调整的步骤、验收标准或风险控制
-3. 拆分/合并步骤 - 回复要拆分或合并的 step ID
-4. 回到 brainstorm - 重新选择或扩展候选目标
+1. 确认计划
+2. 修改计划
+3. 拆分/合并步骤
+4. 回到 brainstorm
 
-请回复 1/2/3/4，或直接写修改要求。
+这是 fallback；请回复 1/2/3/4，或直接写修改要求。
 ```
 
 用户未明确确认前，`review.status` 必须保持 `pending_user_review`，不得归档计划摘要或启动执行。

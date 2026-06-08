@@ -1047,6 +1047,7 @@ code {
       </div>
     </aside>
     <main class="main">
+      <header class="page-header">
       <div class="topbar compact-topbar">
         <button class="top-action theme-toggle" id="themeToggle" type="button" aria-label="切换深色模式" title="切换深色模式">☾</button>
       </div>
@@ -1055,8 +1056,9 @@ code {
           <h2>头脑风暴</h2>
           <p>头脑风暴页需要完整展示 candidate_goals，用户确认前就能看清目标价值、证据、验收标准、风险、前置条件和第一步。</p>
         </div>
-        <div class="live-pill"><span class="live-dot"></span><span id="liveClock">仅模板展示</span></div>
+        <div class="live-pill"><span class="live-dot"></span><span id="liveClock">状态加载中</span></div>
       </section>
+      </header>
       
 <section class="panel">
   <div class="panel-head">
@@ -1064,7 +1066,7 @@ code {
       <h3>头脑风暴上下文</h3>
       <span>对应 <code>.goo/brainstorm.json</code> 顶层字段，保留用户审阅前的决策依据。</span>
     </div>
-    <span class="tag warn">pending_user_review</span>
+    <span class="tag warn">等待用户审阅</span>
   </div>
   <dl class="detail-grid">
     <dt>direction/topic</dt><dd>发布 AutoGoo 工作流页面，并让 Brainstorm/Plan 能作为计划审阅入口。</dd>

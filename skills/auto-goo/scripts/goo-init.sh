@@ -5,7 +5,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  goo-init.sh [--user|--project] [--wiki-dir PATH] [--project-slug SLUG] [--yes] [--force] [--update-claude-md] [--skip-claude-md]
+  goo-init.sh [--user|--project] [--wiki-dir PATH] [--project-slug SLUG] [--server SPEC] [--yes] [--force] [--update-claude-md] [--skip-claude-md]
 
 Options:
   --user            Write user-level config to ~/.auto-goo/config.json
@@ -13,6 +13,11 @@ Options:
   --wiki-dir PATH   Set Goo-wiki directory (default: ~/workspace/Goo-wiki)
   --project-slug SLUG
                     Set Goo-wiki project archive folder name (default: project directory name)
+  --server SPEC     Add a remote server without entering the TTY prompts. Repeatable.
+                    SPEC uses comma-separated key=value pairs:
+                    ip=HOST,user=USER,port=22,type=gpu,purpose=模型训练
+                    Passwords are not accepted on the command line; edit the
+                    generated secrets file after init and keep chmod 600.
   --yes             Use defaults for unanswered prompts
   --force           Overwrite existing config without asking
   --update-claude-md
@@ -30,6 +35,7 @@ YES=0
 FORCE=0
 UPDATE_CLAUDE_MD=0
 SKIP_CLAUDE_MD=0
+SERVER_SPECS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,6 +62,14 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       PROJECT_SLUG="$2"
+      shift 2
+      ;;
+    --server)
+      if [[ $# -lt 2 ]]; then
+        echo "error: --server requires a key=value spec" >&2
+        exit 2
+      fi
+      SERVER_SPECS+=("$2")
       shift 2
       ;;
     --yes|-y)
@@ -247,10 +261,98 @@ else:
 if not isinstance(secrets, list):
     secrets = []
 
-secrets.append({"ip": ip, "user": user, "password": password})
+updated = False
+for item in secrets:
+    if not isinstance(item, dict):
+        continue
+    if str(item.get("ip") or item.get("host") or "") == ip and str(item.get("user") or "") == user:
+        item["ip"] = ip
+        item["user"] = user
+        if password:
+            item["password"] = password
+        else:
+            item.setdefault("password", "")
+        updated = True
+        break
+
+if not updated:
+    secrets.append({"ip": ip, "user": user, "password": password})
 secrets_file.write_text(json.dumps(secrets, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
   chmod 600 "$secrets_file"
+}
+
+append_server_json() {
+  local current_json="$1"
+  local ip="$2"
+  local user="$3"
+  local port="$4"
+  local server_type="$5"
+  local purpose="$6"
+  local secrets_file="$7"
+
+  python3 - "$current_json" "$ip" "$user" "$port" "$server_type" "$purpose" "$secrets_file" <<'PY'
+import json
+import sys
+
+current_json, ip, user, port, server_type, purpose, secrets_file = sys.argv[1:8]
+try:
+    servers = json.loads(current_json)
+except (json.JSONDecodeError, ValueError):
+    servers = []
+if not isinstance(servers, list):
+    servers = []
+servers.append({
+    "ip": ip,
+    "user": user,
+    "port": int(port) if str(port).isdigit() else port,
+    "type": server_type,
+    "purpose": purpose,
+    "secrets_file": secrets_file,
+})
+print(json.dumps(servers, ensure_ascii=False))
+PY
+}
+
+parse_server_spec() {
+  local spec="$1"
+  python3 - "$spec" <<'PY'
+import sys
+
+spec = sys.argv[1]
+values = {}
+for part in spec.split(","):
+    part = part.strip()
+    if not part:
+        continue
+    if "=" not in part:
+        print(f"error: invalid --server segment without '=': {part}", file=sys.stderr)
+        raise SystemExit(2)
+    key, value = part.split("=", 1)
+    values[key.strip().lower()] = value.strip()
+
+ip = values.get("ip") or values.get("host")
+user = values.get("user")
+port = values.get("port") or "22"
+server_type = (values.get("type") or "cpu").lower()
+purpose = values.get("purpose") or "-"
+
+if not ip:
+    print("error: --server requires ip=HOST or host=HOST", file=sys.stderr)
+    raise SystemExit(2)
+if not user:
+    print("error: --server requires user=USER", file=sys.stderr)
+    raise SystemExit(2)
+if not str(port).isdigit():
+    print("error: --server port must be numeric", file=sys.stderr)
+    raise SystemExit(2)
+if server_type not in {"cpu", "gpu"}:
+    print("error: --server type must be cpu or gpu", file=sys.stderr)
+    raise SystemExit(2)
+
+for value in (ip, user, port, server_type, purpose):
+    print(value)
+PY
 }
 
 if [[ -z "$SCOPE" ]]; then
@@ -302,20 +404,39 @@ GIT_REMOTE_URL=""
 
 if [[ "$SCOPE" == "project" ]]; then
   SECRETS_FILE="$CONFIG_DIR/secrets.json"
+  SECRETS_REF=".goo/secrets.json"
 else
   SECRETS_FILE="$CONFIG_DIR/secrets.json"
+  SECRETS_REF="$SECRETS_FILE"
 fi
 
 SERVERS_JSON="[]"
 CONFIG_WRITE_SKIPPED=0
 
-if [[ -t 0 && "$YES" -ne 1 ]]; then
+for spec in "${SERVER_SPECS[@]}"; do
+  if ! mapfile -t SERVER_FIELDS < <(parse_server_spec "$spec"); then
+    exit 2
+  fi
+  if [[ "${#SERVER_FIELDS[@]}" -lt 5 ]]; then
+    echo "error: failed to parse --server spec" >&2
+    exit 2
+  fi
+  SERVER_IP="${SERVER_FIELDS[0]}"
+  SERVER_USER="${SERVER_FIELDS[1]}"
+  SERVER_PORT="${SERVER_FIELDS[2]}"
+  SERVER_TYPE="${SERVER_FIELDS[3]}"
+  SERVER_PURPOSE="${SERVER_FIELDS[4]}"
+  save_server_secrets "$SECRETS_FILE" "$SERVER_IP" "$SERVER_USER" ""
+  SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_IP" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF")"
+done
+
+if [[ "${#SERVER_SPECS[@]}" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
   if confirm "Do you have remote servers to configure?" "n"; then
-    SERVERS_JSON="["
-    FIRST=1
+    SERVERS_JSON="[]"
+    SERVER_INDEX=1
     while true; do
       echo ""
-      echo "--- Server $((FIRST == 0 ? $(echo "$SERVERS_JSON" | grep -o '"ip"' | wc -l) + 1 : 1)) ---"
+      echo "--- Server $SERVER_INDEX ---"
       SERVER_TYPE="$(prompt "Server type (cpu/gpu)" "cpu")"
       read -r -p "Server IP address: " SERVER_IP
       if [[ -z "$SERVER_IP" ]]; then
@@ -337,19 +458,13 @@ if [[ -t 0 && "$YES" -ne 1 ]]; then
       SERVER_PASS="$(prompt_secret "Password (input hidden, Enter to skip)")"
 
       save_server_secrets "$SECRETS_FILE" "$SERVER_IP" "$SERVER_USER" "$SERVER_PASS"
-
-      if [[ "$FIRST" -eq 1 ]]; then
-        FIRST=0
-      else
-        SERVERS_JSON="$SERVERS_JSON,"
-      fi
-      SERVERS_JSON="$SERVERS_JSON{\"ip\": \"$SERVER_IP\", \"user\": \"$SERVER_USER\", \"port\": \"$SERVER_PORT\", \"type\": \"$SERVER_TYPE\", \"purpose\": \"$SERVER_PURPOSE\", \"secrets_file\": \"$SECRETS_FILE\"}"
+      SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_IP" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF")"
+      SERVER_INDEX=$((SERVER_INDEX + 1))
 
       if ! confirm "Add another server?" "n"; then
         break
       fi
     done
-    SERVERS_JSON="$SERVERS_JSON]"
   fi
 fi
 
@@ -406,6 +521,9 @@ if [[ "$SERVERS_JSON" != "[]" ]]; then
   SERVER_COUNT=$(echo "$SERVERS_JSON" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
   echo "  servers:    $SERVER_COUNT server(s) configured"
   echo "  secrets:    $SECRETS_FILE"
+  if ! command -v sshpass >/dev/null 2>&1; then
+    echo "  sshpass:    not found (install with: sudo apt install sshpass)"
+  fi
 fi
 
 ensure_wiki_vault "$WIKI_DIR_EXPANDED"
@@ -532,11 +650,10 @@ config = {
         "enabled": True,
         "site_dir": ".goo/site",
         "index_file": ".goo/site/index.html",
-        "split_pages": False,
         "host": "0.0.0.0",
         "port": 9877,
         "open_browser": True,
-        "include_activity_heatmap": True,
+        "include_workflow_activity": True,
         "include_dag": True,
     },
     "execution": {

@@ -47,7 +47,7 @@ heartbeat_at 距今 < 2 分钟？
 
 检查 depends_on 是否全部 completed，满足则加入当前执行轮。
 
-关键路径失败提问必须优先使用 `AskUserQuestion` / 结构化选择 UI。仅当交互控件不可用时，才使用纯文本 fallback：
+关键路径失败提问必须优先使用 `AskUserQuestion` / 结构化选择 UI，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=failed_step_action` 的 JSON 模板。如果用户通过 Other 输入替代处理方式，必须先解释影响并确认依赖后再继续。如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
 
 ```text
 关键路径步骤失败，会阻塞后续步骤。请选择处理方式：
@@ -55,7 +55,7 @@ heartbeat_at 距今 < 2 分钟？
 2. 跳过并继续可执行的非依赖步骤
 3. 停止并保留当前现场
 
-请回复 1/2/3，或回复“重试”/“跳过”/“停止”。
+这是 fallback；请回复 1/2/3，或直接回复“重试”/“跳过”/“停止”。
 ```
 
 ## 产物文件存在性检测

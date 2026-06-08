@@ -17,9 +17,9 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 - `/auto-goo:goo-init --user` → `~/.auto-goo/config.json`
 - `/auto-goo:goo-init --project` → `.goo/config.json`；自动创建或复用 Goo-wiki 与 `wiki/projects/<project-slug>/` 项目归档根目录，并询问是否更新项目 `CLAUDE.md` 的归档原则段落
 
-初始化采用主 Agent 交互模式：主 Agent 先通过 `AskUserQuestion` / 结构化选择 UI 确认作用域、wiki 路径、覆盖风险和项目 `CLAUDE.md` 更新意愿，再调用脚本落盘。每个交互问题必须展示可点击选项；不得在 `AskUserQuestion` 可用时用普通文本要求用户手打 `1/2` 或命令参数。结构化选择 UI / AskUserQuestion 不可用、调用失败或没有渲染出按钮时，停止初始化并提示用户改用带参数命令，不要继续用普通文本编号收集选项。
+初始化采用主 Agent 交互模式：主 Agent 先通过 `AskUserQuestion` / 结构化选择 UI 确认作用域、wiki 路径、覆盖风险和项目 `CLAUDE.md` 更新意愿，让 Claude Code 渲染可用方向键移动、Enter 确认的选择控件，再调用脚本落盘。每个交互问题必须展示可选项；不得在 `AskUserQuestion` 可用时用普通文本要求用户手打 `1/2` 或命令参数。结构化选择 UI / AskUserQuestion 不可用、调用失败或没有渲染出按钮时，才允许降级为明确标注 fallback 的纯文本列表选项，继续收集用户选择。
 
-底层写入仍由初始化脚本完成，但只有在用户已确认所有参数后才运行脚本。命令文档不得在交互前执行 root 解析；不得内联 heredoc / file redirection 的 Python 片段。最终落盘阶段先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-init.sh --user|--project --wiki-dir <已确认路径> ...`。
+底层写入仍由初始化脚本完成，但只有在用户已确认所有参数后才运行脚本。命令文档不得在交互前执行 root 解析；不得内联 heredoc / file redirection 的 Python 片段。最终落盘阶段先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-init.sh --user|--project --wiki-dir <已确认路径> ...`。如果用户配置远程服务器，主 Agent 把非敏感参数追加为可重复的 `--server 'ip=<host>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`；密码不得作为参数传入。
 
 主 Agent 应优先自己提问，而不是要求用户进入 Bash 交互。必须先用 `AskUserQuestion` 问用户作用域和 wiki 路径，并在问题中展示默认路径 `~/workspace/Goo-wiki`；用户不输入路径时使用默认路径。随后显式传入 `--user/--project` 与 `--wiki-dir <路径>`；不得默认写入项目配置，也不得在未展示默认路径的情况下静默使用默认 wiki 路径。
 
@@ -28,14 +28,30 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 - 项目级 `--project` (Recommended) - 写入当前项目 `.goo/config.json`
 - 用户级 `--user` - 写入 `~/.auto-goo/config.json`
 
-如果交互控件不可用，停止并提示用户改用 `/auto-goo:goo-init --user` 或 `/auto-goo:goo-init --project`；不要输出纯文本编号列表。
+如果交互控件不可用，使用以下纯文本 fallback：
+
+```text
+这是 fallback：结构化选择 UI 不可用。请选择配置作用域：
+1. 项目级 --project (Recommended) - 写入当前项目 .goo/config.json
+2. 用户级 --user - 写入 ~/.auto-goo/config.json
+
+请回复 1/2，或直接回复“项目级”/“用户级”。
+```
 
 第二个问题必须优先通过 `AskUserQuestion` 提供完整可见选项：
 
 - `~/workspace/Goo-wiki` (Recommended)
 - 自定义路径（选择后在 Other 输入）
 
-如果交互控件不可用，停止并提示用户改用带完整参数的命令，例如 `/auto-goo:goo-init --user --wiki-dir ~/workspace/Goo-wiki`；不要输出纯文本编号列表。
+如果交互控件不可用，使用以下纯文本 fallback：
+
+```text
+这是 fallback：结构化选择 UI 不可用。请选择 Goo-wiki 路径：
+1. ~/workspace/Goo-wiki (Recommended)
+2. 自定义路径
+
+请回复 1/2；如果选择自定义路径，请直接写完整路径。
+```
 
 如果用户确认或输入的 Goo-wiki 路径不存在，初始化脚本必须自动创建该目录，并补齐 `CLAUDE.md`、`log.md`、`wiki/projects/`、`wiki/concepts/`、`wiki/questions/`、`journal/daily/`、`journal/weekly/` 基础结构。路径不存在不是 fallback 条件；只有创建失败、权限不足或后续归档时 wiki 不可写，才使用 `.goo/obsidian/` fallback。
 
@@ -131,11 +147,10 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
     "enabled": true,
     "site_dir": ".goo/site",
     "index_file": ".goo/site/index.html",
-    "split_pages": false,
     "host": "0.0.0.0",
     "port": 9877,
     "open_browser": true,
-    "include_activity_heatmap": true,
+    "include_workflow_activity": true,
     "include_dag": true
   },
   "execution": {
@@ -185,13 +200,22 @@ secrets 文件权限为 `chmod 600`，项目级 secrets 文件自动加入 `.git
 
 config 中只记录 `servers[].{ip, port, user, type, purpose, secrets_file}`，不存储密码。使用服务器时，从 `secrets_file` 读取密码。`port` 默认 22，`type` 为 `cpu` 或 `gpu`，默认 `cpu`。`purpose` 为服务器用途说明，用于 CLAUDE.md 中告知何时使用该服务器。
 
+非交互初始化示例：
+
+```bash
+bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~/workspace/Goo-wiki \
+  --server 'ip=10.0.0.8,user=ubuntu,port=22,type=gpu,purpose=模型训练与推理'
+```
+
+该命令只写入非敏感配置，并创建 chmod 600 的 secrets 占位文件。用户需要稍后手动编辑 `.goo/secrets.json` 或 `~/.auto-goo/secrets.json` 填入密码；不得在聊天、计划、命令行或日志里展开密码。
+
 初始化阶段如果用户配置了服务器，脚本会检查本机是否安装 `sshpass`。未安装时只提醒用户：
 
 ```bash
 sudo apt install sshpass
 ```
 
-不会自动安装，也不会中断初始化。自动连接脚本支持按服务器选择。使用时先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-ssh.sh`，例如传入 `--server <ip-or-host>`、`--server <ip-or-host>:<port>`、`--server <user>@<ip-or-host>:<port>`，或传入 `--host <ip-or-host> --user <user> --port <port>`。
+不会自动安装，也不会中断初始化。`sshpass` 只在 secrets 中存在 password 且需要自动填密码时使用；如果 secrets 里没有密码，`goo-ssh.sh` 会退回普通 `ssh`，支持 SSH key 或手动认证；非交互环境会使用 `BatchMode=yes` 避免卡在密码提示。自动连接脚本支持按服务器选择。使用时先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-ssh.sh`，例如传入 `--server <ip-or-host>`、`--server <ip-or-host>:<port>`、`--server <user>@<ip-or-host>:<port>`，或传入 `--host <ip-or-host> --user <user> --port <port>`。
 
 注意：setup 文档不内联 root 解析 heredoc，避免 slash command 在交互前误执行 Bash。
 

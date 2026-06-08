@@ -19,11 +19,10 @@
     "enabled": true,
     "site_dir": ".goo/site",
     "index_file": ".goo/site/index.html",
-    "split_pages": false,
     "host": "0.0.0.0",
     "port": 9877,
     "open_browser": true,
-    "include_activity_heatmap": true,
+    "include_workflow_activity": true,
     "include_dag": true
   },
   "execution": {
