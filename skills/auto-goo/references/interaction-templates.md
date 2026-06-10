@@ -46,7 +46,7 @@
     },
     {
       "label": "运行 git init",
-      "description": "只在当前项目根创建 .git；不自动 add 或 commit，直到有提交前仍不使用 worktree 隔离。"
+      "description": "只在当前项目根创建 .git，默认分支为 main；不自动 add 或 commit，直到有提交前仍不使用 worktree 隔离。"
     },
     {
       "label": "停止执行",

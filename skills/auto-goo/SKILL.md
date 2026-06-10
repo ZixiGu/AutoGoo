@@ -9,7 +9,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 
 收到可分解的多步任务后，按以下六个阶段执行。单步任务或纯问答不需启动此流程，直接执行即可。
 
-**兼容性**：AutoGoo 完全支持非 Git 项目。Git 相关功能（remote 地址记录、worktree 隔离、diff/rollback 等）仅在当前 AutoGoo 项目根本身是 Git repo 且 `HEAD` 可解析时启用。非 Git 项目不需要 Git worktree 隔离，不向父目录、跨文件系统或备用路径寻找 Git root，也不反复探测 Agent 是否能绕过 `HEAD`。执行启动或恢复时只检查一次当前项目根：如果项目根有可用 `.git/HEAD`，写入 `runtime.subagent_isolation.mode="worktree"`；否则必须优先用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否运行 `git init`。用户选择继续非 Git 执行时写 `mode="none"`；用户选择 `git init` 时只初始化仓库，不自动 add/commit，随后重新检查 `HEAD`，无提交时仍写 `mode="none"` 并继续普通非 Git 执行。`mode="none"` 时不得给 Agent tool 传 `isolation` 字段，不得因为 `Failed to resolve base branch "HEAD"` 循环重试；如果运行时仍强制解析 `HEAD`，最多记录一次失败并转为明确阻塞/用户选择，而不是继续 probe。
+**兼容性**：AutoGoo 完全支持非 Git 项目。Git 相关功能（remote 地址记录、worktree 隔离、diff/rollback 等）仅在当前 AutoGoo 项目根本身是 Git repo 且 `HEAD` 可解析时启用。非 Git 项目不需要 Git worktree 隔离，不向父目录、跨文件系统或备用路径寻找 Git root，也不反复探测 Agent 是否能绕过 `HEAD`。执行启动或恢复时只检查一次当前项目根：如果项目根有可用 `.git/HEAD`，写入 `runtime.subagent_isolation.mode="worktree"`；否则必须优先用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否运行 `git init`。用户选择继续非 Git 执行时写 `mode="none"`；用户选择 `git init` 时必须默认使用 `main` 分支：优先运行 `git init -b main`，不支持 `-b` 时初始化后立即把默认分支设为 `main`。初始化不自动 add/commit，随后重新检查 `HEAD`，无提交时仍写 `mode="none"` 并继续普通非 Git 执行。`mode="none"` 时不得给 Agent tool 传 `isolation` 字段，不得因为 `Failed to resolve base branch "HEAD"` 循环重试；如果运行时仍强制解析 `HEAD`，最多记录一次失败并转为明确阻塞/用户选择，而不是继续 probe。
 
 **空跑检测**：Agent 返回 `Done` 不是完成证据。若某个 Subagent 显示 `0 tool uses`，且没有写入 step log、heartbeat 里程碑或声明的 `output` 产物，主 Agent 必须判定为 dispatch 空跑或运行时前置失败，把 step 标记为 `blocked`/`failed` 并记录原因；不得把该 step 标记 completed，也不得解锁下游。
 

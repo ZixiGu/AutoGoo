@@ -426,7 +426,7 @@ DAG 结构总结：
 | `started_at` | plan 开始执行时间，首个步骤派发时设置 |
 | `completed_at` | plan 完成时间，所有步骤完成或标记失败时设置 |
 | `max_concurrent` | 最大并发槽位数，默认 6 |
-| `runtime.subagent_isolation` | 执行启动或恢复时按当前 AutoGoo 项目根一次性计算的 Subagent 隔离策略缓存。`mode="worktree"` 表示当前项目根本身是可解析 `HEAD` 的 Git repo，后续 Agent tool 可传 `isolation: "worktree"`；`mode="none"` 表示当前项目按普通非 Git 模式执行并省略 `isolation`。当前项目不是 Git repo 时，先用 `AskUserQuestion` 的 `id=git_init_project` 模板询问是否运行 `git init`；若用户拒绝或 `git init` 后仍没有提交/HEAD，记录 `reason` 并继续 `mode="none"`。后续派发只读该缓存，除非缓存缺失或执行目录明确变更；不得向父目录、跨文件系统或备用路径寻找 Git root |
+| `runtime.subagent_isolation` | 执行启动或恢复时按当前 AutoGoo 项目根一次性计算的 Subagent 隔离策略缓存。`mode="worktree"` 表示当前项目根本身是可解析 `HEAD` 的 Git repo，后续 Agent tool 可传 `isolation: "worktree"`；`mode="none"` 表示当前项目按普通非 Git 模式执行并省略 `isolation`。当前项目不是 Git repo 时，先用 `AskUserQuestion` 的 `id=git_init_project` 模板询问是否运行 `git init`；若用户选择初始化，默认分支必须是 `main`，优先使用 `git init -b main`。若用户拒绝或 `git init` 后仍没有提交/HEAD，记录 `reason` 并继续 `mode="none"`。后续派发只读该缓存，除非缓存缺失或执行目录明确变更；不得向父目录、跨文件系统或备用路径寻找 Git root |
 | `goals` | 交付目标列表。单目标任务也写一个默认 goal；多目标任务按 goal 拆验收标准、最终产物和依赖关系 |
 | `goals[].id` | goal 稳定 ID，如 `g1` |
 | `goals[].status` | goal 状态：`pending` / `running` / `completed` / `failed` / `deferred` |
