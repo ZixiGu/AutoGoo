@@ -142,6 +142,7 @@ required = {
     "server_purpose",
     "server_password",
     "add_another_server",
+    "git_init_project",
     "brainstorm_review",
     "existing_brainstorm_goal",
     "thread_action",

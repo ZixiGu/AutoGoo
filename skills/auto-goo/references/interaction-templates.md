@@ -32,6 +32,30 @@
 }
 ```
 
+## git preflight
+
+```json
+{
+  "header": "Git 初始化",
+  "id": "git_init_project",
+  "question": "当前项目不是 Git 仓库，是否要先初始化 Git？",
+  "options": [
+    {
+      "label": "继续非 Git 执行 (Recommended)",
+      "description": "不运行 git init；按普通项目执行，不使用 worktree 隔离。"
+    },
+    {
+      "label": "运行 git init",
+      "description": "只在当前项目根创建 .git；不自动 add 或 commit，直到有提交前仍不使用 worktree 隔离。"
+    },
+    {
+      "label": "停止执行",
+      "description": "保留当前 plan，不初始化 Git，也不派发执行。"
+    }
+  ]
+}
+```
+
 ```json
 {
   "header": "Wiki 路径",

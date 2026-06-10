@@ -97,13 +97,14 @@ Subagent 默认隔离上下文。主 Agent 派发时只传：
 - 当前 step 的 `id`、`name`、`description`、`type`、`subagent`、`task_agent`、`output`
 - 当前 step 的 `available_skills`；若为空数组，不额外加载 skill
 - 必要的项目约束和安全规则摘要
-- **执行目录与隔离策略**：执行启动或恢复时只检查一次当前目录是否是 Git repo 且 `HEAD` 可解析，并写入 plan 顶层 `runtime.subagent_isolation`。建议结构：`{"mode":"worktree","checked_at":"<iso>","reason":"git_head_available"}` 或 `{"mode":"none","checked_at":"<iso>","reason":"non_git_or_head_unavailable"}`。后续派发 Subagent 只读取该缓存，不得每次派发前重复运行 git 检查。只有 `mode="worktree"` 时才允许给 Agent tool 传 `isolation: "worktree"`；`mode="none"` 时必须省略 `isolation` 参数，并在 prompt 中声明“当前项目无可用 worktree 隔离；只在 allowed_write_paths 内修改，不执行破坏性操作”。缓存缺失或执行目录明确变更时，先重新计算并回写缓存，再继续派发。不得因为 `Failed to resolve base branch "HEAD"` 把 step 标为 blocked 或改由主 Agent 代做。
+- **执行目录与隔离策略**：执行启动或恢复时只检查一次当前 AutoGoo 项目根本身是否是 Git repo 且 `HEAD` 可解析，并写入 plan 顶层 `runtime.subagent_isolation`。不要设置 `GIT_DISCOVERY_ACROSS_FILESYSTEM`，不要向父目录、跨文件系统或备用路径寻找 Git root。Git worktree 隔离只用于 Git 项目：它给 Subagent 独立工作树，便于 diff、回滚和并行写入隔离；非 Git 项目没有 commit/HEAD 可作为隔离基线，所以按普通非 Git 项目执行。若当前项目不是 Git repo，必须先用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否运行 `git init`。用户选择继续非 Git 执行时写 `{"mode":"none","reason":"project_not_git_user_declined_init"}`；选择运行 `git init` 时只初始化仓库，不自动 add/commit，随后重新检查 `HEAD`，若仍无提交则写 `{"mode":"none","reason":"git_initialized_without_head"}` 并继续普通非 Git 执行；选择停止时标记 workflow blocked/paused。建议结构：`{"mode":"worktree","checked_at":"<iso>","reason":"project_git_head_available"}` 或 `{"mode":"none","checked_at":"<iso>","reason":"..."}`。后续派发 Subagent 只读取该缓存，不得每次派发前重复运行 git 检查。只有 `mode="worktree"` 时才允许给 Agent tool 传 `isolation: "worktree"`；`mode="none"` 时必须省略 `isolation` 参数，并在 prompt 中声明“当前项目按普通非 Git 模式执行；只在 allowed_write_paths 内修改，不执行破坏性操作”。如果 Agent 工具仍报 `Failed to resolve base branch "HEAD"`，最多记录一次失败并把当前调度标记为 blocked/需要用户选择；不得循环 probe，也不得改从父级 Git root 派发。
 - `wiki_context` 中与该 step 直接相关的 3-7 条要点
 - `context_digest` 中与该 step 直接相关的决策、约束和验收点
 - `context_artifacts` 中必要 Markdown 的路径、标题和行号范围
 - 上游依赖的产物路径和精简摘要
 - 允许读取/写入的路径边界
 - plan/log/heartbeat 回写要求
+- **空跑检测**：Agent 返回 `Done` 只能说明工具调用结束，不等于 step 完成。若返回 `0 tool uses`，且没有 step log、没有 heartbeat 里程碑、没有声明的 `output` 产物，必须判定为 dispatch 空跑或运行时前置失败，回写 `blocked`/`failed` 和错误原因，不得标记 completed 或释放下游依赖。
 
 默认不传：
 
@@ -179,7 +180,10 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
   running = []       # 当前在跑的 agent 槽位
   ready_queue = []   # 就绪但等待槽位的步骤
   若 plan.runtime.subagent_isolation.mode 缺失或执行目录变更:
-    检查一次 git repo + HEAD 可解析性
+    只检查当前 AutoGoo 项目根本身是否有可用 git HEAD
+    不设置 GIT_DISCOVERY_ACROSS_FILESYSTEM，不向父目录或备用路径寻找 git root
+    若当前项目不是 git repo，先用 AskUserQuestion(id=git_init_project) 询问是否 git init
+    用户选择 git init 时只运行 git init，不自动 add/commit；无 HEAD 时仍 mode=none
     写入 plan.runtime.subagent_isolation = {mode, checked_at, reason}
 
 主循环:
@@ -193,7 +197,7 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
          step = ready_queue.pop(0)
          若 step.requires_user_confirm=true 且尚未确认 → 主 Agent 前台询问，确认后再派发
          更新 status="running", progress=0, agent_id, started_at → plan.json
-         启动 Agent (run_in_background, 间隔 3-5s 错峰；按 runtime.subagent_isolation.mode 决定是否传 isolation="worktree")
+         启动 Agent (run_in_background, 间隔 3-5s 错峰；mode=worktree 才传 isolation="worktree"，mode=none 不传 isolation，按普通非 Git 项目执行)
          running.append(step)
 
     3. 等待任一 Agent 完成
@@ -520,7 +524,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
      while running slots < MAX_CONCURRENT AND ready_queue 非空:
        step = ready_queue.pop(0)
        → 检查 step.subagent 是否合法
-         → 合法: 按 step.subagent 读取 agents/roles/<role>.md，再按 step.task_agent 读取 agents/tasks/<department>/<task>.md，合成 Subagent Prompt 后启动 Agent (run_in_background；按 runtime.subagent_isolation.mode 决定是否传 isolation="worktree")
+         → 合法: 按 step.subagent 读取 agents/roles/<role>.md，再按 step.task_agent 读取 agents/tasks/<department>/<task>.md，合成 Subagent Prompt 后启动 Agent (run_in_background；仅 mode=worktree 传 isolation="worktree"，mode=none 不传 isolation，按普通非 Git 项目执行)
          → subagent 或 task_agent 不合法/缺失: 暂停派发，先修正 plan 或创建新角色/任务画像
        → 主 Agent 调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入 status、started_at、首个 heartbeat_at 和 step log
        → 调用 `goo-status.py --update-status` 后运行 `goo-status.py`，向用户展示 RUNNING 心跳摘要
@@ -529,7 +533,8 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
 
   3. 等待完成事件
      → 任一 agent 完成 → 从 running 移除
-     → 回写 plan.json: status="completed"/"failed"
+     → 检查 step log、heartbeat 里程碑和声明 output；若 Done 但 0 tool uses 且无证据，回写 blocked/failed，不得 completed
+     → 回写 plan.json: status="completed"/"failed"/"blocked"
      → 写入 .goo/logs/
      → 运行 `goo-status.py`，向用户展示最新完成/告警/下一步摘要
      → 立即回到步骤 1（刚完成步骤的下游可能已就绪）

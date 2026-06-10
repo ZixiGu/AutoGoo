@@ -85,8 +85,8 @@ test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 8. 校验待执行步骤必须包含 `subagent`、`task_agent`、`depends_on`、`output` 和读写边界；缺失或不合法时先修复 plan，不由主 Agent 代执行
 9. 检查 `available_skills`；缺失时可补为空数组，包含不存在或无关 skill 时先修正 plan
 10. 为每个待执行 step 构造 Subagent prompt，包含 `available_skills` 作为 skill allowlist，并**必须包含 `references/execution-engine.md` 中对应类型的 Heartbeat 强制分段**
-11. 恢复执行时只检查一次当前目录是否是 Git repo 且 `HEAD` 可解析；如果 plan 顶层已有 `runtime.subagent_isolation.mode`，默认复用该缓存，不再重复检查。缓存缺失或用户明确切换执行目录时，才重新计算并写回 `runtime.subagent_isolation`。只有 `mode="worktree"` 时，后续 Agent tool 才允许传 `isolation: "worktree"`；`mode="none"` 时必须省略 `isolation` 参数，并在 prompt 中说明当前项目无可用 worktree 隔离、不得执行破坏性操作、只能写 `allowed_write_paths`。不得因 `Failed to resolve base branch "HEAD"` 阻塞 workflow 或降级主 Agent 代做。
-12. 按 tier 分组，同 tier 内并行派发给对应 Subagent。派发每个 Subagent 前，主 Agent 必须先调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入首个 `heartbeat_at`，再启动 Agent；Subagent 继续按 Heartbeat 强制分段写 15/50/85/complete。**每次 step 状态变更后立即调用 `goo-status.py --update-status`**。每次派发批次后、每轮 30s 心跳巡检后，以及任一 Agent 完成后，主 Agent 必须运行 `goo-status.py` 并把 RUNNING/告警摘要展示给用户，避免心跳只存在于 plan 文件里但前台不可见。
+11. 恢复执行时只检查一次当前 AutoGoo 项目根本身是否是 Git repo 且 `HEAD` 可解析；如果 plan 顶层已有 `runtime.subagent_isolation.mode`，默认复用该缓存，不再重复检查。缓存缺失或用户明确切换执行目录时，才按当前项目根重新计算并写回 `runtime.subagent_isolation`。不要设置 `GIT_DISCOVERY_ACROSS_FILESYSTEM`，不要向父目录、跨文件系统或备用路径寻找 Git root。若当前项目根不是 Git repo，必须优先用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否运行 `git init`。用户选择继续非 Git 执行时写 `mode="none"` 并继续；选择运行 `git init` 时只初始化仓库，不自动 add/commit，随后重新检查 `HEAD`，没有提交时仍写 `mode="none"` 并继续普通非 Git 执行；选择停止时标记 workflow blocked/paused，不派发步骤。只有 `mode="worktree"` 时，后续 Agent tool 才允许传 `isolation: "worktree"`；`mode="none"` 时必须按普通非 Git 项目执行并省略 `isolation` 参数，在 prompt 中说明只能写 `allowed_write_paths`、不得执行破坏性操作。如果 Agent 工具仍报 `Failed to resolve base branch "HEAD"`，最多记录一次失败并标记当前调度为 blocked/需要用户选择，不得循环 probe 或改从父级 Git root 派发。
+12. 按 tier 分组，同 tier 内并行派发给对应 Subagent。派发每个 Subagent 前，主 Agent 必须先调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入首个 `heartbeat_at`，再启动 Agent；Subagent 继续按 Heartbeat 强制分段写 15/50/85/complete。Agent 返回 `Done` 但 `0 tool uses`、无 step log、无 heartbeat 里程碑且无声明产物时，必须判定为空跑/运行时前置失败，标记 blocked/failed，不得当作完成或解锁下游。**每次 step 状态变更后立即调用 `goo-status.py --update-status`**。每次派发批次后、每轮 30s 心跳巡检后，以及任一 Agent 完成后，主 Agent 必须运行 `goo-status.py` 并把 RUNNING/告警摘要展示给用户，避免心跳只存在于 plan 文件里但前台不可见。
 13. 按 AutoGoo 标准执行流程继续（Phase 2-4）
 
 ## 示例
@@ -114,7 +114,7 @@ test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 - 如果所有步骤已完成，提示"没有未完成的任务"
 - 关键路径上的失败步骤必须优先用结构化选择 UI 询问是否重试、跳过继续或停止
 - 恢复执行必须派发 Subagent；主 Agent 做状态修复、派发和审核。若 `subagent` 或 `task_agent` 不存在，先补 plan 或创建角色/任务画像，不由主 Agent 代执行
-- 恢复执行必须尊重缓存的 Subagent 隔离策略：优先读取 `runtime.subagent_isolation.mode`；缓存缺失或执行目录变更时才重新检查并写回。值为 `worktree` 才给 Agent tool 传 `isolation: "worktree"`，值为 `none` 则省略 `isolation`，避免重复 git 检查和 `Failed to resolve base branch "HEAD"` 阻塞派发
+- 恢复执行必须尊重缓存的 Subagent 隔离策略：优先读取 `runtime.subagent_isolation.mode`；缓存缺失或执行目录变更时才按当前项目根重新检查并写回。值为 `worktree` 才给 Agent tool 传 `isolation: "worktree"`，值为 `none` 则按普通非 Git 项目执行并省略 `isolation`。不得向父目录寻找 Git root，也不得围绕 `Failed to resolve base branch "HEAD"` 重复探测。
 - 恢复执行时使用 step 的 `available_skills` 作为 Subagent skill allowlist；缺失时先补为空数组
 - 如果 `.goo/brainstorm.json` 或 `.goo/plan.json` 仍是待审草案，恢复执行前必须先展示摘要并优先用结构化选择 UI 让用户确认、修改或停止；确认后如果 brainstorm 未归档，再归档最终版 brainstorm，然后恢复业务 step
 - `heartbeat_at` 为空且 status=running 的步骤：说明派发时写了 tier-X-start.json 但 agent 从未真正启动 → 直接重置为 pending
