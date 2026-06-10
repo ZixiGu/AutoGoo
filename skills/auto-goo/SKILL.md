@@ -1,7 +1,7 @@
 ---
 name: goo-workflow
 description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', '/auto-goo:goo-publish', 'brainstorm', '找目标', '开始任务', 'run:', '读论文', '论文', 'paper', '日报', '周报', 'usage', 'token统计', 'token降本', '发布HTML', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status, HTML publishing, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion tools."
-version: 0.3.4
+version: 0.3.5
 tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 ---
 
@@ -9,7 +9,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 
 收到可分解的多步任务后，按以下六个阶段执行。单步任务或纯问答不需启动此流程，直接执行即可。
 
-**兼容性**：AutoGoo 完全支持非 Git 项目。Git 相关功能（remote 地址记录等）仅在项目是 Git repo 时启用，非 Git 项目不会收到任何 Git 相关错误。
+**兼容性**：AutoGoo 完全支持非 Git 项目。Git 相关功能（remote 地址记录等）仅在项目是 Git repo 时启用，非 Git 项目不会收到任何 Git 相关错误。执行启动或恢复时检查一次当前目录是否是 Git repo 且 `HEAD` 可解析，并把结果写入 plan 顶层 `runtime.subagent_isolation`；后续派发 Subagent 只读取该缓存。只有缓存值为 `worktree` 时才允许给 Agent tool 传 `isolation: "worktree"`；缓存值为 `none` 时必须省略 `isolation` 参数，避免 Agent tool 因 `Failed to resolve base branch "HEAD"` 失败。
 
 **上下文预算**：`SKILL.md` 只保留触发条件、阶段入口和关键铁律。长规则、schema、prompt 变体和检查表放入 `references/`；重复机械操作优先脚本化，并让脚本输出紧凑 packet，避免主会话读取大段 Markdown。完整设计约束见 `references/skill-design.md`。
 
@@ -17,7 +17,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 - `/auto-goo:goo-init --user`：初始化用户级 `~/.auto-goo/config.json`，作为所有项目的默认配置。
 - `/auto-goo:goo-init --project`：初始化当前项目 `.goo/config.json`，覆盖用户级默认配置。
 - `/auto-goo:goo-brainstorm <方向/项目>`：目标不明确时，基于 Goo-wiki 和当前上下文生成候选 goals，写入 `.goo/brainstorm.json` 后等待用户选择。
-- `/auto-goo:goo-plan <任务>`：只执行 Phase 0-1，写入 `.goo/plan.json` 后停止，等待用户确认。
+- `/auto-goo:goo-plan <任务>`：只执行 Phase 0-1；如当前任务线未完成，先用 `AskUserQuestion` 询问新建 thread 还是继续当前 thread；写入当前 thread 的 plan 后停止，等待用户确认。
 - `/auto-goo:goo-start <任务>`：执行完整流程，必要时可先生成 plan 再继续执行。
 - `/auto-goo:goo-research paper <论文/DOI/arXiv/URL/PDF>`：研究资料归档入口；`paper` 子命令用于论文深读、代码/数据集搜索、下载检查和 Goo-wiki 归档。
 - `/auto-goo:goo-daily-report [日期|范围]`：扫描 Claude Code / Codex 会话，生成 Goo-wiki 日报或周报素材。
@@ -27,9 +27,15 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 
 **内容输出归档铁律**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令最终都必须归档到 Goo-wiki。包括 `/auto-goo:goo-brainstorm` 的候选 goals、`/auto-goo:goo-research paper` 的论文资料包和深度笔记、`/auto-goo:goo-usage-analyse` 的降本报告、`/auto-goo:goo-daily-report` 的日报/周报、`/auto-goo:goo-improve` 的改进建议、benchmark/plan/start/continue 的计划与执行经验。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。`goo-brainstorm` 和 `goo-plan` 必须先让用户审阅，用户确认前只写本地 `.goo/brainstorm.json` / `.goo/plan.json` 草案，不急着归档最终知识页。
 
-**同一任务归档根**：同一条任务链路的 brainstorm、plan 和 execution 知识归档默认放在同一个 `task_archive_root` 下，用子目录区分阶段：`brainstorm/` 保存候选目标、推荐顺序和选择依据；`plan/` 保存正式 DAG、上下文摘要和计划取舍；`execution/` 保存步骤证据、验证结果和最终经验。`task_archive_root` 优先位于 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-task-slug>/`；Goo-wiki 不可用时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/`。`.goo/brainstorm.json.archive.task_archive_root` 与 `.goo/plan.json.archive.task_archive_root` 必须保持一致，除非用户明确要求分开归档。注意：这不同于本地 JSON 历史快照；旧 `.goo/plan.json` 仍保存到 `.goo/plans/history/`，旧 `.goo/brainstorm.json` 保存到 `.goo/brainstorms/history/`。
+**Thread 任务线**：AutoGoo thread 是一条 brainstorm/plan/execution 任务线，保存在 `.goo/threads/<thread_id>/`，包含 `thread.json`、`brainstorm.json`、`plan.json`、`logs/`、`artifacts/` 和 `reports/`。`.goo/current_thread.json` 记录默认 thread；`.goo/plan.json` 是兼容入口，指向或复制当前 thread 的 active plan。用户启动新 plan 时，如果当前 thread/plan 未完成，必须优先用 `AskUserQuestion` 复用 `references/interaction-templates.md` 的 `id=thread_action` 模板询问：新建 thread、继续当前 thread、取消。用户未明确选择前，不得覆盖当前 thread 的 plan。每个 plan 顶层必须写入 `thread.id`、`thread.plan_path`、`thread.logs_dir` 和 `thread.artifacts_dir`；每次执行状态变化后必须同步 `.goo/threads/<thread_id>/thread.json.status` 和 `.goo/threads/index.json`。
 
-**HTML 发布层**：`/auto-goo:goo-publish` 是工作流的只读展示层，无需运行 `goo-init` 或创建 `.goo/config.json`，默认从 `.goo/brainstorm.json`、`.goo/plan.json`、`.goo/plans/history/`、`.goo/brainstorms/history/`、`.goo/logs/`、`.goo/artifacts/`、`.goo/reports/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/` 多页站点。`skills/auto-goo/templates/publish/workflow-shell.html` 是唯一运行时页面外壳，`skills/auto-goo/templates/publish/workflow-theme.css` 是唯一正式视觉主题；脚本填充标题、活动导航链接、正文、路径和交互脚本，并把主题复制到站点目录，禁止依赖发布后手工注入 CSS 或 `/tmp` 概念稿。正式主题采用紧凑工作台布局、浅色/暗色模式和页面语义色：计划/流程为蓝色、完成状态为绿色、代理执行为青色、头脑风暴为琥珀色、活动与归档为紫色、失败与风险为红色。默认生成总览、计划、活动、头脑风暴、运行状态、代理执行和产物归档页面，关键页面标签优先使用中文；桌面端固定左侧导航，移动端恢复自然滚动。Token 格子悬浮时显示消耗明细，点击或聚焦后由下方文本型工作流活动说明所选时间段实际完成的工作；活动记录列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情，但不发布 assistant 回复或完整对话正文。它会启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读取已生成的 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。发布 HTML 不替代 Goo-wiki 归档，也不得修改当前 plan 或 brainstorm。
+**Thread 一致性与锁**：从 brainstorm 生成 plan 时，必须校验 `brainstorm.thread.id == plan.thread.id`，并保持 `archive.task_archive_root` 一致。并发执行前必须使用 `skills/auto-goo/scripts/thread-locks.py` 检查资源冲突；写同一文件、同一 wiki 页面、同一端口或同一远程长任务资源时不得并行，冲突 step 标记 `blocked` 并前台询问用户。只读同一资源不冲突。
+
+**Web 修改请求**：`goo-publish --serve` 的 Web 表单只写 `.goo/change-requests/*.json`，不得直接改 plan、业务文件或 Goo-wiki。主 Agent 读取请求后，必须把用户修改点同步进 thread plan 或 context artifact，再派发模型修改和审计。修改完成后必须把对应请求状态更新为 `completed`；审计失败时改为 `needs_revision` 并记录原因。
+
+**同一任务归档根**：同一条任务链路的 brainstorm、plan 和 execution 知识归档默认放在同一个 `task_archive_root` 下，用子目录区分阶段：`brainstorm/` 保存候选目标、推荐顺序和选择依据；`plan/` 保存正式 DAG、上下文摘要和计划取舍；`execution/` 保存步骤证据、验证结果和最终经验。`task_archive_root` 优先位于 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-task-slug>/`；Goo-wiki 不可用时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/`。同一 thread 内 `.goo/threads/<thread_id>/brainstorm.json.archive.task_archive_root` 与 `.goo/threads/<thread_id>/plan.json.archive.task_archive_root` 必须保持一致，除非用户明确要求分开归档。注意：这不同于本地 JSON 历史快照；旧 `.goo/plan.json` 仍保存到 `.goo/plans/history/`，旧 `.goo/brainstorm.json` 保存到 `.goo/brainstorms/history/`。
+
+**HTML 发布层**：`/auto-goo:goo-publish` 是工作流展示层，无需运行 `goo-init` 或创建 `.goo/config.json`，默认从 `.goo/threads/`、`.goo/current_thread.json`、兼容 `.goo/brainstorm.json`、`.goo/plan.json`、历史快照、当前 thread logs/artifacts/reports、`.goo/change-requests/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/` 多页站点。`skills/auto-goo/templates/publish/workflow-shell.html` 是唯一运行时页面外壳，`skills/auto-goo/templates/publish/workflow-theme.css` 是唯一正式视觉主题；脚本填充标题、活动导航链接、正文、路径和交互脚本，并把主题复制到站点目录，禁止依赖发布后手工注入 CSS 或 `/tmp` 概念稿。正式主题采用紧凑工作台布局、浅色/暗色模式和页面语义色：计划/流程为蓝色、完成状态为绿色、代理执行为青色、头脑风暴为琥珀色、活动与归档为紫色、失败与风险为红色。默认生成总览、Threads、计划、活动、头脑风暴、运行状态、代理执行、产物归档和修改请求页面，关键页面标签优先使用中文；桌面端固定左侧导航，移动端恢复自然滚动。Token 格子悬浮时显示消耗明细，点击或聚焦后由下方文本型工作流活动说明所选时间段实际完成的工作；活动记录列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情，但不发布 assistant 回复或完整对话正文。它会启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读取已生成的 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。发布 HTML 不替代 Goo-wiki 归档，不直接修改业务文件、plan 或 brainstorm；Web 表单只允许新增 `.goo/change-requests/*.json`，后续由主 Agent 纳入 thread plan 并审计。
 
 **用户交互契约**：任何需要用户选择、确认、重试、跳过、合并、改写或授权的步骤，必须优先调用结构化选择 UI / `AskUserQuestion`，让 Claude Code 渲染可用方向键移动、Enter 确认的选择控件；不得在工具可用时用普通文本要求用户手打 `1/2`、ID 或命令参数。每个问题至少给 2 个显式选项，推荐项放第一项并标注 Recommended；多候选问题必须把候选 ID/编号放进选项说明。只有结构化选择 UI / `AskUserQuestion` 不可用、调用失败或按钮没有渲染时，才允许降级为纯文本编号列表，并明确这是 fallback。用户未明确选择前，不得用推荐项静默继续。
 
@@ -106,14 +112,15 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 
 ### 规划前现有 plan 检查
 
-每次进入 `/auto-goo:goo-plan`、`/auto-goo:goo-start` 中的自动规划阶段，或任何会写入新 `.goo/plan.json` 的流程前，必须先检查当前 `.goo/plan.json`：
+每次进入 `/auto-goo:goo-plan`、`/auto-goo:goo-start` 中的自动规划阶段，或任何会写入新 plan 的流程前，必须先检查 `.goo/current_thread.json` 指向的 thread plan 和兼容 `.goo/plan.json`：
 
-1. 如果 `.goo/plan.json` 不存在，正常生成新 plan。
+1. 如果当前 thread plan 和 `.goo/plan.json` 都不存在，正常生成新 plan。
 2. 如果存在旧 plan，读取 `steps[]` 和顶层 `status`，判断是否全部完成。只有所有 step 的 `status` 都是 `completed`，且顶层 `status` 为 `completed` 或可由 steps 推断为完成时，才允许直接归档旧 plan 并生成新 plan。
 3. 如果存在未完成 step，或顶层 `status` 是 `pending` / `running` / `blocked` / `paused` / `failed`，必须暂停规划，向用户展示未完成 step 数量和关键摘要，并询问用户选择：
-   - 修改当前 plan：把新需求合并进现有 `.goo/plan.json`，保留已完成步骤、日志、产物和执行证据。
-   - 新建 plan：先把旧 `.goo/plan.json` 原样归档到 `.goo/plans/history/`，再写新的当前 plan。
-4. 上述询问必须优先使用 `AskUserQuestion` / 结构化选择 UI 呈现；纯文本编号只作为交互控件不可用时的 fallback。用户未明确选择前，不得覆盖、归档或重写 `.goo/plan.json`。
+   - 新建 thread：创建 `.goo/threads/<thread_id>/`，新任务写入独立 plan/logs/artifacts，不覆盖当前执行现场。
+   - 继续当前 thread：把新需求合并进当前 thread 的 plan，保留已完成步骤、日志、产物和执行证据。
+   - 取消：不写入新计划。
+4. 上述询问必须优先使用 `AskUserQuestion` / 结构化选择 UI 呈现，并复用 `id=thread_action` 模板；纯文本编号只作为交互控件不可用时的 fallback。用户未明确选择前，不得覆盖、归档或重写当前 thread 的 plan。
 
 解析步骤：
 1. 识别输入形态 — 普通一句话、Markdown 任务包、已有 plan、issue/PR 描述、日志片段等要区别处理。
@@ -170,6 +177,13 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
   "created_at": "YYYY-MM-DDTHH-MM-SS",
   "started_at": null,
   "completed_at": null,
+  "runtime": {
+    "subagent_isolation": {
+      "mode": "worktree",
+      "checked_at": "YYYY-MM-DDTHH-MM-SS",
+      "reason": "git_head_available"
+    }
+  },
   "wiki_context": {
     "found": true,
     "sources": ["wiki/projects/<slug>/<note>.md"],
@@ -224,9 +238,9 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
       "status": "pending",
       "progress": 0,
       "output": "Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/",
-      "inputs": [".goo/plan.json", ".goo/logs/", "<上游产物路径>"],
+      "inputs": [".goo/threads/<thread_id>/plan.json", ".goo/threads/<thread_id>/logs/", "<上游产物路径>"],
       "outputs": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
-      "allowed_read_paths": [".goo/plan.json", ".goo/logs/", ".goo/artifacts/"],
+      "allowed_read_paths": [".goo/threads/<thread_id>/plan.json", ".goo/threads/<thread_id>/logs/", ".goo/threads/<thread_id>/artifacts/", ".goo/plan.json", ".goo/artifacts/"],
       "allowed_write_paths": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
       "validation": "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts 和关键概念/问题/指标/历史任务页；项目 <project-slug>.md 与 log.md 反向链接任务页；新增 concept/lessons/metrics 页也链接回任务页或项目入口；记录产物路径、验证结果和可复用经验",
       "risk_level": "low",
@@ -257,7 +271,7 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 
 ## Phase 2: 执行（槽位调度）
 
-**当前 `.goo/plan.json` 是唯一状态源**。派发、完成、失败均实时回写当前 plan。历史 plan 只归档在 `.goo/plans/history/`，不得作为恢复来源，除非用户明确指定。执行时不得依赖主会话隐含上下文；所有执行必需信息必须在当前 plan、引用的 Markdown/context artifact、wiki 摘要或上游产物中。
+**当前 thread plan 是执行状态源**。派发、完成、失败均实时回写 `.goo/threads/<thread_id>/plan.json` 或兼容 `.goo/plan.json`。历史 plan 只归档在 `.goo/plans/history/`，不得作为恢复来源，除非用户明确指定。执行时不得依赖主会话隐含上下文；所有执行必需信息必须在当前 plan、引用的 Markdown/context artifact、wiki 摘要或上游产物中。每次 `update-step.py` 或 `goo-status.py --update-status` 后，必须同步 thread metadata。
 
 **Brainstorm/Plan 审阅闸门**：执行调度开始前必须确认 `.goo/brainstorm.json` 和 `.goo/plan.json` 不是待审草案。若 `review.status="pending_user_review"`，先让用户审阅、修改或确认，并优先用结构化选项展示：`确认并继续`、`修改草案`、`停止/稍后再说`；不能自动归档或执行。用户确认后，如果 `.goo/brainstorm.json` 存在且未能证明已归档，再归档最终版 brainstorm，然后开始执行 plan steps。归档内容至少包括候选 goals、推荐顺序、用户最终选择、未选原因或合并依据、前置条件、ready checklist、关键 wiki 证据，以及该 brainstorm 如何转成当前 `.goo/plan.json`；归档完成后回写 `archive.status="completed"`、`archive.task_archive_root`、`archive.brainstorm_dir`、fallback 状态和 `log.md` 更新状态。若当前 plan 已有 `archive.task_archive_root`，brainstorm 必须补写到同一个 root 的 `brainstorm/` 子目录；若没有，则创建 root 并同步写回 plan 与 brainstorm。
 
@@ -269,7 +283,7 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 
 **Subagent 缺失处理**：如果步骤的 `subagent` 字段缺失或不属于合法角色，先补 plan 或创建新的 Subagent 角色，不由主 Agent 降级代执行。
 
-**Subagent 上下文隔离**：每个 Subagent 默认只拿当前 step、必要项目约束、相关 wiki_context 摘要、上游产物路径、允许读写边界和回写要求。Subagent 之间通过 `.goo/plan.json`、`.goo/logs/`、`.goo/artifacts/` 和产物路径交接，不共享完整会话历史或彼此的推理草稿。
+**Subagent 上下文隔离**：每个 Subagent 默认只拿当前 step、必要项目约束、相关 wiki_context 摘要、上游产物路径、允许读写边界和回写要求。Subagent 之间通过当前 thread 的 `plan.json`、`logs/`、`artifacts/` 和产物路径交接，不共享完整会话历史或彼此的推理草稿。
 
 **Subagent 显式分工**：每个 step 必须包含 `subagent` 和 `task_agent` 字段。`subagent` 只允许稳定 Role Agent：`researcher`、`implementer`、`optimizer`、`evaluator`、`reviewer`、`auditor`、`recorder`；`task_agent` 必须从对应 role 的 `agents/tasks/` 目录下选择，例如 `document-analyst`、`feature-builder`、`test-runner`、`code-reviewer`、`evidence-auditor`、`wiki-curator`。调度时先按 `subagent` 选择 role prompt，再按 `task_agent` 叠加细分任务 prompt。若缺失或不合法，先补 plan 或创建新角色/任务画像，不由主 Agent 代执行。
 
@@ -395,7 +409,7 @@ Subagent prompt 模板（exec / optimize / eval 三种变体）、上下文传�
 - 归档路径：优先使用项目 config 中的 `archive.project_dir`，即 `Goo-wiki/wiki/projects/<project-slug>/`；fallback 使用 `archive.fallback_project_dir`
 - 内容输出类命令即使不进入完整执行 DAG，也必须归档到 Goo-wiki 或 fallback。适用范围包括 brainstorm 候选 goals、usage/token 降本分析、日报/周报、改进建议、benchmark 指标、plan 摘要和执行经验；不得只写 `.goo/*.json` 或只在聊天中展示。
 - 内容输出对应的 `.goo/*.json` 产物应包含 `archive` 字段，记录归档路径、fallback 状态和 `log.md` 是否更新。
-- 如果 Goo-wiki vault 不存在且 `.goo/obsidian/` 也不必要（临时项目），跳过归档，仅保留 `.goo/logs/` 日志
+- 如果 Goo-wiki vault 不存在且 `.goo/obsidian/` 也不必要（临时项目），跳过归档，仅保留当前 thread 的 `logs/` 日志
 - 如果项目是 Git repo，归档到项目页或任务总览时必须记录 git remote 地址；优先使用 `.goo/config.json.archive.git_remote_url`
 - 归档必须维护 Markdown 关联图谱：写入前检索相关项目页、概念页、问题页、周报、历史任务页和 `context_artifacts`；写入任务页时添加高价值 `[[Wikilink]]`；写入后更新项目入口 `<project-slug>.md`（维护 `## 最近任务`、`## 可复用经验`、`## 代码结构` 等小节的双向链接）和 `log.md`，避免新页面孤立
 - 归档 step 的完成条件必须包含链接验收：任务页链接项目入口、复用的 `wiki_context` / `context_artifacts` 和关键概念/问题/指标/历史任务页；项目 `<project-slug>.md` 的 `## 最近任务` 包含本次任务页链接，`## 可复用经验` 和 `## 代码结构` 按需更新；`log.md` 反向链接任务页；新增 lessons/metrics 页面链接回任务页或项目入口。缺少这些连接时不得把 archive step 标记为 completed。

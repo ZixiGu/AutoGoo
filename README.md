@@ -1,7 +1,7 @@
 # AutoGoo
 
 ![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)
-![Version](https://img.shields.io/badge/version-0.3.4-green)
+![Version](https://img.shields.io/badge/version-0.3.5-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行计划、并行调用 subagent、记录运行状态，并把结果同步到 Goo-wiki / Obsidian。
@@ -12,7 +12,7 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 
 - 复杂任务需要先规划、再执行、再验收。
 - 多个独立步骤可以并行交给 subagent。
-- 需要在 `.goo/plan.json` 中保留清晰状态和续跑入口。
+- 需要用 thread 隔离多条任务线，并在 plan 中保留清晰状态和续跑入口。
 - 需要把研究、日报、周报、用量分析或 HTML 产物归档到 Goo-wiki。
 - 需要固定交互模板，减少临时口头确认。
 
@@ -57,7 +57,7 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 常见节奏：
 
 1. `goo-init` 创建用户级或项目级配置。
-2. `goo-plan` 生成计划，必要时等待用户确认。
+2. `goo-plan` 自动询问继续当前 thread 还是新建 thread，并生成计划。
 3. `goo-start` 执行已确认计划。
 4. `goo-status` 查看状态、日志和阻塞项。
 5. `goo-continue` 从当前状态续跑。
@@ -81,12 +81,14 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 
 ## 核心约定
 
-- **计划状态**：`.goo/plan.json` 是任务执行的源头，步骤状态包括 `pending`、`in_progress`、`completed`、`blocked`、`failed`。
+- **Thread 状态**：每条任务线保存在 `.goo/threads/<thread_id>/`；兼容入口 `.goo/plan.json` 指向当前 thread 的 active plan。
+- **计划状态**：plan 是任务执行的源头，步骤状态包括 `pending`、`running`、`completed`、`blocked`、`failed`。
 - **用户确认**：涉及范围、方案、优先级或不可自动决定的选项时，优先用 `AskUserQuestion` 的固定选项模板。
 - **并行执行**：同层级且互不依赖的步骤会优先并行；串行依赖需要在计划里写明原因。
-- **日志记录**：subagent 的过程信息写入 `.goo/logs/`，前台只展示摘要、阻塞和下一步。
+- **日志记录**：subagent 的过程信息写入当前 thread 的 `logs/`，前台只展示摘要、阻塞和下一步。
 - **归档记忆**：默认写入 Goo-wiki；没有配置时回退到 `.goo/obsidian/`。
 - **安全边界**：敏感信息放在 `.goo/secrets.json` 或 `~/.auto-goo/secrets.json`，不要写入计划、日志或 HTML 发布页。
+- **Web 修改请求**：`goo-publish --serve` 可在网页提交修改请求，落盘到 `.goo/change-requests/`，由 AutoGoo 后续读取并让模型修改、审计。
 
 ## 配置
 
@@ -124,6 +126,10 @@ AutoGoo/
 
 ```text
 .goo/
+├── current_thread.json
+├── threads/
+├── change-requests/
+├── locks/
 ├── plan.json
 ├── config.json
 ├── logs/
@@ -166,7 +172,7 @@ bash skills/auto-goo/scripts/check-plugin.sh
 
 ## 版本
 
-当前版本：**v0.3.4**。
+当前版本：**v0.3.5**。
 
 ## 许可证
 
