@@ -381,8 +381,8 @@ DAG 结构总结：
 输出要求：
 - 覆盖 `.goo/plan.json` 前，先把旧 plan 原样复制到 `.goo/plans/history/`
 - 写入 `.goo/plan.json`
-- 写入 `review.status="pending_user_review"`，并展示简洁计划摘要、并行组、关键风险和需要用户确认的点
-- 计划审阅消息必须优先使用结构化选项：`确认计划`、`修改计划`、`拆分/合并步骤`、`回到 brainstorm`；纯文本编号只作为交互控件不可用时的 fallback
+- 写入 `review.status="pending_user_review"`，并先用普通聊天正文展示简洁计划摘要、目标/交付物、DAG 步骤概览、并行组、必要串行链、关键风险和需要用户确认的点
+- 计划审阅必须分两步完成：先展示用户可直接阅读的计划概述，再实际调用 `AskUserQuestion` / 结构化选择 UI，选项为 `确认计划`、`修改计划`、`拆分/合并步骤`、`回到 brainstorm`；不得在没有计划概述的情况下直接弹出结构化审阅控件，也不得在未尝试调用 `AskUserQuestion` 时直接输出纯文本编号列表；纯文本编号只作为实际调用失败或按钮未渲染后的 fallback
 - 填充 `wiki_context`
 - 填充 `goals[]`；单目标任务也写一个默认 goal，多目标任务必须为每个交付目标写清验收标准和产物
 - 每个步骤包含 `output`，便于后续恢复和验收

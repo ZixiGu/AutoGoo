@@ -432,17 +432,17 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
 
 | 里程碑 | `--progress` | 时机 |
 |--------|-------------|------|
-| 启动 | `5` | **第一步**，读输入之前 |
+| 派发前启动 | `5` | 主 Agent 在启动本 Subagent 前写入；Subagent 发现缺失时才补救 |
 | 理解上下文 | `15` | 读完输入、wiki、上游产物后 |
 | 核心过半 | `50` | 主要逻辑/实现过半时 |
 | 产物接近完成 | `85` | 写完输出、自查前 |
 | 完成/失败 | `100` + `--complete` 或 `--fail` | 最终状态 |
 
-**启动和完成必须分别用 `--start --progress 5` 和 `--complete`，中间里程碑用 `--heartbeat --progress <N>`。**
+**主 Agent 已在派发前用 `--start --progress 5` 写入启动心跳。Subagent 不要重复调用 `--start`；只有发现当前 step 仍不是 running 或没有 `heartbeat_at` 时，才用 `--start --progress 5` 补救。中间里程碑用 `--heartbeat --progress <N>`，完成用 `--complete`。**
 
 ## 交付要求
 1. 在 {cwd} 目录下工作
-2. **第一步**：调用 `update-step.py --start --progress 5`
+2. 读取当前 step 状态；若主 Agent 已写入 `status=running` 和 `heartbeat_at`，直接开始输入读取；若缺失，先调用 `update-step.py --start --progress 5` 补救并记录原因
 3. `update-step.py` 会自动创建并追加当前 thread 的 `logs/{timestamp}_step-{id}_{name}.md`，并把 `log_path` 写回当前 step
 4. **每到一个里程碑**调用 `update-step.py --heartbeat --progress <N> --note "<短进展>"`（见上方 Heartbeat 表）
 5. 执行实现后用 `--note` 补充：关键决策、输出产物路径、耗时
@@ -522,7 +522,8 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
        → 检查 step.subagent 是否合法
          → 合法: 按 step.subagent 读取 agents/roles/<role>.md，再按 step.task_agent 读取 agents/tasks/<department>/<task>.md，合成 Subagent Prompt 后启动 Agent (run_in_background；按 runtime.subagent_isolation.mode 决定是否传 isolation="worktree")
          → subagent 或 task_agent 不合法/缺失: 暂停派发，先修正 plan 或创建新角色/任务画像
-       → 更新 plan.json: status="running", started_at=now
+       → 主 Agent 调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入 status、started_at、首个 heartbeat_at 和 step log
+       → 调用 `goo-status.py --update-status` 后运行 `goo-status.py`，向用户展示 RUNNING 心跳摘要
        → 等待 3-5s（错峰）
        → running.append(step)
 
@@ -530,10 +531,12 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
      → 任一 agent 完成 → 从 running 移除
      → 回写 plan.json: status="completed"/"failed"
      → 写入 .goo/logs/
+     → 运行 `goo-status.py`，向用户展示最新完成/告警/下一步摘要
      → 立即回到步骤 1（刚完成步骤的下游可能已就绪）
 
   4. 心跳巡检（每 30s）
      → 检查 running 中每个 agent 的 heartbeat_at
+     → 运行 `goo-status.py`，把 RUNNING 行中的 progress、hb age、log 摘要展示给用户；不得只在后台静默检查
      → 超时 >= heartbeat_timeout_min（默认 15min）→ 标记 failed，释放槽位
 ```
 
@@ -545,17 +548,19 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
 
 ### 心跳规则
 
-- Agent 启动后立即写第一次 heartbeat_at + progress=5
-- 之后每 30 秒更新：`heartbeat_at` + **`progress` (0-100)**
+- 主 Agent 派发前先写第一次 heartbeat_at + progress=5；这一步必须用 `update-step.py --start --progress 5 --agent-id <agent>` 完成
+- Subagent 启动后不要重复 `--start`；从读输入完成开始按里程碑继续更新 `heartbeat_at` + **`progress` (0-100)**
 - 进度估算：agent 在任务开头拆 3-5 个里程碑，每过一个里程碑更新进度
 - 心跳通过解析后的 `auto_goo_root` 调用 `skills/auto-goo/scripts/update-step.py` 更新 plan.json，不要手写临时 JSON 修改代码；`auto_goo_root` 只能来自 Claude Code 安装记录
+- 心跳必须前台可见：主 Agent 每次派发批次后、每轮 30s 巡检后、任一 Agent 完成后都运行 `goo-status.py`，至少展示 RUNNING 和 WARNINGS 摘要
 
 ### 进度判断
 
 | progress 状态 | 判断 |
 |---------------|------|
 | 0 | 刚启动，尚未开始实质工作 |
-| 5-25 | 读输入、理解上下文阶段 |
+| 5 | 主 Agent 已派发，Agent 可能刚启动 |
+| 15-25 | 读输入、理解上下文阶段 |
 | 30-70 | 核心实现阶段 |
 | 75-95 | 收尾、自查、写日志 |
 | 100 | 完成（与 status=completed 同步） |

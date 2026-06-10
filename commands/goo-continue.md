@@ -86,7 +86,7 @@ test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 9. 检查 `available_skills`；缺失时可补为空数组，包含不存在或无关 skill 时先修正 plan
 10. 为每个待执行 step 构造 Subagent prompt，包含 `available_skills` 作为 skill allowlist，并**必须包含 `references/execution-engine.md` 中对应类型的 Heartbeat 强制分段**
 11. 恢复执行时只检查一次当前目录是否是 Git repo 且 `HEAD` 可解析；如果 plan 顶层已有 `runtime.subagent_isolation.mode`，默认复用该缓存，不再重复检查。缓存缺失或用户明确切换执行目录时，才重新计算并写回 `runtime.subagent_isolation`。只有 `mode="worktree"` 时，后续 Agent tool 才允许传 `isolation: "worktree"`；`mode="none"` 时必须省略 `isolation` 参数，并在 prompt 中说明当前项目无可用 worktree 隔离、不得执行破坏性操作、只能写 `allowed_write_paths`。不得因 `Failed to resolve base branch "HEAD"` 阻塞 workflow 或降级主 Agent 代做。
-12. 按 tier 分组，同 tier 内并行派发给对应 Subagent。**每次 step 状态变更后立即调用 `goo-status.py --update-status`**
+12. 按 tier 分组，同 tier 内并行派发给对应 Subagent。派发每个 Subagent 前，主 Agent 必须先调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入首个 `heartbeat_at`，再启动 Agent；Subagent 继续按 Heartbeat 强制分段写 15/50/85/complete。**每次 step 状态变更后立即调用 `goo-status.py --update-status`**。每次派发批次后、每轮 30s 心跳巡检后，以及任一 Agent 完成后，主 Agent 必须运行 `goo-status.py` 并把 RUNNING/告警摘要展示给用户，避免心跳只存在于 plan 文件里但前台不可见。
 13. 按 AutoGoo 标准执行流程继续（Phase 2-4）
 
 ## 示例

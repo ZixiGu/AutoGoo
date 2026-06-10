@@ -1,7 +1,7 @@
 # AutoGoo
 
 ![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)
-![Version](https://img.shields.io/badge/version-0.3.5-green)
+![Version](https://img.shields.io/badge/version-0.3.6-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行计划、并行调用 subagent、记录运行状态，并把结果同步到 Goo-wiki / Obsidian。
@@ -172,7 +172,7 @@ bash skills/auto-goo/scripts/check-plugin.sh
 
 ## 版本
 
-当前版本：**v0.3.5**。
+当前版本：**v0.3.6**。
 
 ## 许可证
 

@@ -1,7 +1,7 @@
 ---
 name: goo-workflow
 description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', '/auto-goo:goo-publish', 'brainstorm', '找目标', '开始任务', 'run:', '读论文', '论文', 'paper', '日报', '周报', 'usage', 'token统计', 'token降本', '发布HTML', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status, HTML publishing, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion tools."
-version: 0.3.5
+version: 0.3.6
 tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 ---
 
@@ -294,22 +294,23 @@ MAX_CONCURRENT = 6 (plan.json 顶层可覆盖)
 
 主循环:
   1. 扫描 status=pending 且 depends_on 全 completed → 按优先级排序 → 入队
-  2. 填充空槽位 (间隔 3-5s 错峰)，派发前调用 `goo-status.py --update-status`
-  3. 等待任一 agent 完成 → 回写 plan.json → 调用 `goo-status.py --update-status` → 立即回到步骤 1
-  4. 心跳巡检每 30s → 超时无心跳标记 failed → 调用 `goo-status.py --update-status` → 释放槽位
-  5. 所有 step 完成或失败 → 调用 `goo-status.py --update-status` 做最终状态同步
+  2. 填充空槽位 (间隔 3-5s 错峰)：派发每个 Subagent 前先调用 `update-step.py --start --progress 5 --agent-id <agent>` 写首个 heartbeat，再调用 `goo-status.py --update-status`
+  3. 派发批次后运行 `goo-status.py`，把 RUNNING 行的 progress、hb age、log 摘要展示给用户
+  4. 等待任一 agent 完成 → 回写 plan.json → 调用 `goo-status.py --update-status` → 运行 `goo-status.py` 展示完成/告警摘要 → 立即回到步骤 1
+  5. 心跳巡检每 30s → 运行 `goo-status.py` 展示 RUNNING/告警摘要 → 超时无心跳标记 failed → 调用 `goo-status.py --update-status` → 释放槽位
+  6. 所有 step 完成或失败 → 调用 `goo-status.py --update-status` 做最终状态同步
 ```
 
 ### 心跳与进度（强制）
 
 **主 Agent 派发 Subagent 时，prompt 必须包含 `references/execution-engine.md` 中对应类型的 Heartbeat 分段。** 不包含心跳指令会导致 Subagent 不更新 `heartbeat_at`，被误判为僵尸进程。
 
-**Subagent 必须在以下里程碑调用 `update-step.py --heartbeat --progress <N>`**（非时间驱动，是进度驱动）：
+**主 Agent 负责写首个 heartbeat，Subagent 负责后续里程碑 heartbeat**（非时间驱动，是进度驱动）：
 
 | 里程碑 | progress | 命令 |
 |--------|----------|------|
-| 启动 | 5 | `--start --progress 5` |
-| 读输入完成 | 15 | `--heartbeat --progress 15` |
+| 派发前启动 | 5 | 主 Agent 调用 `--start --progress 5 --agent-id <agent>` |
+| 读输入完成 | 15 | Subagent 调用 `--heartbeat --progress 15` |
 | 核心过半 | 50 | `--heartbeat --progress 50` |
 | 产物接近完成 | 85 | `--heartbeat --progress 85` |
 | 完成 | 100 | `--complete` |
@@ -318,6 +319,8 @@ MAX_CONCURRENT = 6 (plan.json 顶层可覆盖)
 先从 Claude Code 安装记录解析 AutoGoo 根目录；不要读取环境变量，也不要自动搜索插件目录。不要在 skill 文档中内联 heredoc / file redirection 的 Python 片段；需要回写 step 时，使用插件内置 `skills/auto-goo/scripts/resolve-root.sh` 或同等无 heredoc 封装来定位 root，再调用 `update-step.py`。
 
 `/auto-goo:goo-status` 必须调用 `skills/auto-goo/scripts/goo-status.py` 渲染进度条和心跳告警。
+
+执行中 heartbeat 必须前台可见：主 Agent 每次派发批次后、每轮 30s 巡检后、任一 Agent 完成后都要运行 `goo-status.py`，并把 RUNNING/告警摘要展示给用户；不要只把 heartbeat 写进 plan 而不展示。
 
 ### 失败处理
 

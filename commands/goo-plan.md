@@ -23,7 +23,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 12. **Thread 落盘** — 用户选择新建 thread 时，创建 `.goo/threads/<thread_id>/thread.json`、`plan.json`、`logs/`、`artifacts/`，更新 `.goo/threads/index.json` 和 `.goo/current_thread.json`；用户选择继续当前 thread 时，更新该 thread 的 plan。
 13. **历史计划归档** — 如果要替换当前 thread 的已有 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`；不得静默覆盖未完成 plan。
 14. **计划落盘** — 输出或更新当前 thread 的 `plan.json`，并把 `thread.id` 写入 plan；兼容路径 `.goo/plan.json` 可指向或复制当前 thread 的 active plan，标记为待用户审阅。
-15. **等待确认** — 向用户展示 thread id、计划摘要、并行组、主要风险和需要确认的点，并优先用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。用户确认前不要归档 plan 摘要。
+15. **等待确认** — 先发送一条普通可读消息展示 thread id、计划摘要、目标/交付物、DAG 步骤概览、并行组、必要串行链、主要风险和需要确认的点；确认用户已经能在聊天正文看到计划概述后，必须实际调用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。不得只显示结构化审阅控件，也不得在未尝试调用 `AskUserQuestion` 时直接输出纯文本 fallback。用户确认前不要归档 plan 摘要。
 16. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
 
 ## 现有 plan 冲突处理
@@ -180,7 +180,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - `steps` 最后必须包含 Wiki 归档任务，默认名称为 `归档到 Goo-wiki`，依赖所有非归档叶子步骤
 - 初次 plan-only 只写入 archive step，不执行归档；计划摘要归档要等用户确认计划后再做
 - 如果没有找到相关 wiki 经验，写入 `wiki_context.found=false`
-- 最终向用户展示简洁计划摘要、并行组、必要串行链及主要风险
+- 最终必须先向用户发送简洁计划摘要、目标/交付物、DAG 步骤概览、并行组、必要串行链及主要风险；随后再展示计划审阅提问
 
 ## 下一步
 
@@ -194,14 +194,19 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 
 ## 计划审阅提问格式
 
-生成或更新 `.goo/plan.json` 后，必须优先用 `AskUserQuestion` / 结构化选择 UI 收尾，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=plan_review` 的 JSON 模板。修改要求、拆分/合并说明通过 Other 输入，输入后必须同步进 plan 或再次展示审阅。选项为：
+生成或更新 `.goo/plan.json` 后，必须分两步收尾：
+
+1. **先展示计划概述**：用普通聊天正文展示可读摘要，至少包含 thread id、`review.summary`、goals/交付物、按 step id/name/tier 摘要的 DAG、并行组、必要串行链及原因、主要风险、需要用户确认的点。不要把这些信息只写进 `.goo/plan.json` 或隐藏在工具调用结果里。
+2. **再发起审阅提问**：计划概述发出后，必须实际调用 `AskUserQuestion` / 结构化选择 UI，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=plan_review` 的 JSON 模板。不要把模板选项改写成普通编号列表。
+
+不得在没有先展示计划概述的情况下直接调用 `AskUserQuestion`；也不得在没有尝试调用 `AskUserQuestion` 的情况下直接使用纯文本 fallback。修改要求、拆分/合并说明通过 Other 输入，输入后必须同步进 plan 或再次展示审阅。选项为：
 
 - 确认计划
 - 修改计划
 - 拆分/合并步骤
 - 回到 brainstorm
 
-如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
+只有在实际调用 `AskUserQuestion` 后确认结构化选择 UI 不可用、调用失败或按钮没有渲染，才使用以下纯文本 fallback；fallback 前必须说明“结构化选择 UI 未渲染，改用文本 fallback”：
 
 ```text
 请审阅计划：
