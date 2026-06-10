@@ -1,11 +1,19 @@
 ---
 name: auto-goo:goo-status
-description: 显示当前 AutoGoo 任务执行进度 — 读取 .goo/plan.json 渲染简洁仪表盘
+description: 显示当前 AutoGoo 任务执行进度 — 优先读取当前 thread plan 渲染简洁仪表盘
 ---
 
 # /auto-goo:goo-status — 执行仪表盘
 
-以 plan.json 为数据源，渲染简洁终端仪表盘。**少字，多看。**
+以 plan.json 或 thread 为数据源，渲染简洁终端仪表盘。**少字，多看。**
+
+如果用户说“查看所有任务线 / threads / 多个 plan 状态”，运行：
+
+```bash
+python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --threads
+```
+
+如果用户指定 thread id，读取 `.goo/threads/<thread_id>/plan.json`；没有指定时优先读取 `.goo/current_thread.json` 指向的 thread plan，缺失时回退 `.goo/plan.json`。
 
 必须优先运行插件脚本，而不是手写临时渲染逻辑：
 
@@ -62,10 +70,10 @@ if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo
   echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
-python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.json
+	python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py"
 ```
 
-如果 `.goo/plan.json` 中的 running step 没有更新 `heartbeat_at` 或 `progress`，必须显示告警；不要假装仍在正常执行。脚本还会检查 `.goo/logs/` 和 step log：running / blocked / failed 缺少对应日志是告警，completed 缺少日志只作为留痕提示。
+如果当前 thread plan 或兼容 `.goo/plan.json` 中的 running step 没有更新 `heartbeat_at` 或 `progress`，必须显示告警；不要假装仍在正常执行。脚本还会检查当前 thread 的 `logs/`（兼容 `.goo/logs/`）和 step log：running / blocked / failed 缺少对应日志是告警，completed 缺少日志只作为留痕提示。
 
 ## 信息密度原则
 
@@ -160,7 +168,7 @@ status=completed 的步骤，紧凑横排，展示最近 6 个，多个用 `·` 
 
 ### 留痕提示
 
-只在 `.goo/logs/` 缺失或 completed step 找不到日志时显示，不改变 `Next:` 判断。
+只在当前 thread `logs/` 缺失、兼容 `.goo/logs/` 缺失或 completed step 找不到日志时显示，不改变 `Next:` 判断。
 
 ## 示例
 

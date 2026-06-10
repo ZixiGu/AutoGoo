@@ -1,6 +1,6 @@
 #!/bin/bash
 # AutoGoo: 初始化 plan.json 模板
-# Usage: ./scripts/init-plan.sh "<task_description>" [step_count] [--force-new-plan]
+# Usage: ./scripts/init-plan.sh "<task_description>" [step_count] [--force-new-plan] [--new-thread|--thread-id <id>]
 #   step_count: 非归档步骤数量，默认 1；脚本会自动追加最后的 Wiki 归档步骤
 #   --force-new-plan: 当前 plan 未完成时仍归档旧 plan 并新建
 
@@ -58,6 +58,81 @@ def archive_existing_plan(plan_file: Path, history_dir: Path) -> Path | None:
         index += 1
     shutil.copy2(plan_file, archive_file)
     return archive_file
+
+
+def slugify(value: str, limit: int = 42) -> str:
+    import re
+
+    text = value.strip().lower()
+    text = re.sub(r"[^\w.\-]+", "-", text, flags=re.UNICODE)
+    text = re.sub(r"-{2,}", "-", text).strip("-_.")
+    return (text or "thread")[:limit].strip("-_.") or "thread"
+
+
+def thread_id_for(task: str, goo_dir: Path) -> str:
+    base = f"tg-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{slugify(task)}"
+    candidate = base
+    index = 1
+    while (goo_dir / "threads" / candidate).exists():
+        index += 1
+        candidate = f"{base}-{index}"
+    return candidate
+
+
+def dump_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def read_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
+    if not path.exists():
+        return default
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_thread_meta(goo_dir: Path, thread_id: str, task: str, status: str = "planning") -> dict[str, Any]:
+    stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    thread_dir = goo_dir / "threads" / thread_id
+    for child in ("logs", "artifacts", "reports"):
+        (thread_dir / child).mkdir(parents=True, exist_ok=True)
+    meta_path = thread_dir / "thread.json"
+    existing = read_json(meta_path, {})
+    meta = {
+        "id": thread_id,
+        "title": existing.get("title") or task,
+        "status": status,
+        "runtime": existing.get("runtime") or "claude-code",
+        "created_at": existing.get("created_at") or stamp,
+        "updated_at": stamp,
+        "active_plan": "plan.json",
+        "plan_path": f".goo/threads/{thread_id}/plan.json",
+        "brainstorm_path": f".goo/threads/{thread_id}/brainstorm.json",
+        "logs_dir": f".goo/threads/{thread_id}/logs",
+        "artifacts_dir": f".goo/threads/{thread_id}/artifacts",
+        "reports_dir": f".goo/threads/{thread_id}/reports",
+        "archive": existing.get("archive", {}),
+    }
+    dump_json(meta_path, meta)
+    index_path = goo_dir / "threads" / "index.json"
+    index = read_json(index_path, {"threads": []})
+    threads = [item for item in index.get("threads", []) if isinstance(item, dict) and item.get("id") != thread_id]
+    threads.insert(
+        0,
+        {
+            "id": thread_id,
+            "title": meta["title"],
+            "status": meta["status"],
+            "plan_path": meta["plan_path"],
+            "created_at": meta["created_at"],
+            "updated_at": meta["updated_at"],
+        },
+    )
+    index["threads"] = threads
+    dump_json(index_path, index)
+    dump_json(goo_dir / "current_thread.json", {"thread_id": thread_id, "updated_at": stamp})
+    return meta
 
 
 def status_of(step: dict[str, Any]) -> str:
@@ -157,6 +232,8 @@ def main() -> int:
         action="store_true",
         help="archive an unfinished current plan and create a new one",
     )
+    parser.add_argument("--new-thread", action="store_true", help="create a new AutoGoo thread for this plan")
+    parser.add_argument("--thread-id", help="write the plan into an existing or explicit thread id")
     args = parser.parse_args(sys.argv[1:])
 
     task = args.task
@@ -169,7 +246,14 @@ def main() -> int:
 
     root = project_root()
     goo_dir = root / ".goo"
-    plan_file = goo_dir / "plan.json"
+    thread_id = args.thread_id
+    if args.new_thread:
+        thread_id = thread_id_for(task, goo_dir)
+    if thread_id:
+        write_thread_meta(goo_dir, thread_id, task)
+        plan_file = goo_dir / "threads" / thread_id / "plan.json"
+    else:
+        plan_file = goo_dir / "plan.json"
     history_dir = goo_dir / "plans" / "history"
     goo_dir.mkdir(parents=True, exist_ok=True)
 
@@ -181,6 +265,16 @@ def main() -> int:
     steps = [make_step(i) for i in range(1, count + 1)]
     archive_id = count + 1
     archive_output = ".goo/obsidian/<project-slug>/"
+    if thread_id:
+        archive_read_paths = [
+            f".goo/threads/{thread_id}/plan.json",
+            f".goo/threads/{thread_id}/logs/",
+            f".goo/threads/{thread_id}/artifacts/",
+            ".goo/plan.json",
+            ".goo/artifacts/",
+        ]
+    else:
+        archive_read_paths = [".goo/plan.json", ".goo/logs/", ".goo/artifacts/"]
     steps.append(
         {
             "id": archive_id,
@@ -203,7 +297,7 @@ def main() -> int:
             "output": archive_output,
             "inputs": [step["output"] for step in steps],
             "outputs": [archive_output],
-            "allowed_read_paths": [".goo/plan.json", ".goo/logs/", ".goo/artifacts/"],
+            "allowed_read_paths": archive_read_paths,
             "allowed_write_paths": [".goo/obsidian/"],
             "validation": (
                 "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts "
@@ -234,6 +328,18 @@ def main() -> int:
             }
         ],
         "status": "pending",
+        "thread": (
+            {
+                "id": thread_id,
+                "title": task,
+                "status": "planning",
+                "plan_path": f".goo/threads/{thread_id}/plan.json",
+                "logs_dir": f".goo/threads/{thread_id}/logs",
+                "artifacts_dir": f".goo/threads/{thread_id}/artifacts",
+            }
+            if thread_id
+            else None
+        ),
         "created_at": timestamp(),
         "started_at": None,
         "completed_at": None,
@@ -255,8 +361,18 @@ def main() -> int:
         "steps": steps,
     }
 
+    if plan["thread"] is None:
+        del plan["thread"]
+
+    plan_file.parent.mkdir(parents=True, exist_ok=True)
     plan_file.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if thread_id:
+        compatibility_plan = goo_dir / "plan.json"
+        if compatibility_plan != plan_file:
+            compatibility_plan.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"✓ plan.json created at {plan_file} ({count} steps + wiki archive)")
+    if thread_id:
+        print(f"✓ thread id: {thread_id}")
     return 0
 
 

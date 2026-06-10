@@ -276,6 +276,50 @@
 
 ```json
 {
+  "header": "任务线",
+  "id": "thread_action",
+  "question": "检测到当前 thread 或 plan 还未完成。请选择本次任务归属。",
+  "options": [
+    {
+      "label": "新建 thread (Recommended)",
+      "description": "为新任务创建独立 thread_id、plan、logs 和 artifacts，不覆盖当前执行现场。"
+    },
+    {
+      "label": "继续当前 thread",
+      "description": "把新需求合并到当前 thread 的 plan，保留已有步骤、日志和产物。"
+    },
+    {
+      "label": "取消",
+      "description": "保留当前 thread 和 plan，不写入新计划。"
+    }
+  ]
+}
+```
+
+```json
+{
+  "header": "Thread 选择",
+  "id": "thread_select",
+  "question": "请选择要查看或继续的 AutoGoo thread。",
+  "options": [
+    {
+      "label": "当前 thread <thread_id> (Recommended)",
+      "description": "使用 .goo/current_thread.json 中记录的 thread；把实际 thread_id 写入 <thread_id>。"
+    },
+    {
+      "label": "选择其他 thread",
+      "description": "通过 Other 输入 thread_id；必须能在 .goo/threads/index.json 中匹配。"
+    },
+    {
+      "label": "查看全部 threads",
+      "description": "运行 goo-status --threads 后再选择。"
+    }
+  ]
+}
+```
+
+```json
+{
   "header": "现有计划",
   "id": "existing_plan_action",
   "question": "当前 .goo/plan.json 还未完成。请选择处理方式。",

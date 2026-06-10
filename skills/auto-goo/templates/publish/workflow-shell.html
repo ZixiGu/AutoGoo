@@ -393,7 +393,7 @@ code {
   gap: 18px;
 }
 .overview-flow .flow-scroll {
-  overflow-x: auto;
+  overflow: hidden;
 }
 .overview-lower {
   display: grid;
@@ -605,7 +605,8 @@ code {
 .tag.ok { color: #1a7f37; background: #dafbe1; }
 .tag.warn { color: #9a6700; background: #fff8c5; }
 .tag.danger { color: #cf222e; background: #ffebe9; }
-.table-scroll, .flow-scroll { overflow-x: auto; }
+.table-scroll { overflow-x: auto; }
+.flow-scroll { overflow: hidden; }
 .workflow-table {
   width: 100%;
   min-width: 760px;
@@ -1113,7 +1114,7 @@ code {
   </style>
   <link rel="stylesheet" href="workflow-theme.css">
 </head>
-<body data-page="{{ACTIVE_PAGE}}">
+<body class="pixel-theme" data-page="{{ACTIVE_PAGE}}">
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
@@ -1126,11 +1127,13 @@ code {
       <div class="nav-section">
         <div class="nav-label">工作区</div>
         <a class="{{NAV_INDEX_CLASS}}" href="{{NAV_INDEX_HREF}}"><span class="nav-icon"></span><span class="nav-text">总览</span></a>
+        <a class="{{NAV_THREADS_CLASS}}" href="{{NAV_THREADS_HREF}}"><span class="nav-icon"></span><span class="nav-text">Threads</span></a>
         <a class="{{NAV_BRAINSTORM_CLASS}}" href="{{NAV_BRAINSTORM_HREF}}"><span class="nav-icon"></span><span class="nav-text">头脑风暴</span></a>
         <a class="{{NAV_PLAN_CLASS}}" href="{{NAV_PLAN_HREF}}"><span class="nav-icon"></span><span class="nav-text">计划</span></a>
         <a class="{{NAV_STATUS_CLASS}}" href="{{NAV_STATUS_HREF}}"><span class="nav-icon"></span><span class="nav-text">运行状态</span><span class="nav-badge live">实时</span></a>
         <a class="{{NAV_SUBAGENTS_CLASS}}" href="{{NAV_SUBAGENTS_HREF}}"><span class="nav-icon"></span><span class="nav-text">代理执行</span></a>
         <a class="{{NAV_ARTIFACTS_CLASS}}" href="{{NAV_ARTIFACTS_HREF}}"><span class="nav-icon"></span><span class="nav-text">产物归档</span></a>
+        <a class="{{NAV_REQUESTS_CLASS}}" href="{{NAV_REQUESTS_HREF}}"><span class="nav-icon"></span><span class="nav-text">修改请求</span></a>
       </div>
       <div class="sidebar-card">
         <strong>{{OUTPUT_NAME}}</strong>

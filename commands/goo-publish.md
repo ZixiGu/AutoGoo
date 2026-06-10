@@ -26,7 +26,9 @@ skills/auto-goo/templates/publish/workflow-shell.html
 
 正式发布主题位于 `skills/auto-goo/templates/publish/workflow-theme.css`。`goo-publish.py` 每次构建都必须把它复制为站点目录中的 `workflow-theme.css`，由运行时 shell 自动引用；不得依赖发布后手工注入 CSS 或 `/tmp` 中的概念稿样式。
 
-默认生成 `index.html`、`plan.html`、`activity.html`、`brainstorm.html`、`status.html`、`agents.html` 和 `artifacts.html`。左侧工作区导航展示总览、头脑风暴、计划、运行状态、代理执行和产物归档；总览包含 Token 活动热力图和文本型工作流活动，悬浮格子显示该日或周期的消耗明细，点击或聚焦格子会在下方说明所选时间段实际完成的工作。活动页会把当前项目 Claude Code usage 日志中的 token 消耗按 turn/session 聚合进时间线，列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情；不发布 assistant 回复或完整对话正文。
+默认生成 `index.html`、`threads.html`、`plan.html`、`activity.html`、`brainstorm.html`、`status.html`、`agents.html`、`artifacts.html` 和 `requests.html`。左侧工作区导航展示总览、Threads、头脑风暴、计划、运行状态、代理执行、产物归档和修改请求；总览包含 Token 活动热力图和文本型工作流活动，悬浮格子显示该日或周期的消耗明细，点击或聚焦格子会在下方说明所选时间段实际完成的工作。活动页会把当前项目 Claude Code usage 日志中的 token 消耗按 turn/session 聚合进时间线，列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情；不发布 assistant 回复或完整对话正文。
+
+`goo-publish --serve` 支持在 Web 上提交修改请求，但只写入 `.goo/change-requests/*.json`，不会直接改业务文件、plan、brainstorm 或 Goo-wiki。后续由 AutoGoo 主 Agent 读取请求、同步到 thread plan 或 context artifact，再派发模型修改并审计。
 
 `goo-publish.py` 必须以 `workflow-shell.html` 为唯一运行时页面外壳，并使用 `workflow-theme.css` 作为唯一正式视觉主题：shell 维护 sidebar、工作区导航容器、页头、主题按钮和主题引用；主题文件维护紧凑工作台布局、浅色/暗色变量、页面语义色、指标卡配色和响应式覆盖。脚本只填充标题、活动导航链接、正文、输出路径和交互脚本，并复制主题文件。其余 `workflow-*.html` 是内容与视觉参考页，不得作为第二套运行时 shell。
 
@@ -103,12 +105,14 @@ http://<server-ip>:9877/
 ## 发布内容
 
 - `index.html`：总览、任务流程和最近执行记录。
+- `threads.html`：所有 thread 的 id、状态、plan 路径、logs 路径和进度。
 - `status.html`：当前计划运行状态和步骤进度。
 - `agents.html`：本次代理执行、状态、耗时、产出和日志。
 - `plan.html`：当前计划、目标、计划步骤、任务流程图和 DAG。
 - `activity.html`：工作流活动和 token 使用记录。
 - `brainstorm.html`：当前或最近一次头脑风暴。
 - `artifacts.html`：最近产物索引。
+- `requests.html`：用户提交的修改请求队列；字段包含 `thread_id`、`target`、`title`、`request` 和 `status=pending_model_update`。
 
 ## 规则
 

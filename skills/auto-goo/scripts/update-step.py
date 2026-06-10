@@ -33,14 +33,23 @@ def safe_name(value: Any, limit: int = 48) -> str:
 
 def project_root_from_plan(plan_path: Path) -> Path:
     parent = plan_path.parent
+    if parent.parent.name == "threads":
+        return parent.parent.parent.parent
     if parent.name == ".goo":
         return parent.parent
     return parent
 
 
+def logs_dir_from_plan(plan_path: Path) -> Path:
+    parent = plan_path.parent
+    if parent.parent.name == "threads":
+        return parent / "logs"
+    return project_root_from_plan(plan_path) / ".goo" / "logs"
+
+
 def ensure_log_path(plan_path: Path, step: dict[str, Any], stamp: str) -> Path:
     project_root = project_root_from_plan(plan_path)
-    logs_dir = project_root / ".goo" / "logs"
+    logs_dir = logs_dir_from_plan(plan_path)
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     existing = step.get("log_path")
@@ -131,6 +140,20 @@ def update_plan_status(data: dict[str, Any], stamp: str) -> None:
         data["completed_at"] = stamp
 
 
+def sync_thread(plan_path: Path) -> None:
+    script = Path(__file__).with_name("thread-state.py")
+    if not script.exists():
+        return
+    import subprocess
+
+    subprocess.run(
+        ["python3", str(script), "sync", "--plan", str(plan_path)],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update .goo/plan.json step state")
     parser.add_argument("--plan", default=".goo/plan.json", help="plan.json path")
@@ -218,6 +241,7 @@ def main() -> int:
 
     update_plan_status(data, stamp)
     dump_json(plan_path, data)
+    sync_thread(plan_path)
     print(f"updated step {args.step_id}: status={target.get('status')} progress={target.get('progress')} heartbeat={target.get('heartbeat_at')} log={target.get('log_path', '')}")
     return 0
 

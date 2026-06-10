@@ -101,6 +101,20 @@ def collect_step_logs(logs_dir: Path) -> dict[str, list[Path]]:
     return by_step
 
 
+def sync_thread_status(plan_path: Path) -> None:
+    script = Path(__file__).with_name("thread-state.py")
+    if not script.exists():
+        return
+    import subprocess
+
+    subprocess.run(
+        ["python3", str(script), "sync", "--plan", str(plan_path)],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 def log_preview(step: dict[str, Any], logs_by_step: dict[str, list[Path]]) -> str:
     paths = logs_by_step.get(id_key(step.get("id")), [])
     if not paths:
@@ -159,7 +173,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Render AutoGoo status")
     parser.add_argument("--plan", default=".goo/plan.json", help="plan.json path")
     parser.add_argument("--update-status", action="store_true", help="auto-update plan status")
+    parser.add_argument("--threads", action="store_true", help="list AutoGoo threads")
     args = parser.parse_args()
+
+    if args.threads:
+        script = Path(__file__).with_name("thread-state.py")
+        import subprocess
+
+        raise SystemExit(subprocess.run(["python3", str(script), "list"]).returncode)
 
     plan_path = Path(args.plan)
     if not plan_path.exists():
@@ -184,6 +205,7 @@ def main() -> int:
             tmp = plan_path.with_suffix(plan_path.suffix + ".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             tmp.replace(plan_path)
+        sync_thread_status(plan_path)
 
     total = len(steps)
     completed = sum(1 for s in steps if s.get("status") == "completed")

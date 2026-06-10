@@ -18,17 +18,19 @@ description: 基于 Goo-wiki 和当前项目上下文 brainstorm 候选 goals，
 3. **前置条件识别** — 提炼所有候选目标共同需要的资源、权限、数据、环境、指标、人工决策和安全确认。
 4. **候选目标生成** — 生成 3-7 个候选 goals，每个 goal 都要有依据、产物、验收标准、风险、第一步、前置要求和 ready checklist。
 5. **推荐排序** — 给出 `recommended_goal_ids` 和排序理由。
-6. **本地落盘** — 写入 `.goo/brainstorm.json`，标记为待用户审阅。
+6. **Thread 归属检查** — 如果当前 thread/plan 未完成，先用 `AskUserQuestion` 复用 `id=thread_action` 模板询问新建 thread、继续当前 thread 或取消；用户未明确选择前不得覆盖当前 brainstorm。
+7. **本地落盘** — 写入当前 thread 的 `.goo/threads/<thread_id>/brainstorm.json`，同时兼容写入 `.goo/brainstorm.json`；标记为待用户审阅。
 7. **等待用户审阅** — 展示候选 goals、推荐顺序、共同前置条件和关键风险，让用户选择、合并、改写或要求继续 brainstorm。必须优先用 `AskUserQuestion` / 结构化选择 UI 展示候选 goal 的 ID/编号和动作选项；不得在交互控件可用时只用普通文本要求用户手打回复。
 8. **确认后归档** — 用户确认候选目标后，再将最终版本、选择依据、共同前置条件和关键 wiki 证据归档到 Goo-wiki 项目路径，并更新项目入口或 `log.md`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。不要在用户还可能修改候选目标时急着归档。
 
-如果 `.goo/brainstorm.json` 已存在，写入新的 brainstorm 前，先把旧文件原样复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。该目录是本地 JSON 历史快照，和 Goo-wiki/fallback 知识归档不同；知识归档仍写入同一任务归档根的 `brainstorm/` 子目录。
+如果当前 thread 的 `brainstorm.json` 已存在，写入新的 brainstorm 前，先把旧文件原样复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。该目录是本地 JSON 历史快照，和 Goo-wiki/fallback 知识归档不同；知识归档仍写入同一任务归档根的 `brainstorm/` 子目录。
 
 ## 输出要求
 
 `.goo/brainstorm.json` 必须包含：
 
 - `task`：用户给出的方向、项目或问题。
+- `thread`：包含 `id`、`brainstorm_path`、`plan_path`、`logs_dir`；后续从 brainstorm 生成 plan 时必须校验同一 thread。
 - `status: "pending_decision"`。
 - `wiki_context.sources` 和 `wiki_context.signals`。
 - `global_prerequisites[]`：开始任何候选 goal 前共同需要确认的条件，例如数据路径、账号权限、远程资源、评价指标、用户取舍、安全确认。
@@ -88,6 +90,7 @@ description: 基于 Goo-wiki 和当前项目上下文 brainstorm 候选 goals，
 ## 边界
 
 - 不写 `.goo/plan.json`。
+- 不跨 thread 读取候选 goal；从 brainstorm 生成 plan 时，`plan.thread.id` 必须等于 `brainstorm.thread.id`，`archive.task_archive_root` 也必须一致。
 - 不生成执行 DAG。
 - 不派发 Subagent 执行。
 - 不修改业务文件；用户确认前只允许写 `.goo/brainstorm.json`，不要写 Goo-wiki/fallback 归档笔记。

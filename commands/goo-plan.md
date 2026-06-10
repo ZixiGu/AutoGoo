@@ -9,7 +9,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 
 ## 行为
 
-1. **现有计划完成检查** — 如果 `.goo/plan.json` 已存在，先读取 `steps[]` 和顶层 `status`；只要存在非 `completed` 的 step，或顶层状态不是 `completed`，就暂停新建 plan，提醒用户当前 plan 未完成，并优先用 `AskUserQuestion` / 结构化选择 UI 询问是“修改当前 plan”还是“新建 plan 并归档旧 plan”。用户未明确选择前，不得覆盖 `.goo/plan.json`
+1. **Thread 归属检查** — 如果 `.goo/current_thread.json` 或 `.goo/plan.json` 指向的当前 thread/plan 未完成，先提醒用户当前 thread id、状态和未完成步骤摘要，并优先用 `AskUserQuestion` / 结构化选择 UI 复用 `id=thread_action` 模板询问是“新建 thread”还是“继续当前 thread”。用户未明确选择前，不得覆盖当前 thread 的 plan。
 2. **Wiki 经验召回** — 检索 Goo-wiki 中相关项目页、概念页、周报和 `log.md`
 3. **输入形态识别** — 判断输入是普通任务、Markdown 任务包、已有 plan、issue/PR 描述还是日志片段
 4. **目标明确性检查** — 判断输入是否已有明确 goal，或是否引用了 `.goo/brainstorm.json` 中的候选 goal；否则停止 plan 流程并改用 `/auto-goo:goo-brainstorm`
@@ -20,37 +20,39 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 9. **远程执行目标标注** — 读取项目 `.goo/config.json` 和用户级 `~/.auto-goo/config.json` 中的 `servers[]`。只有当任务确实需要远程算力、远程依赖、长跑后台环境或用户明确要求远程时，才在对应 step 写入 `execution_target="remote"` 和 `remote_server`；否则默认 `execution_target="local"`。
 10. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
 11. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
-12. **历史计划归档** — 如果 `.goo/plan.json` 已存在且用户选择新建 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`
-13. **计划落盘** — 输出或更新 `.goo/plan.json`，标记为待用户审阅。
-14. **等待确认** — 向用户展示计划摘要、并行组、主要风险和需要确认的点，并优先用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。用户确认前不要归档 plan 摘要。
-15. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
+12. **Thread 落盘** — 用户选择新建 thread 时，创建 `.goo/threads/<thread_id>/thread.json`、`plan.json`、`logs/`、`artifacts/`，更新 `.goo/threads/index.json` 和 `.goo/current_thread.json`；用户选择继续当前 thread 时，更新该 thread 的 plan。
+13. **历史计划归档** — 如果要替换当前 thread 的已有 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`；不得静默覆盖未完成 plan。
+14. **计划落盘** — 输出或更新当前 thread 的 `plan.json`，并把 `thread.id` 写入 plan；兼容路径 `.goo/plan.json` 可指向或复制当前 thread 的 active plan，标记为待用户审阅。
+15. **等待确认** — 向用户展示 thread id、计划摘要、并行组、主要风险和需要确认的点，并优先用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。用户确认前不要归档 plan 摘要。
+16. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
 
 ## 现有 plan 冲突处理
 
-每次进入 `/auto-goo:goo-plan` 时，必须先检查当前项目的 `.goo/plan.json`：
+每次进入 `/auto-goo:goo-plan` 时，必须先检查当前项目的 `.goo/current_thread.json`、`.goo/threads/index.json` 和兼容 `.goo/plan.json`：
 
 - 如果文件不存在，正常生成新 plan。
 - 如果所有 `steps[]` 的 `status` 都是 `completed`，且顶层 `status` 为 `completed` 或缺失但可由 steps 推断为完成，允许归档旧 plan 后生成新 plan。
-- 如果任一 step 的 `status` 不是 `completed`，或顶层 `status` 是 `pending` / `running` / `blocked` / `paused` / `failed`，必须暂停并提醒用户未完成项数量、当前运行/阻塞/失败/待执行 step 摘要，然后询问：
-  - 修改当前 plan：把新需求合并到现有 `.goo/plan.json`，保留已完成步骤和执行证据。
-  - 新建 plan：先把旧 `.goo/plan.json` 原样归档到 `.goo/plans/history/`，再写入新的 `.goo/plan.json`。
-- 用户未明确选择“修改当前 plan”或“新建 plan”前，不得覆盖、归档或重写 `.goo/plan.json`。
+- 如果任一 step 的 `status` 不是 `completed`，或顶层 `status` 是 `pending` / `running` / `blocked` / `paused` / `failed`，必须暂停并提醒用户当前 `thread_id`、未完成项数量、当前运行/阻塞/失败/待执行 step 摘要，然后询问：
+  - 新建 thread：创建 `.goo/threads/<thread_id>/` 并把新 plan 写入该 thread，不覆盖当前执行现场。
+  - 继续当前 thread：把新需求合并到当前 thread 的 plan，保留已完成步骤、日志和执行证据。
+  - 取消：保留当前 thread 和 plan 不变。
+- 用户未明确选择前，不得覆盖、归档或重写当前 thread 的 plan。
 
-提问必须优先使用 `AskUserQuestion` / 结构化选择 UI，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=existing_plan_action` 的 JSON 模板。选项为：
+提问必须优先使用 `AskUserQuestion` / 结构化选择 UI，并复用 `skills/auto-goo/references/interaction-templates.md` 中 `id=thread_action` 的 JSON 模板。选项为：
 
-- 修改当前 plan
-- 新建 plan
+- 新建 thread
+- 继续当前 thread
 - 取消
 
 如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
 
 ```text
-当前 .goo/plan.json 还未完成。请选择处理方式：
-1. 修改当前 plan - 把新需求合并到现有计划
-2. 新建 plan - 归档旧计划后生成新计划
-3. 取消 - 保留当前计划不变
+当前 thread 或 .goo/plan.json 还未完成。请选择处理方式：
+1. 新建 thread - 为新任务创建独立 thread_id、plan、logs 和 artifacts
+2. 继续当前 thread - 把新需求合并到当前计划
+3. 取消 - 保留当前 thread 和 plan 不变
 
-这是 fallback；请回复 1/2/3，或直接回复“修改当前 plan”“新建 plan”或“取消”。
+这是 fallback；请回复 1/2/3，或直接回复“新建 thread”“继续当前 thread”或“取消”。
 ```
 
 ## Markdown 任务输入
@@ -160,6 +162,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - 目标不明确时，不写 `.goo/plan.json`；改用 `/auto-goo:goo-brainstorm` 生成 `.goo/brainstorm.json`
 - 如果用户选择了 `.goo/brainstorm.json` 中的 candidate goal，必须把候选目标、前置条件和 ready checklist 转成正式 `goals[]` 与前置检查 step
 - `.goo/plan.json` 必须包含 `goals[]`；单目标任务也写一个默认 goal，多目标任务按交付目标分别写验收标准和产物
+- `.goo/plan.json` 或 `.goo/threads/<thread_id>/plan.json` 必须包含 `thread.id`、`thread.plan_path`、`thread.logs_dir` 和 `thread.artifacts_dir`；前台摘要必须展示 thread id，便于后续 status/continue 定位
 - `.goo/plan.json` 必须包含 `context_digest`；没有额外对话方案时也写 `{"found": false, "decisions": [], "constraints": [], "acceptance_criteria": [], "open_questions": []}`
 - `.goo/plan.json` 必须包含 `review`，初次生成后写 `{"status": "pending_user_review", "summary": "<给用户看的简短计划摘要>"}`；用户确认后改为 `confirmed`，用户要求修改时保持 `pending_user_review` 并记录修改要求
 - 如果存在大段方案材料，必须包含 `context_artifacts`，用文件路径引用 Goo-wiki 项目路径下的 `context/*.md` 或相关任务 Markdown；Goo-wiki 不可用时引用 `.goo/obsidian/<project-slug>/context/*.md`

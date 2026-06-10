@@ -144,6 +144,8 @@ required = {
     "add_another_server",
     "brainstorm_review",
     "existing_brainstorm_goal",
+    "thread_action",
+    "thread_select",
     "existing_plan_action",
     "plan_review",
     "start_plan_review",
@@ -284,7 +286,7 @@ done
 echo ""
 echo "── 6. 脚本文件 ──"
 
-SCRIPTS=("goo-init.sh" "init-plan.sh" "goo-status.py" "update-step.py" "wiki-graph-assist.py" "daily-report-sessions.py" "goo-usage.py" "goo-publish.py" "goo-ssh.sh" "check-plugin.sh")
+SCRIPTS=("goo-init.sh" "init-plan.sh" "goo-status.py" "update-step.py" "thread-state.py" "thread-locks.py" "wiki-graph-assist.py" "daily-report-sessions.py" "goo-usage.py" "goo-publish.py" "goo-ssh.sh" "check-plugin.sh")
 for s in "${SCRIPTS[@]}"; do
   f="$ROOT/skills/auto-goo/scripts/$s"
   if [[ -f "$f" ]]; then
@@ -410,7 +412,7 @@ PY
       --root "$PUBLISH_SMOKE_DIR/project" \
       --output "$PUBLISH_SMOKE_DIR/project/.goo/site/index.html" >/dev/null 2>&1; then
     missing_pages=0
-    for page in index.html plan.html activity.html brainstorm.html status.html agents.html artifacts.html workflow-theme.css; do
+    for page in index.html threads.html plan.html activity.html brainstorm.html status.html agents.html artifacts.html requests.html workflow-theme.css; do
       if [[ ! -f "$PUBLISH_SMOKE_DIR/project/.goo/site/$page" ]]; then
         missing_pages=$((missing_pages + 1))
       fi

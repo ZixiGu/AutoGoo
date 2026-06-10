@@ -9,8 +9,8 @@
 - Agent 启动后立即写第一次 `heartbeat_at` + `progress=5`
 - 之后每 30 秒更新：`heartbeat_at` + `progress (0-100)`
 - 进度估算：agent 在任务开头拆 3-5 个里程碑，每过一个里程碑更新进度
-- 心跳通过 `skills/auto-goo/scripts/resolve-root.sh` 调用 `update-step.py` 更新 plan.json，不要手写临时 JSON 修改代码，也不要在命令文档里内联 root 解析 heredoc。
-- `update-step.py` 会自动创建并追加 `.goo/logs/{timestamp}_step-{id}_{name}.md`，并把 `log_path` 写回当前 step
+- 心跳通过 `skills/auto-goo/scripts/resolve-root.sh` 调用 `update-step.py` 更新当前 thread plan，不要手写临时 JSON 修改代码，也不要在命令文档里内联 root 解析 heredoc。
+- `update-step.py` 会自动创建并追加当前 thread 的 `logs/{timestamp}_step-{id}_{name}.md`，并把 `log_path` 写回当前 step
 
 ## 命令模板
 
@@ -18,7 +18,7 @@
 
 ```bash
 bash "$auto_goo_root/skills/auto-goo/scripts/resolve-root.sh" \
-  --plan .goo/plan.json \
+  --plan .goo/threads/<thread_id>/plan.json \
   --step-id <id> \
   --heartbeat \
   --progress <0-100> \

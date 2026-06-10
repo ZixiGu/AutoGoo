@@ -23,11 +23,11 @@ AutoGoo 的 wiki 流程分成两段：
 - `/auto-goo:goo-daily-report` 的日报/周报。
 - `/auto-goo:goo-improve` 的流程摩擦、改进建议和采纳状态。
 - `/auto-goo:goo-benchmark`、`/auto-goo:goo-start`、`/auto-goo:goo-continue` 产生的指标、执行证据、优化经验和最终结论。
-- `/auto-goo:goo-plan` 经用户确认后的计划摘要、关键约束和可复用规划经验；完整 `.goo/plan.json` 仍保留为本地状态源。
+- `/auto-goo:goo-plan` 经用户确认后的计划摘要、关键约束和可复用规划经验；完整 thread plan 仍保留为本地状态源，`.goo/plan.json` 只是兼容入口。
 
 归档优先写入 `<wiki_dir>/<archive.project_dir>/`，并更新项目入口或 `log.md`。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。命令对应的 `.goo/*.json` 产物应包含 `archive` 字段，记录归档路径、fallback 状态和 `log.md` 是否更新。
 
-`/auto-goo:goo-publish` 是归档之外的只读展示层。它无需运行 `goo-init` 或创建 `.goo/config.json`，默认从 `.goo/brainstorm.json`、`.goo/plan.json`、history、logs、artifacts、reports、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/` 多页站点。`skills/auto-goo/templates/publish/workflow-shell.html` 是唯一运行时页面外壳，`skills/auto-goo/templates/publish/workflow-theme.css` 是唯一正式视觉主题；脚本填充标题、活动导航、正文、路径和交互脚本，并复制主题到站点目录，不依赖发布后手工注入 CSS。默认生成总览、计划、活动、头脑风暴、运行状态、代理执行和产物归档页面，关键页面标签优先使用中文。Token 格子悬浮时显示消耗明细，点击或聚焦后由下方文本型工作流活动说明所选时间段实际完成的工作；活动记录列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情，但不发布 assistant 回复或完整对话正文。它默认启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读已生成 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。HTML 发布不替代 Goo-wiki/fallback 归档，也不得把草案状态误标为已归档。
+`/auto-goo:goo-publish` 是归档之外的展示层。它无需运行 `goo-init` 或创建 `.goo/config.json`，默认从 `.goo/threads/`、`.goo/current_thread.json`、兼容 `.goo/brainstorm.json`、`.goo/plan.json`、history、当前 thread logs/artifacts/reports、`.goo/change-requests/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/` 多页站点。`skills/auto-goo/templates/publish/workflow-shell.html` 是唯一运行时页面外壳，`skills/auto-goo/templates/publish/workflow-theme.css` 是唯一正式视觉主题；脚本填充标题、活动导航、正文、路径和交互脚本，并复制主题到站点目录，不依赖发布后手工注入 CSS。默认生成总览、Threads、计划、活动、头脑风暴、运行状态、代理执行、产物归档和修改请求页面，关键页面标签优先使用中文。Token 格子悬浮时显示消耗明细，点击或聚焦后由下方文本型工作流活动说明所选时间段实际完成的工作；活动记录列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情，但不发布 assistant 回复或完整对话正文。它默认启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读已生成 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。HTML 发布不替代 Goo-wiki/fallback 归档，不直接修改业务文件、plan 或 brainstorm；Web 表单只新增 `.goo/change-requests/*.json`，后续由主 Agent 纳入 thread plan 并审计。
 
 ## 目录规则
 
