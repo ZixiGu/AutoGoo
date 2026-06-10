@@ -295,6 +295,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-builtin-pricing", action="store_true",
                    help="Disable built-in model pricing")
     p.add_argument("--serve", action="store_true", help="Start HTTP server with HTML dashboard")
+    p.add_argument("--host", default="0.0.0.0", help="HTTP host (default: 0.0.0.0)")
     p.add_argument("--port", type=int, default=9876, help="HTTP server port (default: 9876)")
     return p.parse_args()
 
@@ -1084,7 +1085,7 @@ class _UsageHandler:
         parsed = urlparse(path)
         route = parsed.path.rstrip("/") or "/"
 
-        if route == "/":
+        if route in ("/", "/index.html", "/usage.html"):
             return 200, "text/html; charset=utf-8", _read_html()
 
         if route == "/api/data":
@@ -1110,6 +1111,28 @@ class _UsageHandler:
         return 404, "text/plain", "Not Found"
 
 
+def _local_ip_addresses():
+    import socket
+
+    addresses = set()
+    for probe in (socket.gethostname(), socket.getfqdn()):
+        try:
+            for info in socket.getaddrinfo(probe, None, socket.AF_INET, socket.SOCK_STREAM):
+                address = info[4][0]
+                if address and not address.startswith("127."):
+                    addresses.add(address)
+        except OSError:
+            pass
+    return sorted(addresses)
+
+
+def _display_urls(host, port):
+    if host in ("0.0.0.0", "::"):
+        urls = [f"http://127.0.0.1:{port}/index.html"]
+        urls.extend(f"http://{address}:{port}/index.html" for address in _local_ip_addresses())
+        return urls
+    return [f"http://{host}:{port}/index.html"]
+
 def _make_server(args, pricing, tz):
     from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -1118,34 +1141,46 @@ def _make_server(args, pricing, tz):
     class _Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             code, mime, body = handler_obj.handle(self.path)
+            payload = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", mime)
-            self.send_header("Content-Length", str(len(body.encode("utf-8"))))
+            self.send_header("Content-Length", str(len(payload)))
             if mime == "application/json":
                 self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
             self.end_headers()
-            self.wfile.write(body.encode("utf-8"))
+            self.wfile.write(payload)
 
         def log_message(self, format, *args):
             pass
 
-    return HTTPServer(("127.0.0.1", args.port), _Handler)
+    last_error = None
+    for candidate in range(args.port, args.port + 20):
+        try:
+            server = HTTPServer((args.host, candidate), _Handler)
+            return server, candidate
+        except OSError as exc:
+            last_error = exc
+    raise SystemExit(f"failed to start usage server near port {args.port}: {last_error}")
 
 
 def run_serve(args, pricing, tz):
     import webbrowser
-    server = _make_server(args, pricing, tz)
-    url = f"http://127.0.0.1:{args.port}"
-    print(f"Usage dashboard: {url}")
+    server, selected_port = _make_server(args, pricing, tz)
+    urls = _display_urls(args.host, selected_port)
+    print(f"Usage dashboard: {urls[0]}")
+    for url in urls[1:]:
+        print(f"Remote URL: {url}")
     print("Press Ctrl+C to stop.")
     try:
-        webbrowser.open(url)
+        webbrowser.open(urls[0])
     except Exception:
         pass
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nServer stopped.")
+    finally:
+        server.server_close()
     return 0
 
 

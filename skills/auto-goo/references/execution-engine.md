@@ -2,12 +2,12 @@
 
 ## 核心原则
 
-AutoGoo 的"并行"是 **task-level 并行**（多个独立 Subagent 同时执行），不是 thread-level 或 process-level 并行。每个步骤由独立的 Subagent 执行，通过 `.goo/logs/` 交换结果。
+AutoGoo 的"并行"在单个 thread 内是 **task-level 并行**（多个独立 Subagent 同时执行）。多个 thread 可以并存，但同时执行前必须通过 resource locks 排除共享写资源冲突。每个步骤由独立的 Subagent 执行，通过当前 thread 的 `logs/` 交换结果。
 
 - 并行步骤必须无共享资源（文件、变量、状态）
 - 结果通过日志文件传递，不通过内存
 - 每个 Subagent 看到的是上游步骤的输出快照
-- **当前 `.goo/plan.json` 是唯一状态源**：派发、完成、失败均回写当前 plan；历史 plan 仅归档在 `.goo/plans/history/`
+- **当前 thread plan 是状态源**：派发、完成、失败均回写 `.goo/threads/<thread_id>/plan.json`；`.goo/plan.json` 只是兼容入口，历史 plan 仅归档在 `.goo/plans/history/`
 - **Plan/Wiki/MD-only 执行**：执行阶段必须只依赖当前 plan、`context_artifacts` 指向的 Goo-wiki/Markdown、Goo-wiki 摘要和上游产物路径；不得把主会话聊天记录当作隐含任务说明
 
 ## 主 Agent 职责
@@ -23,7 +23,7 @@ AutoGoo 的"并行"是 **task-level 并行**（多个独立 Subagent 同时执�
 5. 调度、限流、心跳巡检、失败重试和僵尸步骤恢复。
 6. 审核 Subagent 产物，判断是否满足用户目标和项目约束。
 7. 合并跨步骤结果，处理冲突，必要时要求局部返工。
-8. 维护当前 `.goo/plan.json`、`.goo/logs/`、`.goo/artifacts/` 和 Goo-wiki 归档的一致性。
+8. 维护当前 thread 的 `plan.json`、`logs/`、`artifacts/`、thread metadata 和 Goo-wiki 归档的一致性。
 9. 聚合 Subagent 上报的权限阻塞，在前台向用户申请许可，并把批准/拒绝结果回写 plan。
 10. 对远程执行 step 解析 `remote_server`、校验配置和 secrets 文件存在性，并在用户授权后通过 `goo-ssh.sh` 派发远程命令。
 
@@ -97,6 +97,7 @@ Subagent 默认隔离上下文。主 Agent 派发时只传：
 - 当前 step 的 `id`、`name`、`description`、`type`、`subagent`、`task_agent`、`output`
 - 当前 step 的 `available_skills`；若为空数组，不额外加载 skill
 - 必要的项目约束和安全规则摘要
+- **执行目录与隔离策略**：执行启动或恢复时只检查一次当前目录是否是 Git repo 且 `HEAD` 可解析，并写入 plan 顶层 `runtime.subagent_isolation`。建议结构：`{"mode":"worktree","checked_at":"<iso>","reason":"git_head_available"}` 或 `{"mode":"none","checked_at":"<iso>","reason":"non_git_or_head_unavailable"}`。后续派发 Subagent 只读取该缓存，不得每次派发前重复运行 git 检查。只有 `mode="worktree"` 时才允许给 Agent tool 传 `isolation: "worktree"`；`mode="none"` 时必须省略 `isolation` 参数，并在 prompt 中声明“当前项目无可用 worktree 隔离；只在 allowed_write_paths 内修改，不执行破坏性操作”。缓存缺失或执行目录明确变更时，先重新计算并回写缓存，再继续派发。不得因为 `Failed to resolve base branch "HEAD"` 把 step 标为 blocked 或改由主 Agent 代做。
 - `wiki_context` 中与该 step 直接相关的 3-7 条要点
 - `context_digest` 中与该 step 直接相关的决策、约束和验收点
 - `context_artifacts` 中必要 Markdown 的路径、标题和行号范围
@@ -112,11 +113,11 @@ Subagent 默认隔离上下文。主 Agent 派发时只传：
 - 与本 step 无关的 wiki 大段内容
 - 未完成并行步骤的中间状态
 
-Subagent 之间只通过 `.goo/plan.json`、`.goo/logs/`、Goo-wiki 项目笔记、`.goo/obsidian/` fallback、明确产物路径和最终归档摘要交接。需要共享大段上下文时，主 Agent 应先把它整理成 Goo-wiki 项目笔记或摘要，再显式传给下游步骤。若 Subagent 需要的信息只存在于主会话聊天记录中，必须暂停派发，由主 Agent 更新 plan 或创建 context artifact 后再继续。
+Subagent 之间只通过当前 thread 的 `plan.json`、`logs/`、`artifacts/`、Goo-wiki 项目笔记、`.goo/obsidian/` fallback、明确产物路径和最终归档摘要交接。需要共享大段上下文时，主 Agent 应先把它整理成 Goo-wiki 项目笔记或摘要，再显式传给下游步骤。若 Subagent 需要的信息只存在于主会话聊天记录中，必须暂停派发，由主 Agent 更新 plan 或创建 context artifact 后再继续。
 
 ## 前台输出边界
 
-后台 Subagent 的代码阅读、根因猜测、下一步自我提示和未验证判断必须写入 `.goo/logs/` 或最终 step 报告，不直接刷到用户前台。前台只保留：
+后台 Subagent 的代码阅读、根因猜测、下一步自我提示和未验证判断必须写入当前 thread 的 `logs/` 或最终 step 报告，不直接刷到用户前台。前台只保留：
 
 - step 启动、完成、失败、阻塞或需要用户确认的简短状态；
 - 已验证的最终结论、变更文件、产物路径和验证结果；
@@ -177,6 +178,9 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
 初始化:
   running = []       # 当前在跑的 agent 槽位
   ready_queue = []   # 就绪但等待槽位的步骤
+  若 plan.runtime.subagent_isolation.mode 缺失或执行目录变更:
+    检查一次 git repo + HEAD 可解析性
+    写入 plan.runtime.subagent_isolation = {mode, checked_at, reason}
 
 主循环:
   while 有 pending 步骤 或 running 非空:
@@ -189,7 +193,7 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
          step = ready_queue.pop(0)
          若 step.requires_user_confirm=true 且尚未确认 → 主 Agent 前台询问，确认后再派发
          更新 status="running", progress=0, agent_id, started_at → plan.json
-         启动 Agent (run_in_background, 间隔 3-5s 错峰)
+         启动 Agent (run_in_background, 间隔 3-5s 错峰；按 runtime.subagent_isolation.mode 决定是否传 isolation="worktree")
          running.append(step)
 
     3. 等待任一 Agent 完成
@@ -305,7 +309,7 @@ if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo
   echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
-python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --plan .goo/plan.json --update-status
+	python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --update-status
 ```
 
 这会更新 plan 顶层的 `status`（`pending` → `running` → `blocked` → `completed`/`failed`）、`started_at`（首次进入 running 时）和 `completed_at`（全部完成或失败时）。不调用此命令会导致 plan 顶层状态与实际 step 状态不同步。`/auto-goo:goo-status` 也会读取此字段渲染仪表盘。
@@ -365,10 +369,10 @@ if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/upd
   echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
-python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --start --progress 5 --agent-id <agent>
-python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --heartbeat --progress <0-100>
-python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --complete
-python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --fail --error "<reason>"
+	python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/threads/<thread_id>/plan.json --step-id <id> --start --progress 5 --agent-id <agent>
+	python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/threads/<thread_id>/plan.json --step-id <id> --heartbeat --progress <0-100>
+	python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/threads/<thread_id>/plan.json --step-id <id> --complete
+	python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/threads/<thread_id>/plan.json --step-id <id> --fail --error "<reason>"
 ```
 
 ### MAX_CONCURRENT 配置
@@ -421,7 +425,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 
 命令模板（替换 `<id>` 和 `<0-100>`）：
 ```bash
-python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan.json --step-id <id> --heartbeat --progress <0-100>
+python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/threads/<thread_id>/plan.json --step-id <id> --heartbeat --progress <0-100>
 ```
 
 在以下里程碑必须调用上述命令更新 `heartbeat_at` + `progress`：
@@ -439,7 +443,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 ## 交付要求
 1. 在 {cwd} 目录下工作
 2. **第一步**：调用 `update-step.py --start --progress 5`
-3. `update-step.py` 会自动创建并追加 `.goo/logs/{timestamp}_step-{id}_{name}.md`，并把 `log_path` 写回当前 step
+3. `update-step.py` 会自动创建并追加当前 thread 的 `logs/{timestamp}_step-{id}_{name}.md`，并把 `log_path` 写回当前 step
 4. **每到一个里程碑**调用 `update-step.py --heartbeat --progress <N> --note "<短进展>"`（见上方 Heartbeat 表）
 5. 执行实现后用 `--note` 补充：关键决策、输出产物路径、耗时
 6. **完成后**调用 `update-step.py --complete`
@@ -516,7 +520,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
      while running slots < MAX_CONCURRENT AND ready_queue 非空:
        step = ready_queue.pop(0)
        → 检查 step.subagent 是否合法
-         → 合法: 按 step.subagent 读取 agents/roles/<role>.md，再按 step.task_agent 读取 agents/tasks/<department>/<task>.md，合成 Subagent Prompt 后启动 Agent (run_in_background)
+         → 合法: 按 step.subagent 读取 agents/roles/<role>.md，再按 step.task_agent 读取 agents/tasks/<department>/<task>.md，合成 Subagent Prompt 后启动 Agent (run_in_background；按 runtime.subagent_isolation.mode 决定是否传 isolation="worktree")
          → subagent 或 task_agent 不合法/缺失: 暂停派发，先修正 plan 或创建新角色/任务画像
        → 更新 plan.json: status="running", started_at=now
        → 等待 3-5s（错峰）
@@ -583,9 +587,9 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 ## 结果合并
 
 所有并行 Agent 完成后：
-1. 收集每个 Agent 写入的 `.goo/logs/` 记录
-2. 汇总到 `.goo/logs/_summary.md`
-3. plan.json 已是最新状态，无需额外合并
+1. 收集每个 Agent 写入当前 thread `logs/` 的记录
+2. 汇总到当前 thread `logs/_summary.md`
+3. 当前 thread `plan.json` 已是最新状态，无需额外合并
 4. 通知用户完成状态
 
 ## 上下文传递规则
@@ -619,7 +623,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/plan
 - [ ] **该 Agent 的 prompt 包含 Heartbeat 强制分段？**（缺少此项 Subagent 不更新 heartbeat_at，会被误判为僵尸）
 - [ ] 该 Agent 即使看不到主会话聊天记录，也能仅凭 plan/Markdown/wiki 摘要完成当前 step？
 - [ ] 该 Agent 只拿到与当前 step 相关的 wiki_context 和日志摘要？
-- [ ] 该 Agent 知道往哪里写日志（`.goo/logs/`）？
+- [ ] 该 Agent 知道往哪里写日志（当前 thread `logs/`）？
 - [ ] 日志写入逻辑独立于执行结果（即使失败也能写日志）？
 - [ ] 下游扇出度已计算（用于优先级排序）？
 

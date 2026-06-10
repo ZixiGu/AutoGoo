@@ -219,6 +219,13 @@ DAG 结构总结：
   "started_at": null,
   "completed_at": null,
   "max_concurrent": 6,
+  "runtime": {
+    "subagent_isolation": {
+      "mode": "worktree",
+      "checked_at": "YYYY-MM-DDTHH-MM-SS",
+      "reason": "git_head_available"
+    }
+  },
   "wiki_context": {
     "found": true,
     "sources": [
@@ -300,9 +307,9 @@ DAG 结构总结：
       "status": "pending",
       "progress": 0,
       "output": "Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/",
-      "inputs": [".goo/plan.json", ".goo/logs/", "<上游产物路径>"],
+      "inputs": [".goo/threads/<thread_id>/plan.json", ".goo/threads/<thread_id>/logs/", "<上游产物路径>"],
       "outputs": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
-      "allowed_read_paths": [".goo/plan.json", ".goo/logs/", ".goo/artifacts/"],
+      "allowed_read_paths": [".goo/threads/<thread_id>/plan.json", ".goo/threads/<thread_id>/logs/", ".goo/threads/<thread_id>/artifacts/", ".goo/plan.json", ".goo/artifacts/"],
       "allowed_write_paths": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
       "validation": "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts 和关键概念/问题/指标/历史任务页；项目 <project-slug>.md 与 log.md 反向链接任务页；新增 concept/lessons/metrics 页也链接回任务页或项目入口；记录产物路径、验证结果和可复用经验",
       "risk_level": "low",
@@ -394,7 +401,7 @@ DAG 结构总结：
 
 ## 历史 plan 归档
 
-`.goo/plan.json` 是当前任务唯一状态源。每当 `goo-plan`、`goo-start` 或脚本准备写入新的 `.goo/plan.json` 时，如果旧文件已存在，必须先复制归档：
+当前 thread plan 是任务状态源，`.goo/plan.json` 是兼容入口。每当 `goo-plan`、`goo-start` 或脚本准备写入新的 thread plan / `.goo/plan.json` 时，如果旧 plan 已存在，必须先复制归档：
 
 ```text
 .goo/plans/history/plan-YYYY-MM-DDTHH-MM-SS.json
@@ -419,6 +426,7 @@ DAG 结构总结：
 | `started_at` | plan 开始执行时间，首个步骤派发时设置 |
 | `completed_at` | plan 完成时间，所有步骤完成或标记失败时设置 |
 | `max_concurrent` | 最大并发槽位数，默认 6 |
+| `runtime.subagent_isolation` | 执行启动或恢复时一次性计算的 Subagent 隔离策略缓存。`mode="worktree"` 表示后续 Agent tool 可传 `isolation: "worktree"`；`mode="none"` 表示省略 `isolation`。后续派发只读该缓存，除非缓存缺失或执行目录明确变更 |
 | `goals` | 交付目标列表。单目标任务也写一个默认 goal；多目标任务按 goal 拆验收标准、最终产物和依赖关系 |
 | `goals[].id` | goal 稳定 ID，如 `g1` |
 | `goals[].status` | goal 状态：`pending` / `running` / `completed` / `failed` / `deferred` |
