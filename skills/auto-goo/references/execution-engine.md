@@ -104,7 +104,7 @@ Subagent 默认隔离上下文。主 Agent 派发时只传：
 - 上游依赖的产物路径和精简摘要
 - 允许读取/写入的路径边界
 - plan/log/heartbeat 回写要求
-- **空跑检测**：Agent 返回 `Done` 只能说明工具调用结束，不等于 step 完成。若返回 `0 tool uses`，且没有 step log、没有 heartbeat 里程碑、没有声明的 `output` 产物，必须判定为 dispatch 空跑或运行时前置失败，回写 `blocked`/`failed` 和错误原因，不得标记 completed 或释放下游依赖。
+- **空跑检测**：Agent 返回 `Done` 只能说明工具调用结束，不等于 step 完成。`0 tool uses` 不能单独作为失败依据；文本型 review/design step 可以无工具完成。主 Agent 必须检查结构化最终答复、step log、heartbeat 里程碑和声明的 `output` 产物；只有这些完成证据都缺失时，才判定为 dispatch 空跑或运行时前置失败，回写 `blocked`/`failed` 和错误原因，不得标记 completed 或释放下游依赖。
 
 默认不传：
 
@@ -533,7 +533,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
 
   3. 等待完成事件
      → 任一 agent 完成 → 从 running 移除
-     → 检查 step log、heartbeat 里程碑和声明 output；若 Done 但 0 tool uses 且无证据，回写 blocked/failed，不得 completed
+     → 检查结构化最终答复、step log、heartbeat 里程碑和声明 output；0 tool uses 只是可疑信号，只有完成证据全缺失才回写 blocked/failed，不得 completed
      → 回写 plan.json: status="completed"/"failed"/"blocked"
      → 写入 .goo/logs/
      → 运行 `goo-status.py`，向用户展示最新完成/告警/下一步摘要
