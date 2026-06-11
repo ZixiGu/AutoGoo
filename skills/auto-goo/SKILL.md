@@ -11,7 +11,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 
 **兼容性**：AutoGoo 完全支持非 Git 项目。Git 相关功能（remote 地址记录、worktree 隔离、diff/rollback 等）仅在当前 AutoGoo 项目根本身是 Git repo 且 `HEAD` 可解析时启用。非 Git 项目不需要 Git worktree 隔离，不向父目录、跨文件系统或备用路径寻找 Git root，也不反复探测 Agent 是否能绕过 `HEAD`。执行启动或恢复时只检查一次当前项目根：如果项目根有可用 `.git/HEAD`，写入 `runtime.subagent_isolation.mode="worktree"`；否则必须优先用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否运行 `git init`。用户选择继续非 Git 执行时写 `mode="none"`；用户选择 `git init` 时必须默认使用 `main` 分支：优先运行 `git init -b main`，不支持 `-b` 时初始化后立即把默认分支设为 `main`。初始化不自动 add/commit，随后重新检查 `HEAD`，无提交时仍写 `mode="none"` 并继续普通非 Git 执行。`mode="none"` 时不得给 Agent tool 传 `isolation` 字段，不得因为 `Failed to resolve base branch "HEAD"` 循环重试；如果运行时仍强制解析 `HEAD`，最多记录一次失败并转为明确阻塞/用户选择，而不是继续 probe。
 
-**空跑检测**：Agent 返回 `Done` 不是完成证据，`0 tool uses` 也不是失败证据。文本型 review/design step 可以不调用工具，但必须留下可验收结果：结构化最终答复、step log、heartbeat 里程碑或声明的 `output` 产物至少其一。只有同时缺少这些证据时，主 Agent 才能判定为 dispatch 空跑或运行时前置失败，把 step 标记为 `blocked`/`failed` 并记录原因；不得把无证据 step 标记 completed，也不得解锁下游。
+**完成验收闸门**：Agent 返回 `Done` 不是完成证据，`0 tool uses` 也不是失败证据。文本型 review/design step 可以不调用工具，但必须留下可验收结果：结构化最终答复、step log、heartbeat 里程碑或声明的 `output` 产物至少其一。若 step 声明了 `output` 或 `outputs` 必需产物，主 Agent 必须验证产物存在且满足 step 的 `validation`；缺失时不得标记 completed，也不得解锁下游。只有同时缺少结构化最终答复、step log、heartbeat 里程碑和声明产物时，主 Agent 才能判定为 dispatch 空跑或运行时前置失败，把 step 标记为 `blocked`/`failed` 并记录原因。记录原因时必须写明本次实际派发是否传了 `isolation`、plan 中的 `runtime.subagent_isolation.mode`、声明产物路径和缺失情况，不能只猜测是 worktree 问题。
 
 **上下文预算**：`SKILL.md` 只保留触发条件、阶段入口和关键铁律。长规则、schema、prompt 变体和检查表放入 `references/`；重复机械操作优先脚本化，并让脚本输出紧凑 packet，避免主会话读取大段 Markdown。完整设计约束见 `references/skill-design.md`。
 
