@@ -19,7 +19,7 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 
 初始化采用主 Agent 交互模式：主 Agent 先通过 `AskUserQuestion` / 结构化选择 UI 确认作用域、wiki 路径、覆盖风险和项目 `CLAUDE.md` 更新意愿，让 Claude Code 渲染可用方向键移动、Enter 确认的选择控件，再调用脚本落盘。每个交互问题必须展示可选项；不得在 `AskUserQuestion` 可用时用普通文本要求用户手打 `1/2` 或命令参数。结构化选择 UI / AskUserQuestion 不可用、调用失败或没有渲染出按钮时，才允许降级为明确标注 fallback 的纯文本列表选项，继续收集用户选择。
 
-底层写入仍由初始化脚本完成，但只有在用户已确认所有参数后才运行脚本。命令文档不得在交互前执行 root 解析；不得内联 heredoc / file redirection 的 Python 片段。最终落盘阶段先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-init.sh --user|--project --wiki-dir <已确认路径> ...`。如果用户配置远程服务器，主 Agent 把非敏感参数追加为可重复的 `--server 'ip=<host>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`；密码不得作为参数传入。
+底层写入仍由初始化脚本完成，但只有在用户已确认所有参数后才运行脚本。命令文档不得在交互前执行 root 解析；不得内联 heredoc / file redirection 的 Python 片段。最终落盘阶段先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-init.sh --user|--project --wiki-dir <已确认路径> ...`。如果用户配置远程服务器，主 Agent 把非敏感参数追加为可重复的 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`；密码不得作为参数传入。
 
 主 Agent 应优先自己提问，而不是要求用户进入 Bash 交互。必须先用 `AskUserQuestion` 问用户作用域和 wiki 路径，并在问题中展示默认路径 `~/workspace/Goo-wiki`；用户不输入路径时使用默认路径。随后显式传入 `--user/--project` 与 `--wiki-dir <路径>`；不得默认写入项目配置，也不得在未展示默认路径的情况下静默使用默认 wiki 路径。
 
@@ -110,7 +110,7 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 
 如果项目配置了远程服务器，AutoGoo marker 块还会写入：
 
-- 远程服务器表格：IP/host、端口、用户名、类型、用途、secrets 来源
+- 远程服务器表格：名称、host、端口、用户名、类型、用途、secrets 来源
 - `### 何时使用`：按 `purpose` 或服务器类型说明 CPU/GPU 服务器适用场景
 - 远程执行约束：AutoGoo 工具读取 `.goo/config.json` 与 `.goo/secrets.json`，执行任务时必须显式选择目标服务器，不依赖默认第一个
 - secrets 约束：不得把密码展开到命令行、日志、计划正文或 subagent prompt
@@ -198,13 +198,13 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 
 secrets 文件权限为 `chmod 600`，项目级 secrets 文件自动加入 `.gitignore`。
 
-config 中只记录 `servers[].{ip, port, user, type, purpose, secrets_file}`，不存储密码。使用服务器时，从 `secrets_file` 读取密码。`port` 默认 22，`type` 为 `cpu` 或 `gpu`，默认 `cpu`。`purpose` 为服务器用途说明，用于 CLAUDE.md 中告知何时使用该服务器。
+config 中记录 `servers[].{name, host, ip?, port, user, type, purpose, secrets_file}`，不存储密码。`name` 是给模型、plan 和 `remote_server` 使用的稳定名称；`host` 是 SSH 连接地址，可以是 DNS 名、SSH config Host 或 IP；`ip` 仅作为兼容字段可选。使用服务器时，从 `secrets_file` 读取密码。`port` 默认 22，`type` 为 `cpu` 或 `gpu`，默认 `cpu`。`purpose` 为服务器用途说明，用于 CLAUDE.md 中告知何时使用该服务器。
 
 非交互初始化示例：
 
 ```bash
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~/workspace/Goo-wiki \
-  --server 'ip=10.0.0.8,user=ubuntu,port=22,type=gpu,purpose=模型训练与推理'
+  --server 'name=gpu-a100,host=gpu-a100,user=ubuntu,port=22,type=gpu,purpose=模型训练与推理'
 ```
 
 该命令只写入非敏感配置，并创建 chmod 600 的 secrets 占位文件。用户需要稍后手动编辑 `.goo/secrets.json` 或 `~/.auto-goo/secrets.json` 填入密码；不得在聊天、计划、命令行或日志里展开密码。
@@ -215,7 +215,7 @@ bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~
 sudo apt install sshpass
 ```
 
-不会自动安装，也不会中断初始化。`sshpass` 只在 secrets 中存在 password 且需要自动填密码时使用；如果 secrets 里没有密码，`goo-ssh.sh` 会退回普通 `ssh`，支持 SSH key 或手动认证；非交互环境会使用 `BatchMode=yes` 避免卡在密码提示。自动连接脚本支持按服务器选择。使用时先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-ssh.sh`，例如传入 `--server <ip-or-host>`、`--server <ip-or-host>:<port>`、`--server <user>@<ip-or-host>:<port>`，或传入 `--host <ip-or-host> --user <user> --port <port>`。
+不会自动安装，也不会中断初始化。`sshpass` 只在 secrets 中存在 password 且需要自动填密码时使用；如果 secrets 里没有密码，`goo-ssh.sh` 会退回普通 `ssh`，支持 SSH key 或手动认证；非交互环境会使用 `BatchMode=yes` 避免卡在密码提示。自动连接脚本支持按服务器名称、index 或 host 选择。使用时先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-ssh.sh`，例如传入 `--server gpu-a100`、`--server <host-or-ip>`、`--server <host-or-ip>:<port>`、`--server <user>@<host-or-ip>:<port>`，或传入 `--host <host-or-ip> --user <user> --port <port>`。
 
 注意：setup 文档不内联 root 解析 heredoc，避免 slash command 在交互前误执行 Bash。
 

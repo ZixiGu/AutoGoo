@@ -78,7 +78,7 @@ AutoGoo 的权限交互由主 Agent 统一处理，后台 Subagent 不做平凡 
 派发远程 step 前，主 Agent 必须：
 
 - 读取项目 `.goo/config.json`；缺失时再读取用户级 `~/.auto-goo/config.json`。
-- 确认 `remote_server` 能唯一匹配 `servers[]` 的 index、`ip`、`ip:port`、`user@ip` 或 `user@ip:port`。
+- 确认 `remote_server` 能唯一匹配 `servers[]` 的 `name`、index、`host`、`host:port`、`user@host` 或 `user@host:port`；计划里优先使用 `name`。
 - 确认配置项包含 `secrets_file`，且 secrets 文件存在；只检查存在性和权限，不打印密码内容。
 - 用结构化确认向用户说明目标服务器、命令类别、远程路径、产物位置和风险；未获确认时回写 `blocked` / `needs_user_approval`。
 
@@ -97,7 +97,7 @@ Subagent 默认隔离上下文。主 Agent 派发时只传：
 - 当前 step 的 `id`、`name`、`description`、`type`、`subagent`、`task_agent`、`output`
 - 当前 step 的 `available_skills`；若为空数组，不额外加载 skill
 - 必要的项目约束和安全规则摘要
-- **执行目录与隔离策略**：执行启动或恢复时先读取 plan 顶层 `runtime.subagent_isolation`；若已有 `mode` 且 `project_root` 与当前 AutoGoo 项目根一致，直接复用，不做 Git 检查、不再次询问。缓存缺失、根目录不匹配或用户明确切换执行目录时，才检查一次当前项目根本身是否是 Git repo 且 `HEAD` 可解析，并写回缓存。不要设置 `GIT_DISCOVERY_ACROSS_FILESYSTEM`，不要向父目录、跨文件系统或备用路径寻找 Git root。Git worktree 隔离只用于 Git 项目：它给 Subagent 独立工作树，便于 diff、回滚和并行写入隔离；非 Git 项目没有 commit/HEAD 可作为隔离基线，所以按普通非 Git 项目执行。若当前项目不是 Git repo，优先复用同 thread 中已记录的 `decision="continue_non_git"`；没有记录时才用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否运行 `git init`。用户选择继续非 Git 执行时写 `{"mode":"none","project_root":"<path>","decision":"continue_non_git","reason":"project_not_git_user_declined_init"}`；选择运行 `git init` 时必须默认使用 `main` 分支，优先运行 `git init -b main`，不支持 `-b` 的 Git 版本必须在初始化后立即把默认分支设为 `main`，且不自动 add/commit；随后重新检查 `HEAD`，若仍无提交则写 `{"mode":"none","project_root":"<path>","decision":"git_init_without_head","reason":"git_initialized_without_head"}` 并继续普通非 Git 执行；选择停止时标记 workflow blocked/paused。建议结构：`{"mode":"worktree","project_root":"<path>","checked_at":"<iso>","reason":"project_git_head_available"}` 或 `{"mode":"none","project_root":"<path>","checked_at":"<iso>","decision":"...","reason":"..."}`。后续派发 Subagent 只读取该缓存，不得每次派发前重复运行 git 检查。只有 `mode="worktree"` 时才允许给 Agent tool 传 `isolation: "worktree"`；`mode="none"` 时必须省略 `isolation` 参数，并在 prompt 中声明“当前项目按普通非 Git 模式执行；只在 allowed_write_paths 内修改，不执行破坏性操作”。如果 Agent 工具仍报 `Failed to resolve base branch "HEAD"`，最多记录一次失败并把当前调度标记为 blocked/需要用户选择；不得循环 probe，也不得改从父级 Git root 派发。
+- **执行目录与 worktree 配置**：执行启动或恢复时先读取 plan 顶层 `runtime.subagent_isolation`；若已有 `mode` 且 `project_root` 与当前 AutoGoo 项目根一致，直接复用，不做 Git 检查、不再次询问。缓存缺失、根目录不匹配或用户明确切换执行目录时，用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否启用 worktree 隔离。用户选择不启用时写 `{"mode":"none","project_root":"<path>","checked_at":"<iso>","decision":"worktree_disabled"}`，后续派发省略 `isolation`。若省略 `isolation` 的实际派发仍报 `Failed to resolve base branch "HEAD"` / `git rev-parse failed`，说明当前 Claude Code Agent 包装层仍要求 Git HEAD：立即写入 `runtime.subagent_isolation.compatibility.agent_requires_git_head=true`，把当前 step 标记 `blocked`/`needs_user_approval`，重新询问是否启用 worktree；不得重置 heartbeat 后反复重派，也不得创建 probe agent。用户选择启用时写 `mode="worktree"`，并只检查当前项目根本身是否是 Git repo 且 `HEAD` 可解析；不要设置 `GIT_DISCOVERY_ACROSS_FILESYSTEM`，不要向父目录、跨文件系统或备用路径寻找 Git root。若不是 Git repo，运行 `git init -b main`，不支持 `-b` 的 Git 版本在初始化后立即 `git branch -M main`；若已有 Git 但没有 `HEAD`，复用当前仓库。随后执行初始提交：先检查 `git status --short` 和明显敏感文件风险，发现密钥、令牌、密码、secrets 文件或异常大批生成物时先标记 blocked 并前台确认；否则 `git add -A` 后提交 `chore: initialize repository for AutoGoo worktree isolation`。建议结构：`{"mode":"worktree","project_root":"<path>","checked_at":"<iso>","decision":"worktree_enabled","reason":"git_head_available"}` 或 `{"mode":"none","project_root":"<path>","checked_at":"<iso>","decision":"worktree_disabled","compatibility":{"agent_requires_git_head":true}}`。后续派发 Subagent 只读取该缓存，不得每次派发前重复运行 git 检查。只有 `mode="worktree"` 且 `HEAD` 可解析时才允许给 Agent tool 传 `isolation: "worktree"`；`mode="none"` 时必须省略 `isolation` 参数。如果启用后仍无法得到 `HEAD`，最多记录一次失败并把 workflow 标记为 blocked；不得降级普通派发、不得循环 probe，也不得改从父级 Git root 派发。
 - `wiki_context` 中与该 step 直接相关的 3-7 条要点
 - `context_digest` 中与该 step 直接相关的决策、约束和验收点
 - `context_artifacts` 中必要 Markdown 的路径、标题和行号范围
@@ -180,13 +180,16 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
   running = []       # 当前在跑的 agent 槽位
   ready_queue = []   # 就绪但等待槽位的步骤
   若 plan.runtime.subagent_isolation.mode 存在且 project_root 等于当前 AutoGoo 项目根:
-    直接复用缓存，不运行 git 检查，不询问 git init
+    直接复用缓存，不运行 git 检查，不询问 worktree 配置
   否则若缓存缺失、project_root 不匹配或执行目录变更:
-    只检查当前 AutoGoo 项目根本身是否有可用 git HEAD
-    不设置 GIT_DISCOVERY_ACROSS_FILESYSTEM，不向父目录或备用路径寻找 git root
-    若当前项目不是 git repo，先复用同 thread 已记录的 decision=continue_non_git；没有记录才用 AskUserQuestion(id=git_init_project) 询问是否 git init
-    用户选择 git init 时优先运行 git init -b main，不支持 -b 时初始化后立即设为 main；不自动 add/commit；无 HEAD 时仍 mode=none
-    写入 plan.runtime.subagent_isolation = {mode, project_root, checked_at, decision?, reason}
+    用 AskUserQuestion(id=git_init_project) 询问是否启用 worktree
+    用户选择不启用: 写入 {mode:"none", project_root, checked_at, decision:"worktree_disabled"}
+    用户选择启用:
+      只检查当前 AutoGoo 项目根本身是否有可用 git HEAD
+      不设置 GIT_DISCOVERY_ACROSS_FILESYSTEM，不向父目录或备用路径寻找 git root
+      若不是 git repo: git init -b main；不支持 -b 时 git branch -M main
+      若无 HEAD: 检查 git status --short 和敏感文件风险；安全后 git add -A && git commit -m "chore: initialize repository for AutoGoo worktree isolation"
+      HEAD 可解析后写入 {mode:"worktree", project_root, checked_at, decision:"worktree_enabled", reason:"git_head_available"}；否则 blocked
 
 主循环:
   while 有 pending 步骤 或 running 非空:
@@ -199,7 +202,11 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
          step = ready_queue.pop(0)
          若 step.requires_user_confirm=true 且尚未确认 → 主 Agent 前台询问，确认后再派发
          更新 status="running", progress=0, agent_id, started_at → plan.json
-         启动 Agent (run_in_background, 间隔 3-5s 错峰；mode=worktree 才传 isolation="worktree"，mode=none 不传 isolation，按普通非 Git 项目执行)
+         启动 Agent (run_in_background, 间隔 3-5s 错峰；mode=worktree 且 HEAD 可解析时传 isolation="worktree"，mode=none 不传 isolation)
+         若 mode=none 仍返回 Failed to resolve base branch "HEAD"/git rev-parse failed:
+           写入 runtime.subagent_isolation.compatibility.agent_requires_git_head=true
+           将当前 step 标记 blocked/needs_user_approval，前台询问是否启用 worktree
+           不重置 heartbeat，不再重派，不创建 probe agent
          running.append(step)
 
     3. 等待任一 Agent 完成
@@ -526,7 +533,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
      while running slots < MAX_CONCURRENT AND ready_queue 非空:
        step = ready_queue.pop(0)
        → 检查 step.subagent 是否合法
-         → 合法: 按 step.subagent 读取 agents/roles/<role>.md，再按 step.task_agent 读取 agents/tasks/<department>/<task>.md，合成 Subagent Prompt 后启动 Agent (run_in_background；仅 mode=worktree 传 isolation="worktree"，mode=none 不传 isolation，按普通非 Git 项目执行)
+         → 合法: 按 step.subagent 读取 agents/roles/<role>.md，再按 step.task_agent 读取 agents/tasks/<department>/<task>.md，合成 Subagent Prompt 后启动 Agent (run_in_background；mode=worktree 且 HEAD 可解析时传 isolation="worktree"，mode=none 不传 isolation；mode=none 若仍触发 HEAD 解析失败则记录 compatibility.agent_requires_git_head 并阻塞，不再 probe)
          → subagent 或 task_agent 不合法/缺失: 暂停派发，先修正 plan 或创建新角色/任务画像
        → 主 Agent 调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入 status、started_at、首个 heartbeat_at 和 step log
        → 调用 `goo-status.py --update-status` 后运行 `goo-status.py`，向用户展示 RUNNING 心跳摘要

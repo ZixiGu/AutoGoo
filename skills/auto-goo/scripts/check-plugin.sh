@@ -136,6 +136,7 @@ required = {
     "update_claude_md",
     "configure_servers",
     "server_type",
+    "server_name",
     "server_ip",
     "server_port",
     "server_user",

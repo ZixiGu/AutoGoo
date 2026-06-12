@@ -15,7 +15,7 @@ Options:
                     Set Goo-wiki project archive folder name (default: project directory name)
   --server SPEC     Add a remote server without entering the TTY prompts. Repeatable.
                     SPEC uses comma-separated key=value pairs:
-                    ip=HOST,user=USER,port=22,type=gpu,purpose=模型训练
+                    name=gpu-box,host=HOST,user=USER,port=22,type=gpu,purpose=模型训练
                     Passwords are not accepted on the command line; edit the
                     generated secrets file after init and keep chmod 600.
   --yes             Use defaults for unanswered prompts
@@ -233,22 +233,24 @@ prompt_secret() {
 
 save_server_secrets() {
   local secrets_file="$1"
-  local ip="$2"
-  local user="$3"
-  local pass="$4"
+  local name="$2"
+  local host="$3"
+  local user="$4"
+  local pass="$5"
   local secrets_dir
   secrets_dir="$(dirname "$secrets_file")"
 
   mkdir -p "$secrets_dir"
-  python3 - "$secrets_file" "$ip" "$user" "$pass" <<'PY'
+  python3 - "$secrets_file" "$name" "$host" "$user" "$pass" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 secrets_file = Path(sys.argv[1])
-ip = sys.argv[2]
-user = sys.argv[3]
-password = sys.argv[4]
+name = sys.argv[2]
+host = sys.argv[3]
+user = sys.argv[4]
+password = sys.argv[5]
 
 if secrets_file.exists():
     try:
@@ -265,8 +267,13 @@ updated = False
 for item in secrets:
     if not isinstance(item, dict):
         continue
-    if str(item.get("ip") or item.get("host") or "") == ip and str(item.get("user") or "") == user:
-        item["ip"] = ip
+    item_host = str(item.get("host") or item.get("ip") or "")
+    item_name = str(item.get("name") or "")
+    if (item_host == host or (name and item_name == name)) and str(item.get("user") or "") == user:
+        if name:
+            item["name"] = name
+        item["host"] = host
+        item.setdefault("ip", host)
         item["user"] = user
         if password:
             item["password"] = password
@@ -276,7 +283,11 @@ for item in secrets:
         break
 
 if not updated:
-    secrets.append({"ip": ip, "user": user, "password": password})
+    item = {"host": host, "user": user, "password": password}
+    if name:
+        item["name"] = name
+    item["ip"] = host
+    secrets.append(item)
 secrets_file.write_text(json.dumps(secrets, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
   chmod 600 "$secrets_file"
@@ -284,32 +295,38 @@ PY
 
 append_server_json() {
   local current_json="$1"
-  local ip="$2"
-  local user="$3"
-  local port="$4"
-  local server_type="$5"
-  local purpose="$6"
-  local secrets_file="$7"
+  local name="$2"
+  local host="$3"
+  local user="$4"
+  local port="$5"
+  local server_type="$6"
+  local purpose="$7"
+  local secrets_file="$8"
 
-  python3 - "$current_json" "$ip" "$user" "$port" "$server_type" "$purpose" "$secrets_file" <<'PY'
+  python3 - "$current_json" "$name" "$host" "$user" "$port" "$server_type" "$purpose" "$secrets_file" <<'PY'
 import json
 import sys
 
-current_json, ip, user, port, server_type, purpose, secrets_file = sys.argv[1:8]
+current_json, name, host, user, port, server_type, purpose, secrets_file = sys.argv[1:9]
 try:
     servers = json.loads(current_json)
 except (json.JSONDecodeError, ValueError):
     servers = []
 if not isinstance(servers, list):
     servers = []
-servers.append({
-    "ip": ip,
+server = {
+    "name": name,
+    "host": host,
+    "ip": host,
     "user": user,
     "port": int(port) if str(port).isdigit() else port,
     "type": server_type,
     "purpose": purpose,
     "secrets_file": secrets_file,
-})
+}
+if not name:
+    server.pop("name", None)
+servers.append(server)
 print(json.dumps(servers, ensure_ascii=False))
 PY
 }
@@ -331,14 +348,15 @@ for part in spec.split(","):
     key, value = part.split("=", 1)
     values[key.strip().lower()] = value.strip()
 
-ip = values.get("ip") or values.get("host")
+name = values.get("name") or values.get("alias") or values.get("label") or ""
+host = values.get("host") or values.get("ip")
 user = values.get("user")
 port = values.get("port") or "22"
 server_type = (values.get("type") or "cpu").lower()
 purpose = values.get("purpose") or "-"
 
-if not ip:
-    print("error: --server requires ip=HOST or host=HOST", file=sys.stderr)
+if not host:
+    print("error: --server requires host=HOST or ip=HOST", file=sys.stderr)
     raise SystemExit(2)
 if not user:
     print("error: --server requires user=USER", file=sys.stderr)
@@ -350,7 +368,7 @@ if server_type not in {"cpu", "gpu"}:
     print("error: --server type must be cpu or gpu", file=sys.stderr)
     raise SystemExit(2)
 
-for value in (ip, user, port, server_type, purpose):
+for value in (name, host, user, port, server_type, purpose):
     print(value)
 PY
 }
@@ -417,17 +435,18 @@ for spec in "${SERVER_SPECS[@]}"; do
   if ! mapfile -t SERVER_FIELDS < <(parse_server_spec "$spec"); then
     exit 2
   fi
-  if [[ "${#SERVER_FIELDS[@]}" -lt 5 ]]; then
+  if [[ "${#SERVER_FIELDS[@]}" -lt 6 ]]; then
     echo "error: failed to parse --server spec" >&2
     exit 2
   fi
-  SERVER_IP="${SERVER_FIELDS[0]}"
-  SERVER_USER="${SERVER_FIELDS[1]}"
-  SERVER_PORT="${SERVER_FIELDS[2]}"
-  SERVER_TYPE="${SERVER_FIELDS[3]}"
-  SERVER_PURPOSE="${SERVER_FIELDS[4]}"
-  save_server_secrets "$SECRETS_FILE" "$SERVER_IP" "$SERVER_USER" ""
-  SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_IP" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF")"
+  SERVER_NAME="${SERVER_FIELDS[0]}"
+  SERVER_HOST="${SERVER_FIELDS[1]}"
+  SERVER_USER="${SERVER_FIELDS[2]}"
+  SERVER_PORT="${SERVER_FIELDS[3]}"
+  SERVER_TYPE="${SERVER_FIELDS[4]}"
+  SERVER_PURPOSE="${SERVER_FIELDS[5]}"
+  save_server_secrets "$SECRETS_FILE" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" ""
+  SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF")"
 done
 
 if [[ "${#SERVER_SPECS[@]}" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
@@ -438,9 +457,14 @@ if [[ "${#SERVER_SPECS[@]}" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
       echo ""
       echo "--- Server $SERVER_INDEX ---"
       SERVER_TYPE="$(prompt "Server type (cpu/gpu)" "cpu")"
-      read -r -p "Server IP address: " SERVER_IP
-      if [[ -z "$SERVER_IP" ]]; then
-        echo "IP address is required, skipping this server."
+      read -r -p "Server name/alias for plans (e.g. gpu-a100, lab-cpu): " SERVER_NAME
+      if [[ -z "$SERVER_NAME" ]]; then
+        echo "Server name is required, skipping this server."
+        break
+      fi
+      read -r -p "SSH host/IP/DNS for connection: " SERVER_HOST
+      if [[ -z "$SERVER_HOST" ]]; then
+        echo "SSH host is required, skipping this server."
         break
       fi
       read -r -p "Username: " SERVER_USER
@@ -457,8 +481,8 @@ if [[ "${#SERVER_SPECS[@]}" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
       fi
       SERVER_PASS="$(prompt_secret "Password (input hidden, Enter to skip)")"
 
-      save_server_secrets "$SECRETS_FILE" "$SERVER_IP" "$SERVER_USER" "$SERVER_PASS"
-      SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_IP" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF")"
+      save_server_secrets "$SECRETS_FILE" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" "$SERVER_PASS"
+      SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF")"
       SERVER_INDEX=$((SERVER_INDEX + 1))
 
       if ! confirm "Add another server?" "n"; then
@@ -776,16 +800,20 @@ try:
             return f"{purpose} 使用前先确认任务是否需要远程环境、长时间运行或特定依赖。"
 
         lines = ["\n## 远程服务器\n"]
-        lines.append("| IP | 端口 | 用户名 | 类型 | 用途 | 密码来源 |")
-        lines.append("|---|------|--------|------|------|----------|")
+        lines.append("| 名称 | Host | 端口 | 用户名 | 类型 | 用途 | 密码来源 |")
+        lines.append("|------|------|------|--------|------|------|----------|")
         for s in servers:
             purpose = server_purpose(s)
-            lines.append(f"| {s['ip']} | {s.get('port', '22')} | {s['user']} | {s['type']} | {purpose} | `{s['secrets_file']}` |")
+            name = s.get("name") or s.get("host") or s.get("ip")
+            host = s.get("host") or s.get("ip")
+            lines.append(f"| {name} | {host} | {s.get('port', '22')} | {s['user']} | {s['type']} | {purpose} | `{s['secrets_file']}` |")
         lines.append("")
         lines.append("### 何时使用")
         for s in servers:
             purpose = server_purpose(s)
-            lines.append(f"- **{s['ip']}**（{s['type']}）：{usage_hint(s, purpose)}连接信息见 `{s['secrets_file']}`。")
+            name = s.get("name") or s.get("host") or s.get("ip")
+            host = s.get("host") or s.get("ip")
+            lines.append(f"- **{name}**（{s['type']}，host: `{host}`）：{usage_hint(s, purpose)}连接信息见 `{s['secrets_file']}`。")
         lines.append("")
         lines.append(f"config 位于 `.goo/config.json`，secrets 位于 `.goo/secrets.json`（chmod 600，已加入 .gitignore）。")
         lines.append("连接远程服务器由 AutoGoo 工具读取 `.goo/config.json` 与 `.goo/secrets.json` 处理；执行任务时必须显式选择目标服务器，不依赖默认第一个。")

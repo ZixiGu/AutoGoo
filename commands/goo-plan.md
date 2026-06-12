@@ -172,7 +172,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 - 每个步骤必须包含 `tier`；同一 `tier` 内互不依赖的步骤应尽量并行，不能把可并行步骤写成逐个依赖的线性链
 - 每条 `depends_on` 都必须代表真实数据、验收、确认、共享写入或风险依赖；如果只是叙事顺序或文档顺序，必须移除依赖并放入同一并行层
 - 每个步骤应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths` 和 `validation`，让执行阶段不依赖聊天记录猜测读写范围和验收方式
-- 每个步骤应包含 `execution_target`，默认 `"local"`；需要远程执行时写 `"remote"`，并同时写 `remote_server`（匹配 `servers[]` 的 `ip` / `host:port` / `user@host:port` / index）和 `remote_reason`
+- 每个步骤应包含 `execution_target`，默认 `"local"`；需要远程执行时写 `"remote"`，并同时写 `remote_server`（优先匹配 `servers[].name`，也可匹配 `host` / `host:port` / `user@host:port` / index）和 `remote_reason`
 - 远程执行 step 必须设置 `requires_user_confirm=true`，`risk_level` 至少为 `"medium"`，并在 `description` 或 `validation` 中写清远程命令类别、远程路径、预期产物和回传/验收方式；不得把 secrets 写入 plan
 - 每个步骤必须包含 `subagent`，明确稳定 Role Agent：`researcher` / `implementer` / `optimizer` / `evaluator` / `reviewer` / `auditor` / `recorder`
 - 每个步骤必须包含 `task_agent`，明确细分 Task Agent，例如 `codebase-scout`、`feature-builder`、`test-runner`、`code-reviewer`、`evidence-auditor`、`wiki-curator`；不确定时先选对应 role 下最通用的 task agent，不要留空

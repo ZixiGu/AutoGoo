@@ -5,15 +5,15 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  goo-ssh.sh [--config .goo/config.json] [--server HOST_OR_INDEX] [--dry-run] [--] [ssh args or remote command]
+  goo-ssh.sh [--config .goo/config.json] [--server NAME_HOST_OR_INDEX] [--dry-run] [--] [ssh args or remote command]
   goo-ssh.sh --host HOST --user USER [--port PORT] [--dry-run] [--] [ssh args or remote command]
 
 Examples:
   goo-ssh.sh
   goo-ssh.sh --server 0
-  goo-ssh.sh --server 192.168.1.100
-  goo-ssh.sh --server 192.168.1.100:2222 -- nvidia-smi
-  goo-ssh.sh --server user@192.168.1.100:2222 -- nvidia-smi
+  goo-ssh.sh --server gpu-a100
+  goo-ssh.sh --server gpu-a100.local:2222 -- nvidia-smi
+  goo-ssh.sh --server user@gpu-a100.local:2222 -- nvidia-smi
   goo-ssh.sh --host 192.168.1.100 --user ubuntu --port 2222
 
 Notes:
@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --server)
-      [[ $# -ge 2 ]] || { echo "error: --server requires HOST_OR_INDEX" >&2; exit 2; }
+      [[ $# -ge 2 ]] || { echo "error: --server requires NAME_HOST_OR_INDEX" >&2; exit 2; }
       SERVER_SELECTOR="$2"
       shift 2
       ;;
@@ -117,7 +117,10 @@ def split_target(raw):
     return user, host, port
 
 def server_host(server):
-    return str(server.get("ip") or server.get("host") or "")
+    return str(server.get("host") or server.get("ip") or "")
+
+def server_name(server):
+    return str(server.get("name") or "")
 
 def server_port(server):
     return str(server.get("port", 22))
@@ -129,7 +132,7 @@ def server_matches(server, host="", port="", user="", selector_value=""):
     host_value = server_host(server)
     port_value = server_port(server)
     user_value = server_user(server)
-    name_value = str(server.get("name", ""))
+    name_value = server_name(server)
     candidates = {
         host_value,
         f"{host_value}:{port_value}",
@@ -203,7 +206,8 @@ else:
     index = matches[0]
     server = servers[index]
 
-host = server.get("ip") or server.get("host")
+name = server.get("name")
+host = server.get("host") or server.get("ip")
 user = server.get("user")
 port = str(server.get("port", 22))
 secrets_file = server.get("secrets_file") or ".goo/secrets.json"
@@ -231,11 +235,14 @@ if secrets_path.exists():
         for item in entries:
             if not isinstance(item, dict):
                 continue
-            if str(item.get("ip") or item.get("host") or "") == str(host) and str(item.get("user") or "") == str(user):
+            item_host = str(item.get("ip") or item.get("host") or "")
+            item_name = str(item.get("name") or "")
+            if (item_host == str(host) or (name and item_name == str(name))) and str(item.get("user") or "") == str(user):
                 password = item.get("password")
                 break
     elif isinstance(entries, dict):
         candidate_keys = [
+            str(name or ""),
             str(host),
             f"{host}:{port}",
             f"{user}@{host}",

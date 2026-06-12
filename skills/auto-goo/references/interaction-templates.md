@@ -32,25 +32,25 @@
 }
 ```
 
-## git preflight
+## worktree preflight
 
 ```json
 {
-  "header": "Git 初始化",
+  "header": "Worktree",
   "id": "git_init_project",
-  "question": "当前项目不是 Git 仓库，是否要先初始化 Git？",
+  "question": "是否为本次 Subagent 执行启用 Git worktree 隔离？",
   "options": [
     {
-      "label": "继续非 Git 执行 (Recommended)",
-      "description": "不运行 git init；按普通项目执行，不使用 worktree 隔离。"
+      "label": "不启用 (Recommended)",
+      "description": "省略 Agent isolation 字段；不自动初始化 Git 或创建提交。"
     },
     {
-      "label": "运行 git init",
-      "description": "只在当前项目根创建 .git，默认分支为 main；不自动 add 或 commit，直到有提交前仍不使用 worktree 隔离。"
+      "label": "启用 worktree",
+      "description": "需要当前项目有 Git HEAD；若没有会先 git init 并在安全检查后创建初始提交。"
     },
     {
       "label": "停止执行",
-      "description": "保留当前 plan，不初始化 Git，也不派发执行。"
+      "description": "保留当前 plan，不派发执行。"
     }
   ]
 }
@@ -130,17 +130,35 @@
 
 ```json
 {
-  "header": "服务器 IP",
-  "id": "server_ip",
-  "question": "请输入或选择服务器 IP 地址。",
+  "header": "服务器名",
+  "id": "server_name",
+  "question": "请设置一个给模型和 plan 使用的服务器名称。",
   "options": [
     {
       "label": "通过 Other 输入 (Recommended)",
-      "description": "在 Other 中输入真实 IP 或主机名；不要使用占位值落盘。"
+      "description": "例如 gpu-a100、lab-cpu、train-box；后续 remote_server 优先写这个名称。"
     },
     {
       "label": "稍后手动补填",
-      "description": "先跳过 IP，配置落盘后手动编辑 config/secrets；不得连接服务器。"
+      "description": "先跳过名称，配置落盘后手动编辑 config；计划中不得凭空猜服务器。"
+    }
+  ]
+}
+```
+
+```json
+{
+  "header": "服务器 Host",
+  "id": "server_ip",
+  "question": "请输入或选择 SSH 连接用的 host、DNS 名或 IP 地址。",
+  "options": [
+    {
+      "label": "通过 Other 输入 (Recommended)",
+      "description": "在 Other 中输入真实 SSH host、DNS 名或 IP；不要使用占位值落盘。"
+    },
+    {
+      "label": "稍后手动补填",
+      "description": "先跳过 host，配置落盘后手动编辑 config/secrets；不得连接服务器。"
     }
   ]
 }

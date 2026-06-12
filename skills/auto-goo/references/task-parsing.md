@@ -426,7 +426,7 @@ DAG 结构总结：
 | `started_at` | plan 开始执行时间，首个步骤派发时设置 |
 | `completed_at` | plan 完成时间，所有步骤完成或标记失败时设置 |
 | `max_concurrent` | 最大并发槽位数，默认 6 |
-| `runtime.subagent_isolation` | 执行启动或恢复时按当前 AutoGoo 项目根一次性计算的 Subagent 隔离策略缓存。`mode="worktree"` 表示当前项目根本身是可解析 `HEAD` 的 Git repo，后续 Agent tool 可传 `isolation: "worktree"`；`mode="none"` 表示当前项目按普通非 Git 模式执行并省略 `isolation`。必须记录 `project_root`，同 thread 恢复时若 `project_root` 与当前项目根一致则直接复用缓存，不再做 Git 检查或再次询问。当前项目不是 Git repo 时，优先复用同 thread 已记录的 `decision="continue_non_git"`；没有记录才用 `AskUserQuestion` 的 `id=git_init_project` 模板询问是否运行 `git init`。若用户选择初始化，默认分支必须是 `main`，优先使用 `git init -b main`。若用户拒绝或 `git init` 后仍没有提交/HEAD，记录 `decision` 和 `reason` 并继续 `mode="none"`。后续派发只读该缓存，除非缓存缺失、`project_root` 不匹配或执行目录明确变更；不得向父目录、跨文件系统或备用路径寻找 Git root |
+| `runtime.subagent_isolation` | 执行启动或恢复时按当前 AutoGoo 项目根一次性确定的 Subagent worktree 配置缓存。`mode="worktree"` 表示用户已启用 worktree 隔离，当前项目根本身有可解析 `HEAD`，后续 Agent tool 可传 `isolation: "worktree"`；`mode="none"` 表示用户未启用 worktree，后续派发省略 `isolation`。必须记录 `project_root`，同 thread 恢复时若 `project_root` 与当前项目根一致则直接复用缓存，不再做 Git 检查或再次询问。缓存缺失、`project_root` 不匹配或执行目录明确变更时，用 `AskUserQuestion` 的 `id=git_init_project` 模板询问是否启用 worktree。若 `mode="none"` 省略 `isolation` 后实际派发仍报 `Failed to resolve base branch "HEAD"` / `git rev-parse failed`，写入 `compatibility.agent_requires_git_head=true`，把当前 step 标记 `blocked`/`needs_user_approval`，重新询问是否启用 worktree；不得反复重派或创建 probe agent。用户启用后，只检查当前项目根，不向父目录、跨文件系统或备用路径寻找 Git root；若不是 Git repo，运行 `git init -b main`，不支持 `-b` 时初始化后 `git branch -M main`；若无 `HEAD`，先检查 `git status --short` 和敏感文件风险，安全后 `git add -A` 并提交 `chore: initialize repository for AutoGoo worktree isolation`。只有 `HEAD` 可解析后才能写入 `mode="worktree"` 并派发 worktree；启用后仍无 `HEAD` 时标记 blocked，不降级普通派发 |
 | `goals` | 交付目标列表。单目标任务也写一个默认 goal；多目标任务按 goal 拆验收标准、最终产物和依赖关系 |
 | `goals[].id` | goal 稳定 ID，如 `g1` |
 | `goals[].status` | goal 状态：`pending` / `running` / `completed` / `failed` / `deferred` |
@@ -452,7 +452,7 @@ DAG 结构总结：
 | `allowed_write_paths` | Subagent 允许写入的路径边界；缺失时执行前先补 plan |
 | `validation` | 本步骤完成后的验收方式，可以是命令、文件存在性、人工检查点或指标阈值 |
 | `execution_target` | 执行位置，默认 `local`；需要远程服务器时写 `remote` |
-| `remote_server` | 远程服务器选择器，仅 `execution_target=remote` 时使用；必须匹配 config `servers[]` 的 index、`ip`、`ip:port`、`user@ip` 或 `user@ip:port` |
+| `remote_server` | 远程服务器选择器，仅 `execution_target=remote` 时使用；优先匹配 config `servers[].name`，也可匹配 index、`host`、`host:port`、`user@host` 或 `user@host:port`。计划里优先写名称，避免模型记 IP |
 | `remote_reason` | 为什么必须远程执行，例如需要 GPU、远程依赖、长跑环境或用户明确要求 |
 | `risk_level` | 风险等级，建议 `low` / `medium` / `high`；涉及覆盖、远程、批量改写、发布等通常不应为 low |
 | `requires_user_confirm` | 是否需要用户确认后才能执行；高风险或不可逆步骤必须为 `true` |
