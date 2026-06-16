@@ -23,17 +23,21 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 ```text
 /plugin marketplace add ZixiGu/AutoGoo
 /plugin marketplace update
-/plugin install auto-goo@auto-goo
-/plugin enable auto-goo@auto-goo
+/plugin install auto-goo@AutoGoo --scope user
+/reload-plugins
 ```
 
 ### 从本地 checkout 安装
 
 ```text
 /plugin marketplace add /path/to/AutoGoo
-/plugin install auto-goo@AutoGoo
-/plugin enable auto-goo@AutoGoo
+/plugin install auto-goo@AutoGoo --scope user
+/reload-plugins
 ```
+
+这里 `auto-goo@AutoGoo` 的前半段来自 `.claude-plugin/plugin.json` 的 `name`，后半段来自 `.claude-plugin/marketplace.json` 的 `name`。`/plugin install` 默认安装到用户级；显式 `--scope user` 是为了避免和项目级安装混用。
+
+如果提示 `already installed globally`，说明用户级已安装，直接运行 `/reload-plugins`。如需启用已禁用的用户级插件，在 shell 里运行 `claude plugin enable auto-goo@AutoGoo --scope user`，不要用 `/plugin enable`。
 
 如果已经安装旧版本，先运行：
 
