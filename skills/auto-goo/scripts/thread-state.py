@@ -150,9 +150,31 @@ def create_thread(goo_dir: Path, title: str, runtime: str = "claude-code", threa
 
 def set_current(goo_dir: Path, thread_id: str) -> None:
     tdir = thread_dir(goo_dir, thread_id)
-    if not (tdir / "thread.json").exists():
+    meta_path = tdir / "thread.json"
+    if not meta_path.exists():
         raise SystemExit(f"thread not found: {thread_id}")
-    dump_json(goo_dir / "current_thread.json", {"thread_id": thread_id, "updated_at": now()})
+    meta = load_json(meta_path, {})
+    dump_json(
+        goo_dir / "current_thread.json",
+        {
+            "thread_id": thread_id,
+            "thread_dir": f".goo/threads/{thread_id}",
+            "plan_path": meta.get("plan_path") or f".goo/threads/{thread_id}/plan.json",
+            "updated_at": now(),
+        },
+    )
+
+
+def sync_compat_plan(goo_dir: Path, plan_path: Path, plan: dict[str, Any]) -> None:
+    compat_path = goo_dir / "plan.json"
+    try:
+        if plan_path.resolve() == compat_path.resolve():
+            return
+    except FileNotFoundError:
+        pass
+    if plan_path.parent.parent.name != "threads":
+        return
+    dump_json(compat_path, plan)
 
 
 def resolve_thread(goo_dir: Path, thread_id: str | None, plan_path: Path | None = None) -> str | None:
@@ -201,7 +223,10 @@ def sync_from_plan(plan_path: Path, thread_id: str | None = None) -> dict[str, A
     dump_json(tdir / "thread.json", meta)
     index = ensure_index(goo_dir)
     upsert_index(index, meta)
+    index["current_thread_id"] = resolved
     write_index(goo_dir, index)
+    set_current(goo_dir, resolved)
+    sync_compat_plan(goo_dir, plan_path, plan)
     return meta
 
 

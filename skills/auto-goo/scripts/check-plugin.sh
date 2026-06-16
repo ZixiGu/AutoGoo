@@ -323,6 +323,62 @@ for sh in "$ROOT"/skills/auto-goo/scripts/*.sh; do
   fi
 done
 
+if command -v python3 &>/dev/null; then
+  THREAD_SYNC_DIR="${TMPDIR:-/tmp}/autogoo-check-thread-sync-$$"
+  mkdir -p "$THREAD_SYNC_DIR/project/.goo/threads/demo-thread"
+  python3 - "$THREAD_SYNC_DIR/project" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+goo = root / ".goo"
+thread = goo / "threads" / "demo-thread"
+plan = {
+    "task": "thread sync smoke",
+    "status": "running",
+    "thread": {
+        "id": "demo-thread",
+        "plan_path": ".goo/threads/demo-thread/plan.json",
+        "logs_dir": ".goo/threads/demo-thread/logs",
+        "artifacts_dir": ".goo/threads/demo-thread/artifacts",
+    },
+    "steps": [
+        {"id": "s1", "name": "done", "status": "completed"},
+        {"id": "s2", "name": "run", "status": "running"},
+    ],
+}
+thread.mkdir(parents=True, exist_ok=True)
+(thread / "thread.json").write_text(json.dumps({"id": "demo-thread"}, ensure_ascii=False) + "\n", encoding="utf-8")
+(thread / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+(goo / "current_thread.json").write_text(json.dumps({"thread_id": None}, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+  if python3 "$ROOT/skills/auto-goo/scripts/thread-state.py" \
+      --goo-dir "$THREAD_SYNC_DIR/project/.goo" \
+      sync --plan "$THREAD_SYNC_DIR/project/.goo/threads/demo-thread/plan.json" >/dev/null 2>&1 \
+    && python3 - "$THREAD_SYNC_DIR/project" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+goo = root / ".goo"
+current = json.loads((goo / "current_thread.json").read_text(encoding="utf-8"))
+compat = json.loads((goo / "plan.json").read_text(encoding="utf-8"))
+index = json.loads((goo / "threads" / "index.json").read_text(encoding="utf-8"))
+assert current["thread_id"] == "demo-thread"
+assert current["plan_path"] == ".goo/threads/demo-thread/plan.json"
+assert compat["thread"]["id"] == "demo-thread"
+assert compat["steps"][1]["status"] == "running"
+assert index["current_thread_id"] == "demo-thread"
+PY
+  then
+    pass "  thread-state.py sync 同步 current_thread/index/.goo/plan.json"
+  else
+    fail "  thread-state.py sync 未同步 current_thread/index/.goo/plan.json"
+  fi
+fi
+
 # ── 6b. 模板文件 ──
 echo ""
 echo "── 6b. 模板文件 ──"
