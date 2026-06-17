@@ -21,6 +21,8 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 
 业务项目目录结构也属于主 Agent 交互，不允许只依赖脚本里的 Bash prompt。项目级初始化必须复用 `references/interaction-templates.md` 中的固定模板：`id=project_workspace_create` 询问是否创建，`id=project_workspace_layout` 询问模板或自定义目录，创建后用 `id=project_workspace_claude_md` 询问是否写入项目 `CLAUDE.md`。用户未明确选择前不得创建业务目录；选择自定义目录时，主 Agent 必须复述并确认 Other 输入后再传给 `--project-dirs`。
 
+业务目录创建后，如果项目根目录已经有内容，主 Agent 必须只读扫描并排除 `.goo/`、`.git/`、`.claude/`、已创建业务目录、secrets、锁文件和隐藏配置。发现可归类到 `src/`、`data/`、`docs/`、`scripts/`、`configs/`、`tests/` 等业务路径的现有内容时，必须先复用 `id=project_workspace_organize_existing` 模板询问是否生成整理方案；默认不整理。用户选择生成方案后，只展示移动建议，不直接移动；清单必须包含源路径、目标路径、归类理由、冲突/覆盖风险和跳过项。随后必须复用 `id=project_workspace_apply_organization` 模板二次确认，只有用户选择执行后才允许按清单移动；遇到目标已存在、敏感文件、不确定归类或批量大文件时停止并重新确认。脚本默认只创建目录，不自动整理已有内容。
+
 底层写入仍由初始化脚本完成，但只有在用户已确认所有参数后才运行脚本。命令文档不得在交互前执行 root 解析；不得内联 heredoc / file redirection 的 Python 片段。最终落盘阶段先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-init.sh --user|--project --wiki-dir <已确认路径> ...`。如果用户配置远程服务器，主 Agent 把非敏感参数追加为可重复的 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`；密码不得作为参数传入。
 
 主 Agent 应优先自己提问，而不是要求用户进入 Bash 交互。必须先用 `AskUserQuestion` 问用户作用域和 wiki 路径，并在问题中展示默认路径 `~/workspace/Goo-wiki`；用户不输入路径时使用默认路径。随后显式传入 `--user/--project` 与 `--wiki-dir <路径>`；不得默认写入项目配置，也不得在未展示默认路径的情况下静默使用默认 wiki 路径。
@@ -245,7 +247,7 @@ bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project \
 - `data`: `src`, `scripts`, `notebooks`, `data/raw`, `data/interim`, `data/processed`, `data/external`, `reports`, `docs`, `tests`
 - `docs`: `docs`, `docs/adr`, `docs/assets`, `scripts`, `src`, `tests`
 
-也可以用 `--project-dirs src,data/raw,docs` 传入自定义目录；脚本会写入 `.goo/config.json.project_workspace` 并创建对应目录。默认 `project_workspace.layout="none"`，不创建业务目录，避免污染已有项目。业务目录创建后，必须继续复用 `id=project_workspace_claude_md` 询问是否把目录约定写入项目 `CLAUDE.md`。
+也可以用 `--project-dirs src,data/raw,docs` 传入自定义目录；脚本会写入 `.goo/config.json.project_workspace` 并创建对应目录。默认 `project_workspace.layout="none"`，不创建业务目录，避免污染已有项目。业务目录创建后，如根目录已有可归类内容，必须先用 `id=project_workspace_organize_existing` 询问是否生成整理方案，再用 `id=project_workspace_apply_organization` 二次确认是否执行移动；默认不移动任何已有内容。之后必须继续复用 `id=project_workspace_claude_md` 询问是否把目录约定写入项目 `CLAUDE.md`。
 
 ### 远程服务器配置
 

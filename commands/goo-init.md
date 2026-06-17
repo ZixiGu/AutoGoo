@@ -71,6 +71,8 @@ Agent 交互流程：
 9. 项目级初始化时，继续询问：
    - 是否创建业务项目目录结构：必须实际调用 `AskUserQuestion` 并复用 `id=project_workspace_create` 模板；默认「不创建 (Recommended)」。用户未选择前不得静默创建目录。
    - 如果用户选择创建，继续实际调用 `AskUserQuestion` 并复用 `id=project_workspace_layout` 模板。选择 `standard`/`ml`/`data` 时分别传 `--project-layout standard|ml|data`；如果用户通过 Other 输入 `docs`，传 `--project-layout docs`；其他 Other 输入按逗号分隔目录处理，复述确认后传 `--project-dirs <用户输入>`。
+   - 业务目录创建后，主 Agent 必须只读扫描项目根目录已有内容，排除 `.goo/`、`.git/`、`.claude/`、已创建业务目录、secrets、锁文件和隐藏配置。如果发现可归类到新业务目录的现有文件或目录，必须实际调用 `AskUserQuestion` 并复用 `id=project_workspace_organize_existing` 模板询问是否生成整理方案；默认暂不整理。
+   - 用户选择生成整理方案时，只生成并展示移动清单，不直接移动。清单必须包含源路径、目标路径、归类理由、冲突/覆盖风险和跳过项；随后必须实际调用 `AskUserQuestion` 并复用 `id=project_workspace_apply_organization` 模板二次确认。用户选择执行后，才允许按清单移动；遇到目标已存在、路径不确定、敏感文件或批量大文件时停止并重新确认，不得覆盖或删除。
    - 业务目录创建后，必须实际调用 `AskUserQuestion` 并复用 `id=project_workspace_claude_md` 模板，询问是否把目录约定写入项目 `CLAUDE.md`。
    - 是否把 Goo-wiki 归档原则或服务器使用约定写入项目 `CLAUDE.md`（`AskUserQuestion`，选项：「是 (Recommended)」「跳过」）
    - 是否需要配置远程服务器（`AskUserQuestion`，选项：「否 (Recommended)」「是」）
@@ -97,7 +99,7 @@ Agent 交互流程：
    - 项目级 `.goo/config.json` 的 `wiki_dir`
    - 用户级 `~/.auto-goo/config.json` 的 `wiki_dir`
    - 默认 `~/workspace/Goo-wiki`
-5. **配置业务项目目录结构** — AutoGoo 自身状态目录固定为 `.goo/`，配置中的 `workspace.paths` 只描述 AutoGoo 运行态路径。项目级初始化时，先询问是否创建业务目录；用户选择创建后，传 `--project-layout standard|ml|data|docs` 或 `--project-dirs <逗号分隔目录>`，脚本创建这些业务目录并写入 `project_workspace.{layout,dirs}`。默认 `project_workspace.layout="none"`，不创建业务目录，避免污染已有项目。业务目录创建后，必须继续询问是否把目录约定写入项目 `CLAUDE.md`。
+5. **配置业务项目目录结构** — AutoGoo 自身状态目录固定为 `.goo/`，配置中的 `workspace.paths` 只描述 AutoGoo 运行态路径。项目级初始化时，先询问是否创建业务目录；用户选择创建后，传 `--project-layout standard|ml|data|docs` 或 `--project-dirs <逗号分隔目录>`，脚本创建这些业务目录并写入 `project_workspace.{layout,dirs}`。默认 `project_workspace.layout="none"`，不创建业务目录，避免污染已有项目。业务目录创建后，如果项目根目录已有可归类内容，必须通过 `id=project_workspace_organize_existing` 和 `id=project_workspace_apply_organization` 两级 `AskUserQuestion` 流程确认后才允许整理；脚本默认不移动已有内容。随后必须继续询问是否把目录约定写入项目 `CLAUDE.md`。
 6. **配置远程服务器** — Wiki 路径配置后，询问用户是否有远程服务器需要配置；用户确认后逐个交互输入服务器类型（cpu/gpu）、名称/别名、SSH host/IP/DNS、端口（默认 22）、用户名、用途说明和密码处理方式。主 Agent 已通过 `AskUserQuestion` 收集到非敏感参数时，调用脚本必须传 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`，可重复传入多台服务器。密码不得在聊天或命令行中明文传递；脚本会创建独立 secrets 文件占位（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限设为 `chmod 600`，用户稍后手动填入密码。项目级 secrets 文件自动加入 `.gitignore`。config 中记录 `servers[].{name, host, ip?, port, user, type, purpose, secrets_file}`，不存储密码。支持配置多个服务器。配置服务器后必须检查本机是否安装 `sshpass`；缺失时提醒用户运行 `sudo apt install sshpass`，但不中断初始化。
 7. **确保 Goo-wiki 存在** — 如果用户确认或输入的 `<wiki_dir>` 不存在，自动创建该目录，并补齐 `CLAUDE.md`、`log.md`、`wiki/projects/`、`wiki/concepts/`、`wiki/questions/`、`journal/daily/`、`journal/weekly/` 基础结构；不得因为路径不存在而改用 `.goo/obsidian/` fallback
 8. **确定项目归档根路径** — `--project` 时默认用项目根目录名生成 `project_slug`，也可传 `--project-slug <slug>`；创建 `<wiki_dir>/wiki/projects/<project_slug>/`
@@ -193,6 +195,7 @@ Agent 交互流程：
 - 用户回答了 `--user` 或 `--project` 后，必须把该参数传给脚本
 - 用户确认或输入 wiki 路径后，必须把 `--wiki-dir <路径>` 传给脚本
 - 用户指定业务项目目录结构后，必须把 `--project-layout <standard|ml|data|docs>` 或 `--project-dirs <逗号分隔目录>` 传给脚本；未指定时不创建业务目录。该询问必须用 `id=project_workspace_create` 和 `id=project_workspace_layout` 两个固定 `AskUserQuestion` 模板完成。AutoGoo 自身状态目录始终使用项目 `.goo/`
+- 业务目录创建后，如果项目根目录已有内容，必须用 `id=project_workspace_organize_existing` 询问是否生成整理方案；默认不整理。只有用户确认生成方案并在 `id=project_workspace_apply_organization` 中二次确认执行后，才允许移动文件。不得移动 `.goo/`、`.git/`、`.claude/`、secrets、锁文件、隐藏配置或目标冲突项；不得覆盖或删除已有文件
 - 如果用户输入的 Goo-wiki 路径不存在，自动创建该路径和基础 vault 文件；只有创建失败或后续归档时 wiki 不可写，才提示使用 `.goo/obsidian/` fallback
 - 最终输出用户级、项目级和最终生效配置摘要
 - 有远程服务器时，密码必须存储在独立 secrets 文件中（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限 `chmod 600`；config 中只记录 `{name, host, ip?, port, user, type, purpose, secrets_file}`，不存储密码；非敏感参数通过 `--server` 写入，密码由用户稍后手动填入 secrets；如果本机未安装 `sshpass`，必须提示用户安装后才能使用自动填密码的 `goo-ssh.sh`

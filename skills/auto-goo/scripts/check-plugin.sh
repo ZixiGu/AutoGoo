@@ -136,6 +136,8 @@ required = {
     "project_workspace_create",
     "project_workspace_layout",
     "project_workspace_claude_md",
+    "project_workspace_organize_existing",
+    "project_workspace_apply_organization",
     "update_claude_md",
     "configure_servers",
     "server_type",

@@ -134,6 +134,42 @@
 
 ```json
 {
+  "header": "整理文件",
+  "id": "project_workspace_organize_existing",
+  "question": "检测到项目根目录已有内容，是否按业务目录约定整理到 src/data/docs 等路径下？",
+  "options": [
+    {
+      "label": "暂不整理 (Recommended)",
+      "description": "只创建或复用业务目录，不移动任何已有文件或目录。"
+    },
+    {
+      "label": "生成整理方案",
+      "description": "只读扫描现有内容，生成移动建议；执行前还会再次确认清单。"
+    }
+  ]
+}
+```
+
+```json
+{
+  "header": "执行整理",
+  "id": "project_workspace_apply_organization",
+  "question": "是否执行上面展示的文件整理方案？",
+  "options": [
+    {
+      "label": "暂不移动 (Recommended)",
+      "description": "保留整理方案，不移动已有文件或目录。"
+    },
+    {
+      "label": "执行整理",
+      "description": "只按已展示清单移动文件；遇到目标冲突、敏感文件或不确定项时停止并重新确认。"
+    }
+  ]
+}
+```
+
+```json
+{
   "header": "项目说明",
   "id": "update_claude_md",
   "question": "是否更新当前项目 CLAUDE.md 的 AutoGoo 归档说明？",
