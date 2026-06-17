@@ -54,6 +54,20 @@ DEFAULT_PUBLISH_CONFIG = {
     "include_workflow_activity": True,
     "include_dag": True,
 }
+DEFAULT_WORKSPACE_PATHS = {
+    "threads_dir": ".goo/threads",
+    "current_thread_file": ".goo/current_thread.json",
+    "compat_plan_file": ".goo/plan.json",
+    "compat_brainstorm_file": ".goo/brainstorm.json",
+    "plans_history_dir": ".goo/plans/history",
+    "brainstorms_history_dir": ".goo/brainstorms/history",
+    "logs_dir": ".goo/logs",
+    "artifacts_dir": ".goo/artifacts",
+    "reports_dir": ".goo/reports",
+    "change_requests_dir": ".goo/change-requests",
+    "obsidian_dir": ".goo/obsidian",
+    "site_dir": ".goo/site",
+}
 
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):
@@ -207,6 +221,30 @@ def load_config(root: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def workspace_paths(config: dict[str, Any]) -> dict[str, str]:
+    merged = dict(DEFAULT_WORKSPACE_PATHS)
+    workspace = config.get("workspace") if isinstance(config.get("workspace"), dict) else {}
+    paths = workspace.get("paths") if isinstance(workspace.get("paths"), dict) else {}
+    for key, value in paths.items():
+        if key in merged and value:
+            merged[key] = str(value)
+    return merged
+
+
+def workspace_path(root: Path, config: dict[str, Any], key: str) -> Path:
+    raw = Path(workspace_paths(config)[key]).expanduser()
+    if raw.is_absolute():
+        return raw
+    return root / raw
+
+
+def relative_output_path(root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def publish_config(config: dict[str, Any]) -> dict[str, Any]:
     publish = config.get("publish") if isinstance(config.get("publish"), dict) else {}
     merged = DEFAULT_PUBLISH_CONFIG.copy()
@@ -259,34 +297,34 @@ def render_template(name: str, values: dict[str, str]) -> str:
     return text
 
 
-def collect_artifacts(root: Path, limit: int = 24) -> list[Path]:
-    base = root / ".goo"
+def collect_artifacts(root: Path, config: dict[str, Any], limit: int = 24) -> list[Path]:
     candidates: list[Path] = []
-    for rel in ("artifacts", "reports", "obsidian", "logs"):
-        folder = base / rel
+    for key in ("artifacts_dir", "reports_dir", "obsidian_dir", "logs_dir"):
+        folder = workspace_path(root, config, key)
         if folder.exists():
             candidates.extend(path for path in folder.rglob("*") if path.is_file())
     candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
     return candidates[:limit]
 
 
-def thread_root(root: Path) -> Path:
-    return root / ".goo" / "threads"
+def thread_root(root: Path, config: dict[str, Any]) -> Path:
+    return workspace_path(root, config, "threads_dir")
 
 
-def thread_plan_path(root: Path, thread: dict[str, Any]) -> Path:
+def thread_plan_path(root: Path, config: dict[str, Any], thread: dict[str, Any]) -> Path:
     plan_path = thread.get("plan_path")
     if plan_path:
         candidate = root / str(plan_path)
         if candidate.exists():
             return candidate
     thread_id = str(thread.get("id") or "")
-    return thread_root(root) / thread_id / "plan.json"
+    return thread_root(root, config) / thread_id / "plan.json"
 
 
-def collect_threads(root: Path) -> list[dict[str, Any]]:
-    index = read_json(thread_root(root) / "index.json")
-    current = read_json(root / ".goo" / "current_thread.json")
+def collect_threads(root: Path, config: dict[str, Any]) -> list[dict[str, Any]]:
+    threads_dir = thread_root(root, config)
+    index = read_json(threads_dir / "index.json")
+    current = read_json(workspace_path(root, config, "current_thread_file"))
     current_id = current.get("thread_id") if isinstance(current, dict) else None
     rows: list[dict[str, Any]] = []
     if isinstance(index, dict) and isinstance(index.get("threads"), list):
@@ -294,26 +332,28 @@ def collect_threads(root: Path) -> list[dict[str, Any]]:
             if not isinstance(item, dict) or not item.get("id"):
                 continue
             thread_id = str(item["id"])
-            meta = read_json(thread_root(root) / thread_id / "thread.json")
+            meta = read_json(threads_dir / thread_id / "thread.json")
             thread = meta if isinstance(meta, dict) else item.copy()
             thread.setdefault("id", thread_id)
             thread["is_current"] = thread_id == current_id
-            plan = read_json(thread_plan_path(root, thread))
+            plan = read_json(thread_plan_path(root, config, thread))
             if isinstance(plan, dict):
                 thread["plan"] = plan
                 thread["plan_stats"] = plan_stats(plan)
             rows.append(thread)
     if not rows:
-        plan = read_json(root / ".goo" / "plan.json")
+        plan = read_json(workspace_path(root, config, "compat_plan_file"))
         if isinstance(plan, dict):
             thread_meta = plan.get("thread") if isinstance(plan.get("thread"), dict) else {}
+            compat_plan_path = workspace_path(root, config, "compat_plan_file")
+            logs_dir = workspace_path(root, config, "logs_dir")
             rows.append(
                 {
                     "id": thread_meta.get("id") or "legacy-current",
                     "title": plan.get("task") or plan.get("task_name") or "当前计划",
                     "status": plan.get("status", "pending"),
-                    "plan_path": ".goo/plan.json",
-                    "logs_dir": ".goo/logs",
+                    "plan_path": relative_output_path(root, compat_plan_path),
+                    "logs_dir": relative_output_path(root, logs_dir),
                     "is_current": True,
                     "plan": plan,
                     "plan_stats": plan_stats(plan),
@@ -323,19 +363,20 @@ def collect_threads(root: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def current_thread_plan(root: Path) -> tuple[dict[str, Any] | None, Path | None, dict[str, Any] | None]:
-    threads = collect_threads(root)
+def current_thread_plan(root: Path, config: dict[str, Any]) -> tuple[dict[str, Any] | None, Path | None, dict[str, Any] | None]:
+    threads = collect_threads(root, config)
     current = next((item for item in threads if item.get("is_current")), None)
     if current and isinstance(current.get("plan"), dict):
-        return current["plan"], thread_plan_path(root, current), current
-    plan = read_json(root / ".goo" / "plan.json")
+        return current["plan"], thread_plan_path(root, config, current), current
+    compat_plan_path = workspace_path(root, config, "compat_plan_file")
+    plan = read_json(compat_plan_path)
     if isinstance(plan, dict):
-        return plan, root / ".goo" / "plan.json", None
+        return plan, compat_plan_path, None
     return None, None, current
 
 
-def collect_change_requests(root: Path) -> list[dict[str, Any]]:
-    folder = root / ".goo" / "change-requests"
+def collect_change_requests(root: Path, config: dict[str, Any]) -> list[dict[str, Any]]:
+    folder = workspace_path(root, config, "change_requests_dir")
     rows: list[dict[str, Any]] = []
     for path in collect_json_files(folder):
         data = read_json(path)
@@ -346,7 +387,7 @@ def collect_change_requests(root: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def save_change_request(root: Path, data: dict[str, Any]) -> Path:
+def save_change_request(root: Path, config: dict[str, Any], data: dict[str, Any]) -> Path:
     request = str(data.get("request") or "").strip()
     if not request:
         raise ValueError("request is required")
@@ -362,34 +403,34 @@ def save_change_request(root: Path, data: dict[str, Any]) -> Path:
         "source": "autogoo-publish-web",
         "created_at": created,
     }
-    folder = root / ".goo" / "change-requests"
+    folder = workspace_path(root, config, "change_requests_dir")
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{created.replace(':', '-')}_{slug(title, 'request')}.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
 
-def change_request_path(root: Path, rel_text: Any) -> Path:
+def change_request_path(root: Path, config: dict[str, Any], rel_text: Any) -> Path:
     text = str(rel_text or "").strip()
     if not text:
         raise ValueError("path is required")
-    folder = (root / ".goo" / "change-requests").resolve()
+    folder = workspace_path(root, config, "change_requests_dir").resolve()
     path = (root / text).resolve() if not Path(text).is_absolute() else Path(text).resolve()
     try:
         path.relative_to(folder)
     except ValueError as exc:
-        raise ValueError("path must stay inside .goo/change-requests") from exc
+        raise ValueError(f"path must stay inside {relative_output_path(root, folder)}") from exc
     if path.suffix != ".json" or not path.is_file():
         raise ValueError("change request file not found")
     return path
 
 
-def update_change_request_status(root: Path, data: dict[str, Any]) -> Path:
+def update_change_request_status(root: Path, config: dict[str, Any], data: dict[str, Any]) -> Path:
     allowed = {"pending_model_update", "completed", "needs_revision"}
     status = str(data.get("status") or "").strip()
     if status not in allowed:
         raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
-    path = change_request_path(root, data.get("path"))
+    path = change_request_path(root, config, data.get("path"))
     item = read_json(path)
     if not isinstance(item, dict):
         raise ValueError("change request json is invalid")
@@ -408,12 +449,12 @@ def collect_json_files(folder: Path) -> list[Path]:
     return sorted(folder.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
 
 
-def load_current_or_latest(root: Path, current: str, history: str) -> tuple[dict[str, Any] | None, Path | None]:
-    current_path = root / ".goo" / current
+def load_current_or_latest(root: Path, config: dict[str, Any], current_key: str, history_key: str) -> tuple[dict[str, Any] | None, Path | None]:
+    current_path = workspace_path(root, config, current_key)
     data = read_json(current_path)
     if isinstance(data, dict):
         return data, current_path
-    for path in collect_json_files(root / ".goo" / history):
+    for path in collect_json_files(workspace_path(root, config, history_key)):
         data = read_json(path)
         if isinstance(data, dict):
             return data, path
@@ -605,20 +646,21 @@ def collect_token_activity(root: Path, limit: int = 120) -> list[dict[str, Any]]
     return events[:limit]
 
 
-def collect_activity(root: Path, artifacts: list[Path]) -> list[dict[str, Any]]:
+def collect_activity(root: Path, config: dict[str, Any], artifacts: list[Path]) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
-    current_plan = root / ".goo" / "plan.json"
-    current_brainstorm = root / ".goo" / "brainstorm.json"
+    current_plan = workspace_path(root, config, "compat_plan_file")
+    current_brainstorm = workspace_path(root, config, "compat_brainstorm_file")
     add_plan_events(events, current_plan, "current-plan")
     add_brainstorm_events(events, current_brainstorm, "current-brainstorm")
-    for thread in collect_threads(root):
-        plan_path = thread_plan_path(root, thread)
+    threads_dir = thread_root(root, config)
+    for thread in collect_threads(root, config):
+        plan_path = thread_plan_path(root, config, thread)
         add_plan_events(events, plan_path, "thread-plan")
-        brainstorm_path = thread_root(root) / str(thread.get("id")) / "brainstorm.json"
+        brainstorm_path = threads_dir / str(thread.get("id")) / "brainstorm.json"
         add_brainstorm_events(events, brainstorm_path, "thread-brainstorm")
-    for path in collect_json_files(root / ".goo" / "plans" / "history"):
+    for path in collect_json_files(workspace_path(root, config, "plans_history_dir")):
         add_plan_events(events, path, "plan-history")
-    for path in collect_json_files(root / ".goo" / "brainstorms" / "history"):
+    for path in collect_json_files(workspace_path(root, config, "brainstorms_history_dir")):
         add_brainstorm_events(events, path, "brainstorm-history")
     for path in artifacts:
         events.append(
@@ -2448,17 +2490,22 @@ def build_site(root: Path, output: Path) -> dict[str, str]:
         True,
     )
     include_dag = as_bool(publish.get("include_dag"), True)
-    plan, _plan_source, current_thread = current_thread_plan(root)
-    brainstorm, brainstorm_source = load_current_or_latest(root, "brainstorm.json", "brainstorms/history")
+    plan, _plan_source, current_thread = current_thread_plan(root, config)
+    brainstorm, brainstorm_source = load_current_or_latest(
+        root,
+        config,
+        "compat_brainstorm_file",
+        "brainstorms_history_dir",
+    )
     if current_thread and current_thread.get("id"):
-        thread_brainstorm = thread_root(root) / str(current_thread["id"]) / "brainstorm.json"
+        thread_brainstorm = thread_root(root, config) / str(current_thread["id"]) / "brainstorm.json"
         data = read_json(thread_brainstorm)
         if isinstance(data, dict):
             brainstorm, brainstorm_source = data, thread_brainstorm
-    threads = collect_threads(root)
-    change_requests = collect_change_requests(root)
-    artifacts = collect_artifacts(root)
-    events = collect_activity(root, artifacts)
+    threads = collect_threads(root, config)
+    change_requests = collect_change_requests(root, config)
+    artifacts = collect_artifacts(root, config)
+    events = collect_activity(root, config, artifacts)
     project_slug = config.get("archive", {}).get("project_slug") if isinstance(config.get("archive"), dict) else None
     title = project_slug or root.name
     generated_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -2558,7 +2605,7 @@ def main() -> int:
     )
     parser.add_argument("--root", default=".", help="project root, defaults to current directory")
     parser.add_argument("--output", help="output HTML path, defaults to publish.index_file")
-    parser.add_argument("--serve", action="store_true", help="serve the HTML site on localhost")
+    parser.add_argument("--serve", action="store_true", help="serve the HTML site over HTTP")
     parser.add_argument("--host", help="HTTP host, defaults to publish.host")
     parser.add_argument("--port", type=int, help="HTTP port, defaults to publish.port")
     parser.add_argument("--live", action="store_true", help="rebuild HTML on every browser request")
@@ -2587,6 +2634,7 @@ def main() -> int:
 
 def make_server(root: Path, output: Path, host: str, port: int, *, live: bool) -> ReusableThreadingHTTPServer:
     site_dir = output.parent
+    config = load_config(root)
     allowed_pages = {
         "",
         "index.html",
@@ -2680,7 +2728,7 @@ def make_server(root: Path, output: Path, host: str, port: int, *, live: bool) -
                 return
             if route == "/api/change-request/status":
                 try:
-                    path = update_change_request_status(root, data)
+                    path = update_change_request_status(root, config, data)
                 except ValueError as exc:
                     self.send_bytes(
                         400,
@@ -2694,7 +2742,7 @@ def make_server(root: Path, output: Path, host: str, port: int, *, live: bool) -
                 self.send_bytes(200, body, "application/json; charset=utf-8")
                 return
             try:
-                path = save_change_request(root, data)
+                path = save_change_request(root, config, data)
             except ValueError as exc:
                 self.send_bytes(
                     400,

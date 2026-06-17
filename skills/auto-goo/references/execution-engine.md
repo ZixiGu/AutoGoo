@@ -20,7 +20,7 @@ AutoGoo 的"并行"在单个 thread 内是 **task-level 并行**（多个独立 
 2. 拆解 DAG、识别依赖、划定每个 Subagent 的读写边界。
 3. 为每个 Subagent 构造最小必要上下文，而不是传递完整会话历史。
 4. 在派发前检查当前 step 是否能仅凭 plan/Markdown/wiki 摘要执行；如果不能，先更新 plan 或写入 Goo-wiki 项目路径 `context/`，Goo-wiki 不可用时写 `.goo/obsidian/<project-slug>/context/`。
-5. 调度、限流、心跳巡检、失败重试和僵尸步骤恢复。
+5. 调度、限流、资源锁 acquire/release、心跳巡检、失败重试和僵尸步骤恢复。
 6. 审核 Subagent 产物，判断是否满足用户目标和项目约束。
 7. 合并跨步骤结果，处理冲突，必要时要求局部返工。
 8. 维护当前 thread 的 `plan.json`、`logs/`、`artifacts/`、thread metadata 和 Goo-wiki 归档的一致性。
@@ -325,7 +325,7 @@ fi
 	python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --update-status
 ```
 
-这会更新 plan 顶层的 `status`（`pending` → `running` → `blocked` → `completed`/`failed`）、`started_at`（首次进入 running 时）和 `completed_at`（全部完成或失败时）。不调用此命令会导致 plan 顶层状态与实际 step 状态不同步。`/auto-goo:goo-status` 也会读取此字段渲染仪表盘。
+这会更新 plan 顶层的 `status`（`pending` → `running`；任一阻塞优先显示 `blocked`；无阻塞时按完成/失败推导 `completed`/`failed`）、`started_at`（首次进入 running 时）和 `completed_at`（全部完成或失败时）。不调用此命令会导致 plan 顶层状态与实际 step 状态不同步。`/auto-goo:goo-status` 也会读取此字段渲染仪表盘。
 
 状态回写必须使用插件脚本，避免多个 Agent 用临时 JSON 代码互相覆盖：
 
@@ -535,7 +535,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
        → 检查 step.subagent 是否合法
          → 合法: 按 step.subagent 读取 agents/roles/<role>.md，再按 step.task_agent 读取 agents/tasks/<department>/<task>.md，合成 Subagent Prompt 后启动 Agent (run_in_background；mode=worktree 且 HEAD 可解析时传 isolation="worktree"，mode=none 不传 isolation；mode=none 若仍触发 HEAD 解析失败则记录 compatibility.agent_requires_git_head 并阻塞，不再 probe)
          → subagent 或 task_agent 不合法/缺失: 暂停派发，先修正 plan 或创建新角色/任务画像
-       → 主 Agent 调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入 status、started_at、首个 heartbeat_at 和 step log
+       → 主 Agent 先调用 `thread-locks.py check-plan --plan <thread-plan>`，无冲突后调用 `thread-locks.py acquire-plan --plan <thread-plan>` 获取写资源锁，再调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入 status、started_at、首个 heartbeat_at 和 step log
        → 调用 `goo-status.py --update-status` 后运行 `goo-status.py`，向用户展示 RUNNING 心跳摘要
        → 等待 3-5s（错峰）
        → running.append(step)
@@ -543,7 +543,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
   3. 等待完成事件
      → 任一 agent 完成 → 从 running 移除
      → 检查结构化最终答复、step log、heartbeat 里程碑和声明 output/outputs；声明产物缺失时必须 blocked/failed，不得 completed；0 tool uses 只是可疑信号，只有完成证据全缺失才判定为空跑
-     → 回写 plan.json: status="completed"/"failed"/"blocked"
+     → 回写 plan.json: status="completed"/"failed"/"blocked"；流程完成、失败或停止时调用 `thread-locks.py release-plan --plan <thread-plan>` 释放资源锁
      → 写入 .goo/logs/
      → 运行 `goo-status.py`，向用户展示最新完成/告警/下一步摘要
      → 立即回到步骤 1（刚完成步骤的下游可能已就绪）

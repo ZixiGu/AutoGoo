@@ -15,6 +15,29 @@
     "plan_history_dir": ".goo/plans/history",
     "brainstorm_history_dir": ".goo/brainstorms/history"
   },
+  "workspace": {
+    "root": ".goo",
+    "layout": "standard",
+    "paths": {
+      "threads_dir": ".goo/threads",
+      "current_thread_file": ".goo/current_thread.json",
+      "compat_plan_file": ".goo/plan.json",
+      "compat_brainstorm_file": ".goo/brainstorm.json",
+      "plans_history_dir": ".goo/plans/history",
+      "brainstorms_history_dir": ".goo/brainstorms/history",
+      "logs_dir": ".goo/logs",
+      "artifacts_dir": ".goo/artifacts",
+      "reports_dir": ".goo/reports",
+      "locks_dir": ".goo/locks",
+      "change_requests_dir": ".goo/change-requests",
+      "obsidian_dir": ".goo/obsidian",
+      "site_dir": ".goo/site"
+    }
+  },
+  "project_workspace": {
+    "layout": "none",
+    "dirs": []
+  },
   "publish": {
     "enabled": true,
     "site_dir": ".goo/site",

@@ -11,7 +11,7 @@ description: 从中断处继续执行 AutoGoo 任务 — 读取 .goo/plan.json �
 
 如果存在多个未完成 thread 且无法唯一确定 current thread，必须先用 `AskUserQuestion` 复用 `id=thread_select` 模板让用户选择；用户未选择前不得随意续跑某个 plan。
 
-恢复前必须扫描 `.goo/change-requests/*.json`。对当前 thread 的 `pending_model_update` 请求，把请求同步进 plan 或新增修改 step；对其他 thread 的请求，先用结构化选择让用户决定切换、复制或跳过。模型修改完成后必须增加审计 step，审计通过再把请求状态改为 `completed`；审计失败则改为 `needs_revision`。
+恢复前必须扫描 `.goo/change-requests/*.json`，优先用 `change-requests.py list --thread-id <thread_id>` 查看活跃请求，并用 `change-requests.py claim --thread-id <thread_id> --actor main-agent` 把要处理的请求标记为 `in_progress`。对当前 thread 的请求，把请求同步进 plan 或新增修改 step；对其他 thread 的请求，先用结构化选择让用户决定切换、复制或跳过。模型修改完成后必须增加审计 step；审计通过用 `change-requests.py status --request <id-or-path> --status completed --plan-step-id <step>` 更新状态，审计失败则写 `needs_revision` 并记录原因。
 
 恢复时默认先执行 context sync：检查 plan 生成后当前对话是否新增方案、约束、验收标准、用户偏好或 open question。若有增量，先把旧 `.goo/plan.json` 归档到 `.goo/plans/history/`，短内容写入 `context_digest.post_plan_updates`，长内容写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/*.md` 并追加到 `context_artifacts`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/context/*.md`。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认；该询问必须优先使用结构化选项：`同步并继续执行`、`先修改 plan`、`停止并保留当前 plan`。
 
@@ -62,16 +62,16 @@ heartbeat_at 距今 < 2 分钟？
 这是 fallback；请回复 1/2/3，或直接回复“重试”/“跳过”/“停止”。
 ```
 
-## 产物文件存在性检测
+## 恢复验收检测
 
-对每个 step 的 `output` 字段指定的路径，执行：
+恢复时优先执行 step 的 `validation`。只有 `validation` 不是可执行命令、缺失或明确需要人工判断时，才用 `output` / `outputs` 作为兜底检测。对普通文件产物可执行：
 
 ```bash
 # 对于 .py 文件，还需检查是否有实质内容（非空、非纯注释）
 test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 ```
 
-产物文件存在 + 行数 > 5 → 视为步骤已完成（即使 plan.json 未更新）。
+产物文件存在 + 行数 > 5 只能作为兜底信号；若 step 有 `validation`，必须以 validation 通过为准。JSON、图片、模型文件、目录产物、远程产物和报告型 step 应使用对应的类型化检查或人工确认点，不套用行数规则。
 
 ## 执行流程
 
@@ -88,6 +88,7 @@ test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 11. 恢复执行时先读当前 thread plan 顶层 `runtime.subagent_isolation`；如果已有 `mode` 且 `project_root` 与当前 AutoGoo 项目根一致，默认复用该缓存，不再重复检查或询问。缓存缺失、`project_root` 不匹配或用户明确切换执行目录时，用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否启用 worktree 隔离。用户选择不启用时写 `mode="none"`、`project_root`、`decision="worktree_disabled"` 并继续，后续 Agent tool 省略 `isolation` 参数；如果省略 `isolation` 的实际派发仍报 `Failed to resolve base branch "HEAD"` / `git rev-parse failed`，说明当前 Claude Code Agent 包装层仍要求 Git HEAD，必须写入 `runtime.subagent_isolation.compatibility.agent_requires_git_head=true`，把当前 step 标记 `blocked` / `needs_user_approval`，并重新询问是否启用 worktree，不得重置 heartbeat 后反复重派，也不得创建 probe agent。用户选择启用时写 `mode="worktree"`，只检查当前项目根本身；不要设置 `GIT_DISCOVERY_ACROSS_FILESYSTEM`，不要向父目录、跨文件系统或备用路径寻找 Git root。若不是 Git repo，运行 `git init -b main`，不支持 `-b` 时初始化后立即 `git branch -M main`；若已有 Git 但没有 `HEAD`，复用当前仓库。随后先检查 `git status --short` 和敏感文件风险，确认安全后 `git add -A` 并提交 `chore: initialize repository for AutoGoo worktree isolation`。只有 `HEAD` 可解析后才给 Agent tool 传 `isolation: "worktree"`；启用后仍无 `HEAD` 时标记 workflow blocked，不降级普通派发，也不得循环 probe 或改从父级 Git root 派发。
 12. 按 tier 分组，同 tier 内并行派发给对应 Subagent。派发每个 Subagent 前，主 Agent 必须先调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入首个 `heartbeat_at`，再启动 Agent；Subagent 继续按 Heartbeat 强制分段写 15/50/85/complete。Agent 返回 `Done` 时，`0 tool uses` 只能作为可疑信号；文本型 step 可以无工具完成，但必须有结构化最终答复、step log、heartbeat 里程碑或声明产物之一。若 step 声明了 `output`/`outputs`，必须验证产物存在且满足 `validation` 后才能 completed；缺失时记录实际 isolation 参数、plan 隔离模式和缺失路径，标记 blocked/failed，不得当作完成或解锁下游。**每次 step 状态变更后立即调用 `goo-status.py --update-status`**。每次派发批次后、每轮 30s 心跳巡检后，以及任一 Agent 完成后，主 Agent 必须运行 `goo-status.py` 并把 RUNNING/告警摘要展示给用户，避免心跳只存在于 plan 文件里但前台不可见。
 13. 按 AutoGoo 标准执行流程继续（Phase 2-4）
+14. 最终任务归档验收通过后，必须用 `AskUserQuestion` 复用 `id=post_archive_html_report` 模板询问是否生成并启动 HTML 报告。用户选择生成时，解析 AutoGoo 根目录后运行 `python3 "$auto_goo_root/skills/auto-goo/scripts/goo-publish.py" --root . --output .goo/site/index.html --serve --host 0.0.0.0 --port 9877`；脚本会在端口占用时尝试后续端口，并打印 `127.0.0.1` 与本机 IP URL。本地 PC 需要能访问这些 URL；若处于 SSH/Remote IDE 环境，最终答复要提示使用脚本打印的 `Remote URL` 或对实际端口做端口转发。
 
 ## 示例
 
@@ -118,5 +119,6 @@ test -f "<output_path>" && [ "$(wc -l < "<output_path>")" -gt 5 ]
 - 恢复执行时使用 step 的 `available_skills` 作为 Subagent skill allowlist；缺失时先补为空数组
 - 如果 `.goo/brainstorm.json` 或 `.goo/plan.json` 仍是待审草案，恢复执行前必须先展示摘要并优先用结构化选择 UI 让用户确认、修改或停止；确认后如果 brainstorm 未归档，再归档最终版 brainstorm，然后恢复业务 step
 - `heartbeat_at` 为空且 status=running 的步骤：说明派发时写了 tier-X-start.json 但 agent 从未真正启动 → 直接重置为 pending
-- Plan 顶层 `status`（`pending` → `running` → `blocked` → `completed`/`failed`）由 `goo-status.py --update-status` 自动计算更新，主 Agent 在每次 step 状态变更后必须调用
+- Plan 顶层 `status` 由 `goo-status.py --update-status` 自动计算更新：`blocked` 优先于普通 running/failed，所有步骤完成后才是 `completed`。主 Agent 在每次 step 状态变更后必须调用
 - Thread 状态由当前 plan 推导；每次 step 状态变更后同步 `.goo/threads/<thread_id>/thread.json` 和 `.goo/threads/index.json`
+- 每次恢复执行并完成最终归档后，都要优先用 `AskUserQuestion` 复用 `id=post_archive_html_report` 模板询问是否生成 HTML 报告；用户选择生成时启动 `goo-publish.py --serve --host 0.0.0.0 --port 9877`，并把实际端口、`.goo/site/index.html`、`127.0.0.1` URL 和本机 IP `Remote URL` 告诉用户

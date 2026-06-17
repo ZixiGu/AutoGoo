@@ -5,12 +5,16 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  goo-init.sh [--user|--project] [--wiki-dir PATH] [--project-slug SLUG] [--server SPEC] [--yes] [--force] [--update-claude-md] [--skip-claude-md]
+  goo-init.sh [--user|--project] [--wiki-dir PATH] [--project-layout NAME] [--project-dirs LIST] [--project-slug SLUG] [--server SPEC] [--yes] [--force] [--update-claude-md] [--skip-claude-md]
 
 Options:
   --user            Write user-level config to ~/.auto-goo/config.json
   --project         Write project-level config to .goo/config.json
   --wiki-dir PATH   Set Goo-wiki directory (default: ~/workspace/Goo-wiki)
+  --project-layout NAME
+                    Create/record a project directory layout: none, standard, ml, data, docs (default: none)
+  --project-dirs LIST
+                    Comma-separated project directories to create/record, e.g. src,data/raw,docs
   --project-slug SLUG
                     Set Goo-wiki project archive folder name (default: project directory name)
   --server SPEC     Add a remote server without entering the TTY prompts. Repeatable.
@@ -30,6 +34,13 @@ EOF
 SCOPE=""
 WIKI_DIR="${AUTO_GOO_WIKI_DIR:-}"
 WIKI_DIR_PROVIDED=0
+WORK_DIR=".goo"
+WORKSPACE_LAYOUT="standard"
+PROJECT_LAYOUT="none"
+PROJECT_DIRS=""
+PROJECT_LAYOUT_PROVIDED=0
+PROJECT_DIRS_PROVIDED=0
+WRITE_PROJECT_WORKSPACE_CLAUDE=0
 PROJECT_SLUG=""
 YES=0
 FORCE=0
@@ -54,6 +65,24 @@ while [[ $# -gt 0 ]]; do
       fi
       WIKI_DIR="$2"
       WIKI_DIR_PROVIDED=1
+      shift 2
+      ;;
+    --project-layout)
+      if [[ $# -lt 2 ]]; then
+        echo "error: --project-layout requires a value" >&2
+        exit 2
+      fi
+      PROJECT_LAYOUT="$2"
+      PROJECT_LAYOUT_PROVIDED=1
+      shift 2
+      ;;
+    --project-dirs)
+      if [[ $# -lt 2 ]]; then
+        echo "error: --project-dirs requires a comma-separated list" >&2
+        exit 2
+      fi
+      PROJECT_DIRS="$2"
+      PROJECT_DIRS_PROVIDED=1
       shift 2
       ;;
     --project-slug)
@@ -147,6 +176,79 @@ expand_path() {
   else
     printf '%s\n' "$raw"
   fi
+}
+
+join_path() {
+  local root="$1"
+  local child="$2"
+  if [[ "$root" == "." || -z "$root" ]]; then
+    printf '%s\n' "$child"
+  else
+    printf '%s/%s\n' "${root%/}" "$child"
+  fi
+}
+
+workspace_path() {
+  local key="$1"
+  case "$key" in
+    threads_dir) join_path "$WORK_DIR" "threads" ;;
+    current_thread_file) join_path "$WORK_DIR" "current_thread.json" ;;
+    compat_plan_file) join_path "$WORK_DIR" "plan.json" ;;
+    compat_brainstorm_file) join_path "$WORK_DIR" "brainstorm.json" ;;
+    plans_history_dir) join_path "$WORK_DIR" "plans/history" ;;
+    brainstorms_history_dir) join_path "$WORK_DIR" "brainstorms/history" ;;
+    logs_dir) join_path "$WORK_DIR" "logs" ;;
+    artifacts_dir) join_path "$WORK_DIR" "artifacts" ;;
+    reports_dir) join_path "$WORK_DIR" "reports" ;;
+    locks_dir) join_path "$WORK_DIR" "locks" ;;
+    change_requests_dir) join_path "$WORK_DIR" "change-requests" ;;
+    obsidian_dir) join_path "$WORK_DIR" "obsidian" ;;
+    site_dir) join_path "$WORK_DIR" "site" ;;
+    index_file) join_path "$WORK_DIR" "site/index.html" ;;
+  esac
+}
+
+project_layout_dirs() {
+  case "$PROJECT_LAYOUT" in
+    none)
+      ;;
+    standard)
+      printf '%s\n' src tests docs scripts data artifacts
+      ;;
+    ml)
+      printf '%s\n' src configs scripts notebooks data/raw data/processed data/external models outputs reports docs tests
+      ;;
+    data)
+      printf '%s\n' src scripts notebooks data/raw data/interim data/processed data/external reports docs tests
+      ;;
+    docs)
+      printf '%s\n' docs docs/adr docs/assets scripts src tests
+      ;;
+    custom)
+      ;;
+  esac
+  if [[ -n "$PROJECT_DIRS" ]]; then
+    python3 - "$PROJECT_DIRS" <<'PY'
+import sys
+
+for item in sys.argv[1].split(","):
+    text = item.strip().strip("/")
+    if text:
+        print(text)
+PY
+  fi
+}
+
+project_layout_dirs_json() {
+  PROJECT_LAYOUT_DIRS="$(project_layout_dirs | awk '!seen[$0]++')"
+  python3 - "$PROJECT_LAYOUT_DIRS" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1]
+items = [line.strip() for line in raw.splitlines() if line.strip()]
+print(json.dumps(items, ensure_ascii=False))
+PY
 }
 
 ensure_wiki_vault() {
@@ -386,13 +488,11 @@ case "$SCOPE" in
   user)
     CONFIG_DIR="$HOME/.auto-goo"
     CONFIG_FILE="$CONFIG_DIR/config.json"
-    FALLBACK_DIR=".goo/obsidian"
     ;;
   project)
     ROOT="$(project_root)"
     CONFIG_DIR="$ROOT/.goo"
     CONFIG_FILE="$CONFIG_DIR/config.json"
-    FALLBACK_DIR=".goo/obsidian"
     ;;
   *)
     echo "error: scope must be 'user' or 'project'" >&2
@@ -413,7 +513,48 @@ elif [[ "$WIKI_DIR_PROVIDED" -eq 0 && -n "${AUTO_GOO_WIKI_DIR:-}" ]]; then
   WIKI_DIR_PROVIDED=1
 fi
 
+if [[ "$SCOPE" == "project" && "$PROJECT_LAYOUT_PROVIDED" -eq 0 && "$PROJECT_DIRS_PROVIDED" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
+  if confirm "Create business project directories such as src/data/docs?" "n"; then
+    PROJECT_LAYOUT="$(prompt "Project directory layout (standard/ml/data/docs/custom)" "standard")"
+    if [[ "$PROJECT_LAYOUT" == "custom" ]]; then
+      PROJECT_DIRS="$(prompt "Comma-separated project directories" "src,data/raw,docs")"
+      PROJECT_DIRS_PROVIDED=1
+    fi
+    PROJECT_LAYOUT_PROVIDED=1
+  fi
+fi
+
+case "$PROJECT_LAYOUT" in
+  none|standard|ml|data|docs|custom)
+    ;;
+  *)
+    echo "error: --project-layout must be one of: none, standard, ml, data, docs, custom" >&2
+    exit 2
+    ;;
+esac
+
+if [[ -n "$PROJECT_DIRS" && "$PROJECT_LAYOUT" == "none" ]]; then
+  PROJECT_LAYOUT="custom"
+fi
+
 WIKI_DIR_EXPANDED="$(expand_path "$WIKI_DIR")"
+WORK_DIR_EXPANDED="$(expand_path "$WORK_DIR")"
+PROJECT_LAYOUT_DIRS_JSON="$(project_layout_dirs_json)"
+FALLBACK_DIR="$(workspace_path obsidian_dir)"
+WORKSPACE_THREADS_DIR="$(workspace_path threads_dir)"
+WORKSPACE_CURRENT_THREAD_FILE="$(workspace_path current_thread_file)"
+WORKSPACE_COMPAT_PLAN_FILE="$(workspace_path compat_plan_file)"
+WORKSPACE_COMPAT_BRAINSTORM_FILE="$(workspace_path compat_brainstorm_file)"
+WORKSPACE_PLANS_HISTORY_DIR="$(workspace_path plans_history_dir)"
+WORKSPACE_BRAINSTORMS_HISTORY_DIR="$(workspace_path brainstorms_history_dir)"
+WORKSPACE_LOGS_DIR="$(workspace_path logs_dir)"
+WORKSPACE_ARTIFACTS_DIR="$(workspace_path artifacts_dir)"
+WORKSPACE_REPORTS_DIR="$(workspace_path reports_dir)"
+WORKSPACE_LOCKS_DIR="$(workspace_path locks_dir)"
+WORKSPACE_CHANGE_REQUESTS_DIR="$(workspace_path change_requests_dir)"
+WORKSPACE_OBSIDIAN_DIR="$(workspace_path obsidian_dir)"
+WORKSPACE_SITE_DIR="$(workspace_path site_dir)"
+WORKSPACE_INDEX_FILE="$(workspace_path index_file)"
 WIKI_READY=0
 WIKI_CREATED=0
 PROJECT_ARCHIVE_DIR=""
@@ -535,8 +676,12 @@ echo "AutoGoo init"
 echo "  scope:      $SCOPE"
 echo "  config:     $CONFIG_FILE"
 echo "  wiki_dir:   $WIKI_DIR"
+echo "  state_dir:  .goo"
 if [[ "$SCOPE" == "project" ]]; then
   echo "  project:    $PROJECT_SLUG"
+  if [[ "$PROJECT_LAYOUT" != "none" ]]; then
+    echo "  layout:     $PROJECT_LAYOUT"
+  fi
   if [[ -n "$GIT_REMOTE_URL" ]]; then
     echo "  git remote: $GIT_REMOTE_URL"
   fi
@@ -557,6 +702,41 @@ if [[ "$WIKI_CREATED" -eq 1 ]]; then
 else
   WIKI_READY=1
   echo "  wiki check: ready ($WIKI_DIR_EXPANDED/CLAUDE.md)"
+fi
+
+if [[ "$SCOPE" == "project" ]]; then
+  mkdir -p \
+    "$ROOT/$WORKSPACE_THREADS_DIR" \
+    "$ROOT/$WORKSPACE_PLANS_HISTORY_DIR" \
+    "$ROOT/$WORKSPACE_BRAINSTORMS_HISTORY_DIR" \
+    "$ROOT/$WORKSPACE_LOGS_DIR" \
+    "$ROOT/$WORKSPACE_ARTIFACTS_DIR" \
+    "$ROOT/$WORKSPACE_REPORTS_DIR" \
+    "$ROOT/$WORKSPACE_LOCKS_DIR" \
+    "$ROOT/$WORKSPACE_CHANGE_REQUESTS_DIR" \
+    "$ROOT/$WORKSPACE_OBSIDIAN_DIR" \
+    "$ROOT/$WORKSPACE_SITE_DIR"
+  echo "  workspace:  AutoGoo state directories ready under .goo"
+  python3 - "$ROOT" "$PROJECT_LAYOUT" "$PROJECT_LAYOUT_DIRS_JSON" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+layout = sys.argv[2]
+dirs = json.loads(sys.argv[3])
+if layout == "none" or not dirs:
+    raise SystemExit(0)
+created = []
+for item in dirs:
+    rel = Path(str(item))
+    if rel.is_absolute() or ".." in rel.parts or not rel.parts or rel.parts[0] == ".goo":
+        raise SystemExit(f"unsafe project layout dir: {item}")
+    path = root / rel
+    path.mkdir(parents=True, exist_ok=True)
+    created.append(rel.as_posix())
+print("  project dirs: " + ", ".join(created))
+PY
 fi
 
 if [[ -f "$CONFIG_FILE" && "$FORCE" -ne 1 ]]; then
@@ -639,7 +819,7 @@ fi
 if [[ "$CONFIG_WRITE_SKIPPED" -eq 0 ]]; then
   mkdir -p "$CONFIG_DIR"
 
-  python3 - "$CONFIG_FILE" "$WIKI_DIR" "$FALLBACK_DIR" "$PROJECT_SLUG" "$PROJECT_ARCHIVE_DIR" "$FALLBACK_PROJECT_ARCHIVE_DIR" "$GIT_REMOTE_URL" "$SERVERS_JSON" <<'PY'
+  python3 - "$CONFIG_FILE" "$WIKI_DIR" "$FALLBACK_DIR" "$PROJECT_SLUG" "$PROJECT_ARCHIVE_DIR" "$FALLBACK_PROJECT_ARCHIVE_DIR" "$GIT_REMOTE_URL" "$SERVERS_JSON" "$WORK_DIR" "$WORKSPACE_LAYOUT" "$WORKSPACE_THREADS_DIR" "$WORKSPACE_CURRENT_THREAD_FILE" "$WORKSPACE_COMPAT_PLAN_FILE" "$WORKSPACE_COMPAT_BRAINSTORM_FILE" "$WORKSPACE_PLANS_HISTORY_DIR" "$WORKSPACE_BRAINSTORMS_HISTORY_DIR" "$WORKSPACE_LOGS_DIR" "$WORKSPACE_ARTIFACTS_DIR" "$WORKSPACE_REPORTS_DIR" "$WORKSPACE_LOCKS_DIR" "$WORKSPACE_CHANGE_REQUESTS_DIR" "$WORKSPACE_OBSIDIAN_DIR" "$WORKSPACE_SITE_DIR" "$WORKSPACE_INDEX_FILE" "$PROJECT_LAYOUT" "$PROJECT_LAYOUT_DIRS_JSON" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -652,6 +832,24 @@ project_archive_dir = sys.argv[5]
 fallback_project_archive_dir = sys.argv[6]
 git_remote_url = sys.argv[7]
 servers_json = sys.argv[8]
+work_dir = sys.argv[9]
+workspace_layout = sys.argv[10]
+workspace_threads_dir = sys.argv[11]
+workspace_current_thread_file = sys.argv[12]
+workspace_compat_plan_file = sys.argv[13]
+workspace_compat_brainstorm_file = sys.argv[14]
+workspace_plans_history_dir = sys.argv[15]
+workspace_brainstorms_history_dir = sys.argv[16]
+workspace_logs_dir = sys.argv[17]
+workspace_artifacts_dir = sys.argv[18]
+workspace_reports_dir = sys.argv[19]
+workspace_locks_dir = sys.argv[20]
+workspace_change_requests_dir = sys.argv[21]
+workspace_obsidian_dir = sys.argv[22]
+workspace_site_dir = sys.argv[23]
+workspace_index_file = sys.argv[24]
+project_layout = sys.argv[25]
+project_layout_dirs = json.loads(sys.argv[26])
 
 config = {
     "version": 1,
@@ -667,13 +865,36 @@ config = {
     "archive": {
         "enabled": True,
         "fallback_dir": fallback_dir,
-        "plan_history_dir": ".goo/plans/history",
-        "brainstorm_history_dir": ".goo/brainstorms/history",
+        "plan_history_dir": workspace_plans_history_dir,
+        "brainstorm_history_dir": workspace_brainstorms_history_dir,
+    },
+    "workspace": {
+        "root": work_dir,
+        "layout": workspace_layout,
+        "paths": {
+            "threads_dir": workspace_threads_dir,
+            "current_thread_file": workspace_current_thread_file,
+            "compat_plan_file": workspace_compat_plan_file,
+            "compat_brainstorm_file": workspace_compat_brainstorm_file,
+            "plans_history_dir": workspace_plans_history_dir,
+            "brainstorms_history_dir": workspace_brainstorms_history_dir,
+            "logs_dir": workspace_logs_dir,
+            "artifacts_dir": workspace_artifacts_dir,
+            "reports_dir": workspace_reports_dir,
+            "locks_dir": workspace_locks_dir,
+            "change_requests_dir": workspace_change_requests_dir,
+            "obsidian_dir": workspace_obsidian_dir,
+            "site_dir": workspace_site_dir,
+        },
+    },
+    "project_workspace": {
+        "layout": project_layout,
+        "dirs": project_layout_dirs,
     },
     "publish": {
         "enabled": True,
-        "site_dir": ".goo/site",
-        "index_file": ".goo/site/index.html",
+        "site_dir": workspace_site_dir,
+        "index_file": workspace_index_file,
         "host": "0.0.0.0",
         "port": 9877,
         "open_browser": True,
@@ -735,10 +956,40 @@ fi
 if [[ "$SCOPE" == "project" && "$SKIP_CLAUDE_MD" -ne 1 ]]; then
   PROJECT_CLAUDE_MD="$ROOT/CLAUDE.md"
   SHOULD_UPDATE_CLAUDE_MD=0
+  PROJECT_LAYOUT_DIR_COUNT="$(python3 - "$PROJECT_LAYOUT_DIRS_JSON" <<'PY'
+import json
+import sys
+
+print(len(json.loads(sys.argv[1])))
+PY
+)"
   if [[ "$UPDATE_CLAUDE_MD" -eq 1 ]]; then
     SHOULD_UPDATE_CLAUDE_MD=1
+    if [[ "$PROJECT_LAYOUT_DIR_COUNT" -gt 0 ]]; then
+      WRITE_PROJECT_WORKSPACE_CLAUDE=1
+    fi
   elif [[ "$YES" -eq 1 || ! -t 0 ]]; then
     echo "Project CLAUDE.md was not updated; rerun with --update-claude-md to add configuration."
+  elif [[ "$PROJECT_LAYOUT_DIR_COUNT" -gt 0 ]]; then
+    if confirm "Write project directory conventions to $PROJECT_CLAUDE_MD?" "y"; then
+      SHOULD_UPDATE_CLAUDE_MD=1
+      WRITE_PROJECT_WORKSPACE_CLAUDE=1
+    else
+      echo "Skipped project directory conventions in CLAUDE.md by user choice."
+    fi
+    if [[ "$SERVERS_JSON" != "[]" && "$WIKI_READY" -eq 1 ]]; then
+      if confirm "Also write server config and archive principles to $PROJECT_CLAUDE_MD?" "y"; then
+        SHOULD_UPDATE_CLAUDE_MD=1
+      fi
+    elif [[ "$SERVERS_JSON" != "[]" ]]; then
+      if confirm "Also write server config to $PROJECT_CLAUDE_MD?" "y"; then
+        SHOULD_UPDATE_CLAUDE_MD=1
+      fi
+    elif [[ "$WIKI_READY" -eq 1 ]]; then
+      if confirm "Also add Goo-wiki archive principles to $PROJECT_CLAUDE_MD?" "y"; then
+        SHOULD_UPDATE_CLAUDE_MD=1
+      fi
+    fi
   elif [[ "$SERVERS_JSON" != "[]" && "$WIKI_READY" -eq 1 ]]; then
     if confirm "Update $PROJECT_CLAUDE_MD with server config and archive principles?" "y"; then
       SHOULD_UPDATE_CLAUDE_MD=1
@@ -761,7 +1012,7 @@ if [[ "$SCOPE" == "project" && "$SKIP_CLAUDE_MD" -ne 1 ]]; then
 
   if [[ "$SHOULD_UPDATE_CLAUDE_MD" -eq 1 ]]; then
     set +e
-    python3 - "$PROJECT_CLAUDE_MD" "$WIKI_DIR" "$FALLBACK_PROJECT_ARCHIVE_DIR" "$PROJECT_ARCHIVE_DIR" "$SERVERS_JSON" "$WIKI_READY" <<'PY'
+    python3 - "$PROJECT_CLAUDE_MD" "$WIKI_DIR" "$FALLBACK_PROJECT_ARCHIVE_DIR" "$PROJECT_ARCHIVE_DIR" "$SERVERS_JSON" "$WIKI_READY" "$PROJECT_LAYOUT" "$PROJECT_LAYOUT_DIRS_JSON" "$WRITE_PROJECT_WORKSPACE_CLAUDE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -772,6 +1023,9 @@ fallback_project_dir = sys.argv[3]
 project_archive_dir = sys.argv[4]
 servers_json = sys.argv[5]
 wiki_ready = sys.argv[6] == "1"
+project_layout = sys.argv[7]
+project_layout_dirs = json.loads(sys.argv[8])
+write_project_workspace = sys.argv[9] == "1"
 
 begin = "<!-- AUTO-GOO-WIKI-ARCHIVE-BEGIN -->"
 end = "<!-- AUTO-GOO-WIKI-ARCHIVE-END -->"
@@ -827,6 +1081,46 @@ try:
 except (json.JSONDecodeError, ValueError):
     pass
 
+project_workspace_section = ""
+if write_project_workspace and project_layout_dirs:
+    lines = ["## 项目目录约定\n"]
+    lines.append(f"- 本项目采用 `{project_layout}` 业务目录结构；AutoGoo 自身状态仍固定写入 `.goo/`。")
+    lines.append("- 规划、执行和归档时优先复用以下目录语义，不要把业务代码、数据或文档混入 `.goo/`：")
+    for item in project_layout_dirs:
+        if item.startswith("data/raw"):
+            meaning = "原始数据，只读使用；清洗或转换结果不要覆盖这里"
+        elif item.startswith("data/processed"):
+            meaning = "处理后的可复用数据"
+        elif item.startswith("data/interim"):
+            meaning = "处理中间数据，可按任务清理或重建"
+        elif item.startswith("data/external"):
+            meaning = "外部来源数据或第三方下载数据"
+        elif item == "src" or item.startswith("src/"):
+            meaning = "项目源码"
+        elif item == "tests" or item.startswith("tests/"):
+            meaning = "测试与验收用例"
+        elif item == "docs" or item.startswith("docs/"):
+            meaning = "项目文档、设计记录和说明材料"
+        elif item == "configs" or item.startswith("configs/"):
+            meaning = "配置文件和实验参数"
+        elif item == "scripts" or item.startswith("scripts/"):
+            meaning = "可复用脚本和批处理入口"
+        elif item == "notebooks" or item.startswith("notebooks/"):
+            meaning = "探索分析 notebook"
+        elif item == "models" or item.startswith("models/"):
+            meaning = "模型权重、检查点或模型产物"
+        elif item == "outputs" or item.startswith("outputs/"):
+            meaning = "任务输出、生成结果和临时导出"
+        elif item == "reports" or item.startswith("reports/"):
+            meaning = "评测报告、分析报告和汇总材料"
+        elif item == "artifacts" or item.startswith("artifacts/"):
+            meaning = "业务产物；区别于 `.goo/artifacts/` 的 AutoGoo 执行产物"
+        else:
+            meaning = "项目约定目录"
+        lines.append(f"- `{item}/`: {meaning}。")
+    lines.append("- 新增计划步骤时，`allowed_read_paths` / `allowed_write_paths` 应优先落在上述业务目录或 `.goo/` 的明确 AutoGoo 状态目录内；涉及原始数据覆盖、批量改写或大文件生成时先请求用户确认。")
+    project_workspace_section = "\n".join(lines) + "\n"
+
 archive_section = ""
 if wiki_ready:
     archive_section = f"""## AutoGoo / Goo-wiki 归档原则
@@ -846,7 +1140,7 @@ if wiki_ready:
 - 不把归档当作事后报告；归档内容要能支撑下一次任务的召回、规划和复用。
 """
 
-content = archive_section + server_section
+content = project_workspace_section + archive_section + server_section
 if not content.strip():
     sys.exit(2)
 

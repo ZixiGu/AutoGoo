@@ -133,6 +133,9 @@ seen = set()
 required = {
     "config_scope",
     "wiki_dir",
+    "project_workspace_create",
+    "project_workspace_layout",
+    "project_workspace_claude_md",
     "update_claude_md",
     "configure_servers",
     "server_type",
@@ -155,6 +158,7 @@ required = {
     "research_followup",
     "usage_view",
     "publish_public_confirm",
+    "post_archive_html_report",
     "improve_confirm",
     "permission_block_action",
 }
@@ -288,7 +292,7 @@ done
 echo ""
 echo "── 6. 脚本文件 ──"
 
-SCRIPTS=("goo-init.sh" "init-plan.sh" "goo-status.py" "update-step.py" "thread-state.py" "thread-locks.py" "wiki-graph-assist.py" "daily-report-sessions.py" "goo-usage.py" "goo-publish.py" "goo-ssh.sh" "check-plugin.sh")
+SCRIPTS=("goo-init.sh" "init-plan.sh" "goo-status.py" "update-step.py" "thread-state.py" "thread-locks.py" "change-requests.py" "wiki-graph-assist.py" "daily-report-sessions.py" "goo-usage.py" "goo-publish.py" "goo-ssh.sh" "check-plugin.sh")
 for s in "${SCRIPTS[@]}"; do
   f="$ROOT/skills/auto-goo/scripts/$s"
   if [[ -f "$f" ]]; then
@@ -355,7 +359,7 @@ thread.mkdir(parents=True, exist_ok=True)
 PY
   if python3 "$ROOT/skills/auto-goo/scripts/thread-state.py" \
       --goo-dir "$THREAD_SYNC_DIR/project/.goo" \
-      sync --plan "$THREAD_SYNC_DIR/project/.goo/threads/demo-thread/plan.json" >/dev/null 2>&1 \
+      sync --plan "$THREAD_SYNC_DIR/project/.goo/threads/demo-thread/plan.json" --set-current >/dev/null 2>&1 \
     && python3 - "$THREAD_SYNC_DIR/project" <<'PY'
 import json
 import sys
@@ -376,6 +380,272 @@ PY
     pass "  thread-state.py sync 同步 current_thread/index/.goo/plan.json"
   else
     fail "  thread-state.py sync 未同步 current_thread/index/.goo/plan.json"
+  fi
+
+  mkdir -p "$THREAD_SYNC_DIR/project/.goo/threads/other-thread"
+  python3 - "$THREAD_SYNC_DIR/project" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+goo = root / ".goo"
+other = goo / "threads" / "other-thread"
+plan = {
+    "task": "other thread sync smoke",
+    "status": "running",
+    "thread": {
+        "id": "other-thread",
+        "plan_path": ".goo/threads/other-thread/plan.json",
+        "logs_dir": ".goo/threads/other-thread/logs",
+        "artifacts_dir": ".goo/threads/other-thread/artifacts",
+    },
+    "steps": [{"id": "s1", "name": "run", "status": "running"}],
+}
+other.mkdir(parents=True, exist_ok=True)
+(other / "thread.json").write_text(json.dumps({"id": "other-thread"}, ensure_ascii=False) + "\n", encoding="utf-8")
+(other / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  if python3 "$ROOT/skills/auto-goo/scripts/thread-state.py" \
+      --goo-dir "$THREAD_SYNC_DIR/project/.goo" \
+      sync --plan "$THREAD_SYNC_DIR/project/.goo/threads/other-thread/plan.json" >/dev/null 2>&1 \
+    && python3 - "$THREAD_SYNC_DIR/project" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+goo = root / ".goo"
+current = json.loads((goo / "current_thread.json").read_text(encoding="utf-8"))
+compat = json.loads((goo / "plan.json").read_text(encoding="utf-8"))
+index = json.loads((goo / "threads" / "index.json").read_text(encoding="utf-8"))
+assert current["thread_id"] == "demo-thread"
+assert compat["thread"]["id"] == "demo-thread"
+assert index["current_thread_id"] == "demo-thread"
+assert any(item["id"] == "other-thread" for item in index["threads"])
+PY
+  then
+    pass "  thread-state.py sync 不会让后台旧线程抢占 current thread"
+  else
+    fail "  thread-state.py sync current thread 保护失败"
+  fi
+
+  LOCK_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-check-locks-$$"
+  mkdir -p "$LOCK_SMOKE_DIR/project/.goo/threads/t1" "$LOCK_SMOKE_DIR/project/.goo/threads/t2"
+  python3 - "$LOCK_SMOKE_DIR/project" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+goo = root / ".goo"
+for thread_id, path in (("t1", "src"), ("t2", "src/app.py")):
+    tdir = goo / "threads" / thread_id
+    plan = {
+        "thread": {"id": thread_id},
+        "steps": [{
+            "id": "s1",
+            "status": "pending",
+            "allowed_write_paths": [path],
+            "wiki_pages": ["wiki/projects/demo.md"],
+            "ports": [9877],
+        }],
+    }
+    (tdir / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  if python3 "$ROOT/skills/auto-goo/scripts/thread-locks.py" \
+      --goo-dir "$LOCK_SMOKE_DIR/project/.goo" \
+      acquire-plan --plan "$LOCK_SMOKE_DIR/project/.goo/threads/t1/plan.json" >/dev/null 2>&1 \
+    && ! python3 "$ROOT/skills/auto-goo/scripts/thread-locks.py" \
+      --goo-dir "$LOCK_SMOKE_DIR/project/.goo" \
+      check-plan --plan "$LOCK_SMOKE_DIR/project/.goo/threads/t2/plan.json" >/dev/null 2>&1 \
+    && python3 "$ROOT/skills/auto-goo/scripts/thread-locks.py" \
+      --goo-dir "$LOCK_SMOKE_DIR/project/.goo" \
+      release-plan --plan "$LOCK_SMOKE_DIR/project/.goo/threads/t1/plan.json" >/dev/null 2>&1; then
+    pass "  thread-locks.py 检测文件目录/wiki/port 冲突并可释放"
+  else
+    fail "  thread-locks.py 资源锁 smoke test 失败"
+  fi
+
+  REQUEST_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-check-requests-$$"
+  mkdir -p "$REQUEST_SMOKE_DIR/project/.goo/change-requests"
+  python3 - "$REQUEST_SMOKE_DIR/project/.goo/change-requests/r1.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+Path(sys.argv[1]).write_text(json.dumps({
+    "id": "r1",
+    "thread_id": "demo-thread",
+    "status": "pending_model_update",
+    "request": "update plan",
+}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  if python3 "$ROOT/skills/auto-goo/scripts/change-requests.py" \
+      --goo-dir "$REQUEST_SMOKE_DIR/project/.goo" \
+      claim --thread-id demo-thread --actor check-plugin >/dev/null 2>&1 \
+    && python3 "$ROOT/skills/auto-goo/scripts/change-requests.py" \
+      --goo-dir "$REQUEST_SMOKE_DIR/project/.goo" \
+      status --request r1 --status completed --actor check-plugin --plan-step-id s1 >/dev/null 2>&1 \
+    && python3 - "$REQUEST_SMOKE_DIR/project/.goo/change-requests/r1.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert data["status"] == "completed"
+assert data["claimed_by"] == "check-plugin"
+assert data["plan_step_id"] == "s1"
+assert len(data["history"]) == 2
+PY
+  then
+    pass "  change-requests.py 支持 claim/status 状态机"
+  else
+    fail "  change-requests.py smoke test 失败"
+  fi
+fi
+
+if command -v python3 &>/dev/null; then
+  INIT_WORKSPACE_DIR="${TMPDIR:-/tmp}/autogoo-check-init-workspace-$$"
+  mkdir -p "$INIT_WORKSPACE_DIR/project" "$INIT_WORKSPACE_DIR/wiki"
+  if (cd "$INIT_WORKSPACE_DIR/project" && bash "$ROOT/skills/auto-goo/scripts/goo-init.sh" \
+      --project \
+      --wiki-dir "$INIT_WORKSPACE_DIR/wiki" \
+      --project-layout ml \
+      --project-dirs experiments,docs/notes \
+      --project-slug smoke \
+      --skip-claude-md \
+      --force \
+      --yes >/dev/null 2>&1) \
+    && python3 - "$INIT_WORKSPACE_DIR/project" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+config = json.loads((root / ".goo" / "config.json").read_text(encoding="utf-8"))
+paths = config["workspace"]["paths"]
+project_workspace = config["project_workspace"]
+assert config["workspace"]["root"] == ".goo"
+assert config["workspace"]["layout"] == "standard"
+assert paths["threads_dir"] == ".goo/threads"
+assert project_workspace["layout"] == "ml"
+for rel in ("src", "configs", "data/raw", "data/processed", "models", "outputs", "reports", "docs", "tests", "experiments", "docs/notes"):
+    assert rel in project_workspace["dirs"], rel
+for rel in (
+    ".goo/threads",
+    ".goo/logs",
+    ".goo/artifacts",
+    ".goo/reports",
+    ".goo/locks",
+    ".goo/change-requests",
+    ".goo/site",
+    "src",
+    "data/raw",
+    "docs/notes",
+    "experiments",
+):
+    assert (root / rel).is_dir(), rel
+PY
+  then
+    pass "  goo-init.sh 支持业务项目目录结构模板"
+  else
+    fail "  goo-init.sh 业务项目目录结构 smoke test 失败"
+  fi
+
+  INIT_CLAUDE_DIR="${TMPDIR:-/tmp}/autogoo-check-init-claude-$$"
+  mkdir -p "$INIT_CLAUDE_DIR/project" "$INIT_CLAUDE_DIR/wiki"
+  if (cd "$INIT_CLAUDE_DIR/project" && bash "$ROOT/skills/auto-goo/scripts/goo-init.sh" \
+      --project \
+      --wiki-dir "$INIT_CLAUDE_DIR/wiki" \
+      --project-layout data \
+      --project-slug smoke \
+      --update-claude-md \
+      --force \
+      --yes >/dev/null 2>&1) \
+    && python3 - "$INIT_CLAUDE_DIR/project" <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+text = (root / "CLAUDE.md").read_text(encoding="utf-8")
+assert "<!-- AUTO-GOO-WIKI-ARCHIVE-BEGIN -->" in text
+assert "## 项目目录约定" in text
+assert "data/raw/" in text
+assert "data/processed/" in text
+assert "AutoGoo 自身状态仍固定写入 `.goo/`" in text
+assert "allowed_read_paths" in text and "allowed_write_paths" in text
+PY
+  then
+    pass "  goo-init.sh 创建业务目录后可写入 CLAUDE.md 目录约定"
+  else
+    fail "  goo-init.sh 未正确写入 CLAUDE.md 目录约定"
+  fi
+
+  mkdir -p "$INIT_WORKSPACE_DIR/project/.goo/threads/split-thread"
+  python3 - "$INIT_WORKSPACE_DIR/project" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+thread = root / ".goo" / "threads" / "split-thread"
+plan = {
+    "task": "project layout runtime smoke",
+    "status": "pending",
+    "thread": {
+        "id": "split-thread",
+        "plan_path": ".goo/threads/split-thread/plan.json",
+        "logs_dir": ".goo/threads/split-thread/logs",
+        "artifacts_dir": ".goo/artifacts",
+    },
+    "steps": [{"id": "s1", "name": "runtime", "status": "pending"}],
+}
+thread.mkdir(parents=True, exist_ok=True)
+(thread / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  python3 - "$INIT_WORKSPACE_DIR/project/.goo/change-requests/r2.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps({
+    "id": "r2",
+    "thread_id": "split-thread",
+    "status": "pending_model_update",
+    "request": "change",
+}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  if (cd "$INIT_WORKSPACE_DIR/project" \
+      && python3 "$ROOT/skills/auto-goo/scripts/thread-state.py" sync \
+        --plan .goo/threads/split-thread/plan.json --set-current >/dev/null 2>&1 \
+      && python3 "$ROOT/skills/auto-goo/scripts/update-step.py" --step-id s1 --start >/dev/null 2>&1 \
+      && python3 "$ROOT/skills/auto-goo/scripts/goo-status.py" >/dev/null 2>&1 \
+      && python3 "$ROOT/skills/auto-goo/scripts/thread-locks.py" acquire \
+        --type files --resource output/demo.txt --thread-id split-thread --step-id s1 >/dev/null 2>&1 \
+      && python3 "$ROOT/skills/auto-goo/scripts/change-requests.py" claim \
+        --thread-id split-thread --actor smoke --limit 1 >/dev/null 2>&1 \
+      && python3 "$ROOT/skills/auto-goo/scripts/goo-publish.py" \
+        --root "$INIT_WORKSPACE_DIR/project" --output "$INIT_WORKSPACE_DIR/project/.goo/site/index.html" >/dev/null 2>&1) \
+    && python3 - "$INIT_WORKSPACE_DIR/project" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+assert json.loads((root / ".goo" / "current_thread.json").read_text(encoding="utf-8"))["thread_id"] == "split-thread"
+assert json.loads((root / ".goo" / "plan.json").read_text(encoding="utf-8"))["steps"][0]["status"] == "running"
+assert list((root / ".goo" / "logs").glob("*.md"))
+assert (root / ".goo" / "locks" / "files.json").is_file()
+assert json.loads((root / ".goo" / "change-requests" / "r2.json").read_text(encoding="utf-8"))["status"] == "in_progress"
+assert (root / ".goo" / "site" / "index.html").is_file()
+PY
+  then
+    pass "  固定 .goo 运行脚本读取 workspace.paths"
+  else
+    fail "  固定 .goo 运行脚本未正确读取 workspace.paths"
   fi
 fi
 

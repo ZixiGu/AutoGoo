@@ -76,6 +76,64 @@
 
 ```json
 {
+  "header": "项目目录",
+  "id": "project_workspace_create",
+  "question": "是否为当前项目创建业务目录结构？",
+  "options": [
+    {
+      "label": "不创建 (Recommended)",
+      "description": "只初始化 .goo/ AutoGoo 状态目录，不新增 src/data/docs 等业务目录。"
+    },
+    {
+      "label": "创建业务目录",
+      "description": "继续选择目录模板或通过 Other 输入自定义目录，并传给 goo-init 脚本。"
+    }
+  ]
+}
+```
+
+```json
+{
+  "header": "目录模板",
+  "id": "project_workspace_layout",
+  "question": "请选择业务项目目录模板。",
+  "options": [
+    {
+      "label": "standard (Recommended)",
+      "description": "创建 src、tests、docs、scripts、data、artifacts，适合通用代码项目。"
+    },
+    {
+      "label": "ml",
+      "description": "创建 src、configs、notebooks、data/raw、data/processed、models、outputs、reports 等。"
+    },
+    {
+      "label": "data",
+      "description": "创建数据处理项目常用目录：data/raw、data/interim、data/processed、reports、notebooks 等。"
+    }
+  ]
+}
+```
+
+```json
+{
+  "header": "目录约定",
+  "id": "project_workspace_claude_md",
+  "question": "是否把业务目录约定写入项目 CLAUDE.md？",
+  "options": [
+    {
+      "label": "写入 CLAUDE.md (Recommended)",
+      "description": "只更新 AutoGoo marker 段，记录目录语义、读写边界和 .goo/ 状态目录边界。"
+    },
+    {
+      "label": "跳过",
+      "description": "创建目录并写入 .goo/config.json，但不修改项目 CLAUDE.md。"
+    }
+  ]
+}
+```
+
+```json
+{
   "header": "项目说明",
   "id": "update_claude_md",
   "question": "是否更新当前项目 CLAUDE.md 的 AutoGoo 归档说明？",
@@ -515,6 +573,24 @@
     {
       "label": "取消发布",
       "description": "不生成公开发布产物，不提交不推送。"
+    }
+  ]
+}
+```
+
+```json
+{
+  "header": "HTML 报告",
+  "id": "post_archive_html_report",
+  "question": "任务归档已完成，是否生成并启动 HTML 报告？",
+  "options": [
+    {
+      "label": "生成并启动 (Recommended)",
+      "description": "运行 goo-publish.py --serve --host 0.0.0.0 --port 9877，打印 localhost 和本机 IP 访问地址。"
+    },
+    {
+      "label": "跳过",
+      "description": "只保留 Goo-wiki/fallback 归档和 .goo 状态，不启动 HTML server。"
     }
   ]
 }

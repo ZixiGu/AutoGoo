@@ -11,6 +11,13 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_WORKSPACE_PATHS = {
+    "threads_dir": ".goo/threads",
+    "logs_dir": ".goo/logs",
+    "compat_plan_file": ".goo/plan.json",
+}
+
+
 def now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -31,20 +38,74 @@ def safe_name(value: Any, limit: int = 48) -> str:
     return (text or "step")[:limit]
 
 
+def find_config_dir(start: Path) -> Path | None:
+    resolved = start.resolve()
+    for candidate in [resolved, *resolved.parents]:
+        if candidate.name == ".goo" and (candidate / "config.json").exists():
+            return candidate
+        config_dir = candidate / ".goo"
+        if (config_dir / "config.json").exists():
+            return config_dir
+    return None
+
+
+def workspace_paths(config_dir: Path | None) -> dict[str, str]:
+    merged = dict(DEFAULT_WORKSPACE_PATHS)
+    if not config_dir:
+        return merged
+    try:
+        config = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return merged
+    workspace = config.get("workspace") if isinstance(config.get("workspace"), dict) else {}
+    paths = workspace.get("paths") if isinstance(workspace.get("paths"), dict) else {}
+    for key, value in paths.items():
+        if key in merged and value:
+            merged[key] = str(value)
+    return merged
+
+
+def project_root_from_config_dir(config_dir: Path | None, fallback: Path) -> Path:
+    if config_dir and config_dir.name == ".goo":
+        return config_dir.parent.resolve()
+    return fallback.resolve()
+
+
 def project_root_from_plan(plan_path: Path) -> Path:
-    parent = plan_path.parent
-    if parent.parent.name == "threads":
-        return parent.parent.parent.parent
-    if parent.name == ".goo":
-        return parent.parent
-    return parent
+    config_dir = find_config_dir(plan_path)
+    fallback = plan_path.parent.parent.parent.parent if plan_path.parent.parent.name == "threads" else plan_path.parent
+    return project_root_from_config_dir(config_dir, fallback)
+
+
+def resolve_plan_path(value: str) -> Path:
+    plan_path = Path(value)
+    if plan_path.exists() or value != ".goo/plan.json":
+        return plan_path
+    config_dir = find_config_dir(plan_path)
+    paths = workspace_paths(config_dir)
+    raw = Path(paths["compat_plan_file"])
+    if raw.is_absolute():
+        return raw
+    return project_root_from_config_dir(config_dir, Path.cwd()) / raw
 
 
 def logs_dir_from_plan(plan_path: Path) -> Path:
     parent = plan_path.parent
-    if parent.parent.name == "threads":
+    config_dir = find_config_dir(plan_path)
+    project_root = project_root_from_plan(plan_path)
+    paths = workspace_paths(config_dir)
+    threads_dir = Path(paths["threads_dir"])
+    if not threads_dir.is_absolute():
+        threads_dir = project_root / threads_dir
+    try:
+        plan_path.resolve().relative_to(threads_dir.resolve())
         return parent / "logs"
-    return project_root_from_plan(plan_path) / ".goo" / "logs"
+    except ValueError:
+        pass
+    logs_dir = Path(paths["logs_dir"])
+    if logs_dir.is_absolute():
+        return logs_dir
+    return project_root / logs_dir
 
 
 def ensure_log_path(plan_path: Path, step: dict[str, Any], stamp: str) -> Path:
@@ -119,11 +180,13 @@ def compute_plan_status(data: dict[str, Any]) -> str:
     running = sum(1 for step in steps if step.get("status") == "running")
     if completed == total:
         return "completed"
-    if failed and not running:
-        return "failed"
-    if blocked and not running:
+    if blocked:
         return "blocked"
-    if running or completed:
+    if running:
+        return "running"
+    if failed:
+        return "failed"
+    if completed:
         return "running"
     return "pending"
 
@@ -170,7 +233,7 @@ def main() -> int:
     parser.add_argument("--note", help="append a short step-log note for this update")
     args = parser.parse_args()
 
-    plan_path = Path(args.plan)
+    plan_path = resolve_plan_path(args.plan)
     data = load_json(plan_path)
     stamp = now()
 

@@ -11,6 +11,13 @@ from pathlib import Path
 from typing import Any
 
 
+DEFAULT_WORKSPACE_PATHS = {
+    "threads_dir": ".goo/threads",
+    "current_thread_file": ".goo/current_thread.json",
+    "compat_plan_file": ".goo/plan.json",
+}
+
+
 def now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -39,21 +46,74 @@ def dump_json(path: Path, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def goo_dir_from_plan(plan_path: Path) -> Path:
-    plan = plan_path.resolve()
-    if plan.parent.parent.name == "threads":
-        return plan.parent.parent.parent
-    if plan.parent.name == ".goo":
-        return plan.parent
+def project_root_from_config_dir(config_dir: Path) -> Path:
+    return config_dir.resolve().parent if config_dir.name == ".goo" else Path.cwd().resolve()
+
+
+def find_config_dir(start: Path | None = None) -> Path:
+    if start:
+        resolved = start.resolve()
+        for candidate in [resolved, *resolved.parents]:
+            if candidate.name == ".goo":
+                return candidate
+            config_dir = candidate / ".goo"
+            if (config_dir / "config.json").exists():
+                return config_dir
+    for candidate in [Path.cwd().resolve(), *Path.cwd().resolve().parents]:
+        if candidate.name == ".goo" and (candidate / "config.json").exists():
+            return candidate
+        config_dir = candidate / ".goo"
+        if (config_dir / "config.json").exists():
+            return config_dir
     return Path.cwd() / ".goo"
 
 
+def workspace_paths(config_dir: Path) -> dict[str, str]:
+    config = load_json(config_dir / "config.json", {})
+    workspace = config.get("workspace") if isinstance(config.get("workspace"), dict) else {}
+    paths = workspace.get("paths") if isinstance(workspace.get("paths"), dict) else {}
+    merged = dict(DEFAULT_WORKSPACE_PATHS)
+    for key, value in paths.items():
+        if key in merged and value:
+            merged[key] = str(value)
+    return merged
+
+
+def workspace_path(config_dir: Path, key: str) -> Path:
+    paths = workspace_paths(config_dir)
+    raw = Path(paths[key]).expanduser()
+    if raw.is_absolute():
+        return raw
+    default = DEFAULT_WORKSPACE_PATHS.get(key)
+    if default and raw.as_posix() == default and config_dir.name == ".goo" and not (config_dir / "config.json").exists():
+        return config_dir.resolve() / raw.relative_to(".goo")
+    return project_root_from_config_dir(config_dir) / raw
+
+
+def display_path(config_dir: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(project_root_from_config_dir(config_dir)).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def config_dir_from_plan(plan_path: Path) -> Path:
+    return find_config_dir(plan_path)
+
+
+def resolve_plan_path(config_dir: Path, value: str) -> Path:
+    plan_path = Path(value)
+    if plan_path.exists() or value != ".goo/plan.json":
+        return plan_path
+    return workspace_path(config_dir, "compat_plan_file")
+
+
 def thread_dir(goo_dir: Path, thread_id: str) -> Path:
-    return goo_dir / "threads" / thread_id
+    return workspace_path(goo_dir, "threads_dir") / thread_id
 
 
 def current_thread_id(goo_dir: Path) -> str | None:
-    data = load_json(goo_dir / "current_thread.json", {})
+    data = load_json(workspace_path(goo_dir, "current_thread_file"), {})
     value = data.get("thread_id")
     return str(value) if value else None
 
@@ -71,11 +131,13 @@ def compute_plan_status(plan: dict[str, Any]) -> str:
     running = sum(1 for step in steps if step.get("status") == "running")
     if completed == total:
         return "completed"
-    if failed and not running:
-        return "failed"
-    if blocked and not running:
+    if blocked:
         return "blocked"
-    if running or completed:
+    if running:
+        return "running"
+    if failed:
+        return "failed"
+    if completed:
         return "running"
     return "pending"
 
@@ -91,12 +153,12 @@ def unique_thread_id(goo_dir: Path, title: str) -> str:
 
 
 def ensure_index(goo_dir: Path) -> dict[str, Any]:
-    path = goo_dir / "threads" / "index.json"
+    path = workspace_path(goo_dir, "threads_dir") / "index.json"
     return load_json(path, {"threads": []})
 
 
 def write_index(goo_dir: Path, index: dict[str, Any]) -> None:
-    dump_json(goo_dir / "threads" / "index.json", index)
+    dump_json(workspace_path(goo_dir, "threads_dir") / "index.json", index)
 
 
 def upsert_index(index: dict[str, Any], meta: dict[str, Any]) -> None:
@@ -133,11 +195,11 @@ def create_thread(goo_dir: Path, title: str, runtime: str = "claude-code", threa
         "created_at": created,
         "updated_at": created,
         "active_plan": "plan.json",
-        "plan_path": f".goo/threads/{thread_id}/plan.json",
-        "brainstorm_path": f".goo/threads/{thread_id}/brainstorm.json",
-        "logs_dir": f".goo/threads/{thread_id}/logs",
-        "artifacts_dir": f".goo/threads/{thread_id}/artifacts",
-        "reports_dir": f".goo/threads/{thread_id}/reports",
+        "plan_path": display_path(goo_dir, tdir / "plan.json"),
+        "brainstorm_path": display_path(goo_dir, tdir / "brainstorm.json"),
+        "logs_dir": display_path(goo_dir, tdir / "logs"),
+        "artifacts_dir": display_path(goo_dir, tdir / "artifacts"),
+        "reports_dir": display_path(goo_dir, tdir / "reports"),
         "archive": {},
     }
     dump_json(tdir / "thread.json", meta)
@@ -155,24 +217,27 @@ def set_current(goo_dir: Path, thread_id: str) -> None:
         raise SystemExit(f"thread not found: {thread_id}")
     meta = load_json(meta_path, {})
     dump_json(
-        goo_dir / "current_thread.json",
+        workspace_path(goo_dir, "current_thread_file"),
         {
             "thread_id": thread_id,
-            "thread_dir": f".goo/threads/{thread_id}",
-            "plan_path": meta.get("plan_path") or f".goo/threads/{thread_id}/plan.json",
+            "thread_dir": display_path(goo_dir, tdir),
+            "plan_path": meta.get("plan_path") or display_path(goo_dir, tdir / "plan.json"),
             "updated_at": now(),
         },
     )
 
 
 def sync_compat_plan(goo_dir: Path, plan_path: Path, plan: dict[str, Any]) -> None:
-    compat_path = goo_dir / "plan.json"
+    compat_path = workspace_path(goo_dir, "compat_plan_file")
     try:
         if plan_path.resolve() == compat_path.resolve():
             return
     except FileNotFoundError:
         pass
-    if plan_path.parent.parent.name != "threads":
+    threads_dir = workspace_path(goo_dir, "threads_dir").resolve()
+    try:
+        plan_path.resolve().relative_to(threads_dir)
+    except ValueError:
         return
     dump_json(compat_path, plan)
 
@@ -193,9 +258,22 @@ def resolve_thread(goo_dir: Path, thread_id: str | None, plan_path: Path | None 
     return current_thread_id(goo_dir)
 
 
-def sync_from_plan(plan_path: Path, thread_id: str | None = None) -> dict[str, Any]:
+def is_compat_plan(goo_dir: Path, plan_path: Path) -> bool:
+    try:
+        return plan_path.resolve() == workspace_path(goo_dir, "compat_plan_file").resolve()
+    except FileNotFoundError:
+        return False
+
+
+def sync_from_plan(
+    plan_path: Path,
+    thread_id: str | None = None,
+    *,
+    make_current: bool = False,
+    goo_dir_override: Path | None = None,
+) -> dict[str, Any]:
     plan = load_json(plan_path, {})
-    goo_dir = goo_dir_from_plan(plan_path)
+    goo_dir = goo_dir_override or config_dir_from_plan(plan_path)
     resolved = resolve_thread(goo_dir, thread_id, plan_path)
     if not resolved:
         return {}
@@ -223,18 +301,19 @@ def sync_from_plan(plan_path: Path, thread_id: str | None = None) -> dict[str, A
     dump_json(tdir / "thread.json", meta)
     index = ensure_index(goo_dir)
     upsert_index(index, meta)
-    index["current_thread_id"] = resolved
+    current = current_thread_id(goo_dir)
+    should_update_current = make_current or is_compat_plan(goo_dir, plan_path) or not current or current == resolved
+    if should_update_current:
+        index["current_thread_id"] = resolved
     write_index(goo_dir, index)
-    set_current(goo_dir, resolved)
-    sync_compat_plan(goo_dir, plan_path, plan)
+    if should_update_current:
+        set_current(goo_dir, resolved)
+        sync_compat_plan(goo_dir, plan_path, plan)
     return meta
 
 
 def relative_to_goo_parent(goo_dir: Path, path: Path) -> str:
-    try:
-        return path.resolve().relative_to(goo_dir.parent.resolve()).as_posix()
-    except ValueError:
-        return path.as_posix()
+    return display_path(goo_dir, path)
 
 
 def list_threads(goo_dir: Path) -> int:
@@ -270,11 +349,12 @@ def main() -> int:
     sync = sub.add_parser("sync", help="sync thread metadata from plan")
     sync.add_argument("--plan", default=".goo/plan.json")
     sync.add_argument("--id", dest="thread_id")
+    sync.add_argument("--set-current", action="store_true", help="also make this plan's thread current")
 
     sub.add_parser("list", help="list threads")
 
     args = parser.parse_args()
-    goo_dir = Path(args.goo_dir)
+    goo_dir = find_config_dir(Path(args.goo_dir))
     goo_dir.mkdir(parents=True, exist_ok=True)
 
     if args.cmd == "create":
@@ -286,7 +366,12 @@ def main() -> int:
         print(f"current thread: {args.thread_id}")
         return 0
     if args.cmd == "sync":
-        meta = sync_from_plan(Path(args.plan), args.thread_id)
+        meta = sync_from_plan(
+            resolve_plan_path(goo_dir, args.plan),
+            args.thread_id,
+            make_current=args.set_current,
+            goo_dir_override=goo_dir,
+        )
         if meta:
             print(f"synced thread {meta.get('id')}: status={meta.get('status')}")
         return 0

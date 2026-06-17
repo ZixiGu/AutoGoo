@@ -15,7 +15,7 @@
 10. **并行优先审计** — 移除仅由叙事顺序、文档顺序或保守习惯造成的伪依赖；能独立读输入、独立写产物、独立验收的步骤放入同一 `tier`
 11. **识别优化标记** — 包含"性能/速度/延迟/吞吐/效率/内存/GPU/耗时" → `type: "optimize"`
 12. **范围约束** — 每个步骤目标严格取自任务描述，不添加未要求的功能
-13. **归档历史 plan** — 如果 `.goo/plan.json` 已存在，先复制到 `.goo/plans/history/plan-<timestamp>.json`
+13. **归档历史 plan** — 只有旧 plan 已完成，或用户明确选择新建/继续并确认替换当前 plan 时，才把旧 plan 复制到 `.goo/plans/history/plan-<timestamp>.json`；复制 history 不是覆盖未完成现场的许可
 14. **输出 plan.json**
 
 ## 多 Goal 任务
@@ -379,7 +379,7 @@ DAG 结构总结：
 `/auto-goo:goo-plan <任务>` 只执行 Wiki 经验召回和任务解析，不派发 Subagent。
 
 输出要求：
-- 覆盖 `.goo/plan.json` 前，先把旧 plan 原样复制到 `.goo/plans/history/`
+- 写入新的 `.goo/plan.json` 或 thread plan 前，先执行现有 plan 冲突检查；只有旧 plan 已完成，或用户明确选择新建 thread/继续当前 thread 并确认替换时，才把旧 plan 原样复制到 `.goo/plans/history/`
 - 写入 `.goo/plan.json`
 - 写入 `review.status="pending_user_review"`，并先用普通聊天正文展示简洁计划摘要、目标/交付物、DAG 步骤概览、并行组、必要串行链、关键风险和需要用户确认的点
 - 计划审阅必须分两步完成：先展示用户可直接阅读的计划概述，再实际调用 `AskUserQuestion` / 结构化选择 UI，选项为 `确认计划`、`修改计划`、`拆分/合并步骤`、`回到 brainstorm`；不得在没有计划概述的情况下直接弹出结构化审阅控件，也不得在未尝试调用 `AskUserQuestion` 时直接输出纯文本编号列表；纯文本编号只作为实际调用失败或按钮未渲染后的 fallback
@@ -401,7 +401,7 @@ DAG 结构总结：
 
 ## 历史 plan 归档
 
-当前 thread plan 是任务状态源，`.goo/plan.json` 是兼容入口。每当 `goo-plan`、`goo-start` 或脚本准备写入新的 thread plan / `.goo/plan.json` 时，如果旧 plan 已存在，必须先复制归档：
+当前 thread plan 是任务状态源，`.goo/plan.json` 是兼容入口。每当 `goo-plan`、`goo-start` 或脚本准备写入新的 thread plan / `.goo/plan.json` 时，必须先判断旧 plan 是否已完成。只有旧 plan 已完成，或用户明确选择新建 thread/继续当前 thread 并确认替换时，才复制归档：
 
 ```text
 .goo/plans/history/plan-YYYY-MM-DDTHH-MM-SS.json
@@ -412,6 +412,7 @@ DAG 结构总结：
 - 只复制，不删除旧归档
 - 保留旧 plan 原始内容，便于追溯历史规划
 - 如同一秒内多次生成，追加数字后缀避免覆盖
+- 归档不是覆盖许可；未完成 plan 仍必须经过 `thread_action` 或等价用户确认
 - `/auto-goo:goo-continue` 默认只读取当前 `.goo/plan.json`，不自动恢复历史 plan
 
 ### 字段说明
@@ -506,8 +507,8 @@ pending ──→ running ──→ completed
 
 1. `status = "completed"` → 跳过
 2. `status = "running"` 且 `heartbeat_at` 在 2 分钟内 → 等待或跳过（agent 仍在跑）
-3. `status = "running"` 且 `heartbeat_at` 超过 2 分钟 → 检查 output 文件是否存在
-   - 产物文件存在且内容完整 → 标记为 completed
+3. `status = "running"` 且 `heartbeat_at` 超过 2 分钟 → 优先执行 step 的 `validation`，缺少可执行 validation 时再检查 output 文件是否存在
+   - validation 通过，或缺少可执行 validation 但产物文件存在且内容完整 → 标记为 completed
    - 产物文件不存在/不完整 → 重置为 pending，重新派发
 4. `status = "pending"` 且 depends_on 全部 completed → 正常执行
 
@@ -562,4 +563,4 @@ pending ──→ running ──→ completed
 如果必须用大 plan（跨会话），依赖三重恢复机制：
 - `status` 字段追踪每步完成状态
 - `heartbeat_at` 区分僵尸/存活 agent
-- `output` 产物文件存在性兜底检测
+- `validation` 优先的恢复检测；缺少可执行 validation 时再用 `output` 产物存在性兜底检测

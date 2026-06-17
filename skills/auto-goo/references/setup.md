@@ -17,7 +17,9 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 - `/auto-goo:goo-init --user` → `~/.auto-goo/config.json`
 - `/auto-goo:goo-init --project` → `.goo/config.json`；自动创建或复用 Goo-wiki 与 `wiki/projects/<project-slug>/` 项目归档根目录，并询问是否更新项目 `CLAUDE.md` 的归档原则段落
 
-初始化采用主 Agent 交互模式：主 Agent 先通过 `AskUserQuestion` / 结构化选择 UI 确认作用域、wiki 路径、覆盖风险和项目 `CLAUDE.md` 更新意愿，让 Claude Code 渲染可用方向键移动、Enter 确认的选择控件，再调用脚本落盘。每个交互问题必须展示可选项；不得在 `AskUserQuestion` 可用时用普通文本要求用户手打 `1/2` 或命令参数。结构化选择 UI / AskUserQuestion 不可用、调用失败或没有渲染出按钮时，才允许降级为明确标注 fallback 的纯文本列表选项，继续收集用户选择。
+初始化采用主 Agent 交互模式：主 Agent 先通过 `AskUserQuestion` / 结构化选择 UI 确认作用域、wiki 路径、是否创建业务项目目录、创建后是否写入 `CLAUDE.md`、覆盖风险和项目 `CLAUDE.md` 更新意愿，让 Claude Code 渲染可用方向键移动、Enter 确认的选择控件，再调用脚本落盘。每个交互问题必须展示可选项；不得在 `AskUserQuestion` 可用时用普通文本要求用户手打 `1/2` 或命令参数。结构化选择 UI / AskUserQuestion 不可用、调用失败或没有渲染出按钮时，才允许降级为明确标注 fallback 的纯文本列表选项，继续收集用户选择。
+
+业务项目目录结构也属于主 Agent 交互，不允许只依赖脚本里的 Bash prompt。项目级初始化必须复用 `references/interaction-templates.md` 中的固定模板：`id=project_workspace_create` 询问是否创建，`id=project_workspace_layout` 询问模板或自定义目录，创建后用 `id=project_workspace_claude_md` 询问是否写入项目 `CLAUDE.md`。用户未明确选择前不得创建业务目录；选择自定义目录时，主 Agent 必须复述并确认 Other 输入后再传给 `--project-dirs`。
 
 底层写入仍由初始化脚本完成，但只有在用户已确认所有参数后才运行脚本。命令文档不得在交互前执行 root 解析；不得内联 heredoc / file redirection 的 Python 片段。最终落盘阶段先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-init.sh --user|--project --wiki-dir <已确认路径> ...`。如果用户配置远程服务器，主 Agent 把非敏感参数追加为可重复的 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`；密码不得作为参数传入。
 
@@ -94,7 +96,14 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 
 ## 项目 CLAUDE.md 归档原则
 
-项目级初始化使用 Goo-wiki 时，AutoGoo 会询问用户是否在项目根目录 `CLAUDE.md` 中追加或更新由 `AUTO-GOO-WIKI-ARCHIVE` marker 包裹的段落。该段落要求：
+项目级初始化如果创建了业务项目目录结构，AutoGoo 必须继续用 `AskUserQuestion` 复用 `id=project_workspace_claude_md` 模板，询问是否在项目根目录 `CLAUDE.md` 中写入目录约定。用户同意时，`AUTO-GOO-WIKI-ARCHIVE` marker 段会包含 `## 项目目录约定`，记录：
+
+- `project_workspace.layout` 和目录清单
+- `src/`、`data/raw/`、`data/processed/`、`docs/`、`configs/`、`outputs/` 等目录语义
+- 原始数据只读、处理数据和输出目录分离、`.goo/` 只存 AutoGoo 状态的边界
+- 后续 plan 的 `allowed_read_paths` / `allowed_write_paths` 应优先落在业务目录或明确的 `.goo/` 状态目录中
+
+项目级初始化使用 Goo-wiki 时，AutoGoo 还会询问用户是否在项目根目录 `CLAUDE.md` 中追加或更新由 `AUTO-GOO-WIKI-ARCHIVE` marker 包裹的归档原则段落。该段落要求：
 
 - 规划前先从 Goo-wiki 召回相关项目经验、概念页、周报和 `log.md`
 - `goo-plan` 的 `.goo/plan.json` 最后保留 `归档到 Goo-wiki` 步骤
@@ -106,7 +115,7 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 - 归档完成前必须验收 Markdown 连接图谱：任务页链接项目入口、复用知识、上下文材料和关键概念/问题/指标/历史任务页；项目 `<project-slug>.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口
 - 归档内容必须服务下一次任务复用，而不是只做事后报告
 
-该更新是幂等的，只替换 AutoGoo marker 内的内容，不覆盖项目已有指引。非交互场景默认不写，需传 `--update-claude-md` 明确写入；需要跳过时传 `--skip-claude-md`。
+该更新是幂等的，只替换 AutoGoo marker 内的内容，不覆盖项目已有指引。非交互场景默认不写，需传 `--update-claude-md` 明确写入目录约定、服务器配置和归档原则；需要跳过时传 `--skip-claude-md`。
 
 如果项目配置了远程服务器，AutoGoo marker 块还会写入：
 
@@ -142,6 +151,41 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
     "project_dir": "wiki/projects/<project-slug>",
     "fallback_project_dir": ".goo/obsidian/<project-slug>",
     "git_remote_url": "https://github.com/<owner>/<repo>.git"
+  },
+  "workspace": {
+    "root": ".goo",
+    "layout": "standard",
+    "paths": {
+      "threads_dir": ".goo/threads",
+      "current_thread_file": ".goo/current_thread.json",
+      "compat_plan_file": ".goo/plan.json",
+      "compat_brainstorm_file": ".goo/brainstorm.json",
+      "plans_history_dir": ".goo/plans/history",
+      "brainstorms_history_dir": ".goo/brainstorms/history",
+      "logs_dir": ".goo/logs",
+      "artifacts_dir": ".goo/artifacts",
+      "reports_dir": ".goo/reports",
+      "locks_dir": ".goo/locks",
+      "change_requests_dir": ".goo/change-requests",
+      "obsidian_dir": ".goo/obsidian",
+      "site_dir": ".goo/site"
+    }
+  },
+  "project_workspace": {
+    "layout": "ml",
+    "dirs": [
+      "src",
+      "configs",
+      "scripts",
+      "notebooks",
+      "data/raw",
+      "data/processed",
+      "models",
+      "outputs",
+      "reports",
+      "docs",
+      "tests"
+    ]
   },
   "publish": {
     "enabled": true,
@@ -186,6 +230,22 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
   ]
 }
 ```
+
+`goo-init` 支持指定业务项目目录结构。项目级初始化必须先用 `AskUserQuestion` 复用 `id=project_workspace_create` 询问是否创建；默认不创建。用户选择创建后，再复用 `id=project_workspace_layout` 询问模板或自定义目录，才传 `--project-layout` 或 `--project-dirs`。AutoGoo 自身状态目录固定在项目 `.goo/`，不要把它改成项目代码/数据目录。
+
+```bash
+bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project \
+  --wiki-dir ~/workspace/Goo-wiki \
+  --project-layout ml
+```
+
+内置模板：
+- `standard`: `src`, `tests`, `docs`, `scripts`, `data`, `artifacts`
+- `ml`: `src`, `configs`, `scripts`, `notebooks`, `data/raw`, `data/processed`, `data/external`, `models`, `outputs`, `reports`, `docs`, `tests`
+- `data`: `src`, `scripts`, `notebooks`, `data/raw`, `data/interim`, `data/processed`, `data/external`, `reports`, `docs`, `tests`
+- `docs`: `docs`, `docs/adr`, `docs/assets`, `scripts`, `src`, `tests`
+
+也可以用 `--project-dirs src,data/raw,docs` 传入自定义目录；脚本会写入 `.goo/config.json.project_workspace` 并创建对应目录。默认 `project_workspace.layout="none"`，不创建业务目录，避免污染已有项目。业务目录创建后，必须继续复用 `id=project_workspace_claude_md` 询问是否把目录约定写入项目 `CLAUDE.md`。
 
 ### 远程服务器配置
 
