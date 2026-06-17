@@ -532,7 +532,7 @@ assert config["workspace"]["root"] == ".goo"
 assert config["workspace"]["layout"] == "standard"
 assert paths["threads_dir"] == ".goo/threads"
 assert project_workspace["layout"] == "ml"
-for rel in ("src", "configs", "data/raw", "data/processed", "models", "outputs", "reports", "docs", "tests", "experiments", "docs/notes"):
+for rel in ("src", "configs", "references", "references/papers", "data/raw", "data/processed", "models", "outputs", "reports", "docs", "tests", "experiments", "docs/notes"):
     assert rel in project_workspace["dirs"], rel
 for rel in (
     ".goo/threads",
@@ -543,6 +543,7 @@ for rel in (
     ".goo/change-requests",
     ".goo/site",
     "src",
+    "references/papers",
     "data/raw",
     "docs/notes",
     "experiments",
@@ -575,6 +576,7 @@ assert "<!-- AUTO-GOO-WIKI-ARCHIVE-BEGIN -->" in text
 assert "## 项目目录约定" in text
 assert "data/raw/" in text
 assert "data/processed/" in text
+assert "references/papers/" in text
 assert "AutoGoo 自身状态仍固定写入 `.goo/`" in text
 assert "allowed_read_paths" in text and "allowed_write_paths" in text
 PY

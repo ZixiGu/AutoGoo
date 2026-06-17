@@ -45,6 +45,8 @@
       "configs",
       "scripts",
       "notebooks",
+      "references",
+      "references/papers",
       "data/raw",
       "data/processed",
       "data/external",

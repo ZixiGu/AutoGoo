@@ -101,7 +101,7 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 项目级初始化如果创建了业务项目目录结构，AutoGoo 必须继续用 `AskUserQuestion` 复用 `id=project_workspace_claude_md` 模板，询问是否在项目根目录 `CLAUDE.md` 中写入目录约定。用户同意时，`AUTO-GOO-WIKI-ARCHIVE` marker 段会包含 `## 项目目录约定`，记录：
 
 - `project_workspace.layout` 和目录清单
-- `src/`、`data/raw/`、`data/processed/`、`docs/`、`configs/`、`outputs/` 等目录语义
+- `src/`、`data/raw/`、`data/processed/`、`references/`、`references/papers/`、`docs/`、`configs/`、`outputs/` 等目录语义
 - 原始数据只读、处理数据和输出目录分离、`.goo/` 只存 AutoGoo 状态的边界
 - 后续 plan 的 `allowed_read_paths` / `allowed_write_paths` 应优先落在业务目录或明确的 `.goo/` 状态目录中
 
@@ -233,7 +233,7 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 }
 ```
 
-`goo-init` 支持指定业务项目目录结构。项目级初始化必须先用 `AskUserQuestion` 复用 `id=project_workspace_create` 询问是否创建；默认不创建。用户选择创建后，再复用 `id=project_workspace_layout` 询问模板或自定义目录，才传 `--project-layout` 或 `--project-dirs`。AutoGoo 自身状态目录固定在项目 `.goo/`，不要把它改成项目代码/数据目录。
+`goo-init` 支持指定业务项目目录结构。项目级初始化必须先用 `AskUserQuestion` 复用 `id=project_workspace_create` 询问是否创建；默认不创建。用户选择创建后，再复用 `id=project_workspace_layout` 询问模板或自定义目录，才传 `--project-layout` 或 `--project-dirs`。AutoGoo 自身状态目录固定在项目 `.goo/`，不要把它改成项目代码/数据目录。业务目录可以包含 `references/` 与 `references/papers/`，用于参考资料、论文、规范、paper PDF、arXiv/DOI 元数据和阅读材料；这些资料属于项目业务上下文，不属于 AutoGoo 运行态 `.goo/`。
 
 ```bash
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project \
@@ -242,12 +242,12 @@ bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project \
 ```
 
 内置模板：
-- `standard`: `src`, `tests`, `docs`, `scripts`, `data`, `artifacts`
-- `ml`: `src`, `configs`, `scripts`, `notebooks`, `data/raw`, `data/processed`, `data/external`, `models`, `outputs`, `reports`, `docs`, `tests`
-- `data`: `src`, `scripts`, `notebooks`, `data/raw`, `data/interim`, `data/processed`, `data/external`, `reports`, `docs`, `tests`
-- `docs`: `docs`, `docs/adr`, `docs/assets`, `scripts`, `src`, `tests`
+- `standard`: `src`, `tests`, `docs`, `references`, `references/papers`, `scripts`, `data`, `artifacts`
+- `ml`: `src`, `configs`, `scripts`, `notebooks`, `references`, `references/papers`, `data/raw`, `data/processed`, `data/external`, `models`, `outputs`, `reports`, `docs`, `tests`
+- `data`: `src`, `scripts`, `notebooks`, `references`, `references/papers`, `data/raw`, `data/interim`, `data/processed`, `data/external`, `reports`, `docs`, `tests`
+- `docs`: `docs`, `docs/adr`, `docs/assets`, `references`, `references/papers`, `scripts`, `src`, `tests`
 
-也可以用 `--project-dirs src,data/raw,docs` 传入自定义目录；脚本会写入 `.goo/config.json.project_workspace` 并创建对应目录。默认 `project_workspace.layout="none"`，不创建业务目录，避免污染已有项目。业务目录创建后，如根目录已有可归类内容，必须先用 `id=project_workspace_organize_existing` 询问是否生成整理方案，再用 `id=project_workspace_apply_organization` 二次确认是否执行移动；默认不移动任何已有内容。之后必须继续复用 `id=project_workspace_claude_md` 询问是否把目录约定写入项目 `CLAUDE.md`。
+也可以用 `--project-dirs src,data/raw,docs,references/papers` 传入自定义目录；脚本会写入 `.goo/config.json.project_workspace` 并创建对应目录。默认 `project_workspace.layout="none"`，不创建业务目录，避免污染已有项目。业务目录创建后，如根目录已有可归类内容，必须先用 `id=project_workspace_organize_existing` 询问是否生成整理方案，再用 `id=project_workspace_apply_organization` 二次确认是否执行移动；默认不移动任何已有内容。之后必须继续复用 `id=project_workspace_claude_md` 询问是否把目录约定写入项目 `CLAUDE.md`。
 
 ### 远程服务器配置
 

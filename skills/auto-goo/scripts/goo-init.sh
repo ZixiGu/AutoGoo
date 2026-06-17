@@ -14,7 +14,7 @@ Options:
   --project-layout NAME
                     Create/record a project directory layout: none, standard, ml, data, docs (default: none)
   --project-dirs LIST
-                    Comma-separated project directories to create/record, e.g. src,data/raw,docs
+                    Comma-separated project directories to create/record, e.g. src,data/raw,docs,references/papers
   --project-slug SLUG
                     Set Goo-wiki project archive folder name (default: project directory name)
   --server SPEC     Add a remote server without entering the TTY prompts. Repeatable.
@@ -213,16 +213,16 @@ project_layout_dirs() {
     none)
       ;;
     standard)
-      printf '%s\n' src tests docs scripts data artifacts
+      printf '%s\n' src tests docs references references/papers scripts data artifacts
       ;;
     ml)
-      printf '%s\n' src configs scripts notebooks data/raw data/processed data/external models outputs reports docs tests
+      printf '%s\n' src configs scripts notebooks references references/papers data/raw data/processed data/external models outputs reports docs tests
       ;;
     data)
-      printf '%s\n' src scripts notebooks data/raw data/interim data/processed data/external reports docs tests
+      printf '%s\n' src scripts notebooks references references/papers data/raw data/interim data/processed data/external reports docs tests
       ;;
     docs)
-      printf '%s\n' docs docs/adr docs/assets scripts src tests
+      printf '%s\n' docs docs/adr docs/assets references references/papers scripts src tests
       ;;
     custom)
       ;;
@@ -517,7 +517,7 @@ if [[ "$SCOPE" == "project" && "$PROJECT_LAYOUT_PROVIDED" -eq 0 && "$PROJECT_DIR
   if confirm "Create business project directories such as src/data/docs?" "n"; then
     PROJECT_LAYOUT="$(prompt "Project directory layout (standard/ml/data/docs/custom)" "standard")"
     if [[ "$PROJECT_LAYOUT" == "custom" ]]; then
-      PROJECT_DIRS="$(prompt "Comma-separated project directories" "src,data/raw,docs")"
+      PROJECT_DIRS="$(prompt "Comma-separated project directories" "src,data/raw,docs,references/papers")"
       PROJECT_DIRS_PROVIDED=1
     fi
     PROJECT_LAYOUT_PROVIDED=1
@@ -1095,6 +1095,11 @@ if write_project_workspace and project_layout_dirs:
             meaning = "处理中间数据，可按任务清理或重建"
         elif item.startswith("data/external"):
             meaning = "外部来源数据或第三方下载数据"
+        elif item == "references" or item.startswith("references/"):
+            if item.startswith("references/papers"):
+                meaning = "论文、paper PDF、arXiv/DOI 元数据和阅读材料；可读写但需保留来源信息"
+            else:
+                meaning = "参考资料、论文、规范、外部文档和资料索引；区别于项目产出文档"
         elif item == "src" or item.startswith("src/"):
             meaning = "项目源码"
         elif item == "tests" or item.startswith("tests/"):
