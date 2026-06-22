@@ -29,7 +29,7 @@ AutoGoo 的 wiki 流程分成两段：
 
 `/auto-goo:goo-publish` 是归档之外的展示层。它无需运行 `goo-init` 或创建 `.goo/config.json`，默认从 `.goo/threads/`、`.goo/current_thread.json`、兼容 `.goo/brainstorm.json`、`.goo/plan.json`、history、当前 thread logs/artifacts/reports、`.goo/change-requests/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/` 多页站点。`skills/auto-goo/templates/publish/workflow-shell.html` 是唯一运行时页面外壳，`skills/auto-goo/templates/publish/workflow-theme.css` 是唯一正式视觉主题；脚本填充标题、活动导航、正文、路径和交互脚本，并复制主题到站点目录，不依赖发布后手工注入 CSS。默认生成总览、Threads、计划、活动、头脑风暴、运行状态、代理执行、产物归档和修改请求页面，关键页面标签优先使用中文。Token 格子悬浮时显示消耗明细，点击或聚焦后由下方文本型工作流活动说明所选时间段实际完成的工作；活动记录列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情，但不发布 assistant 回复或完整对话正文。它默认启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读已生成 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。HTML 发布不替代 Goo-wiki/fallback 归档，不直接修改业务文件、plan 或 brainstorm；Web 表单只新增 `.goo/change-requests/*.json`，后续由主 Agent 纳入 thread plan 并审计。
 
-每次最终任务归档完成后，主 Agent 必须用 `AskUserQuestion` 复用 `id=post_archive_html_report` 模板询问是否生成 HTML 报告。用户选择生成时，解析 AutoGoo 根目录后运行 `python3 "$auto_goo_root/skills/auto-goo/scripts/goo-publish.py" --root . --output .goo/site/index.html --serve --host 0.0.0.0 --port 9877`。该 server 需要让本地 PC 可访问：优先使用脚本输出的 `Remote URL`（本机 IP + 实际端口），如果处于 SSH/Remote IDE 环境且本地浏览器无法直连，提示用户配置端口转发到脚本打印的实际端口。用户选择跳过时，只报告归档路径，不启动 HTML server。
+每次最终任务归档完成后，主 Agent 必须用 `AskUserQuestion` 复用 `id=post_archive_html_report` 模板询问是否生成任务总结报告。用户选择生成时，生成当前任务的 `reports/final-report.html`（或无法生成 HTML 时生成 `reports/final-report.md`），报告内容必须服务任务复盘和交付验收：任务目标、执行摘要、关键产物、验证结果、指标/模型对比表（如适用）、风险限制、归档链接和后续建议。报告 URL 必须指向该任务报告页；不要运行 `goo-publish.py` 把项目级 `.goo/site/index.html` 工作流状态站点当作任务总结报告。用户选择跳过时，只报告归档路径，不启动报告页 server。
 
 ## 目录规则
 
@@ -163,7 +163,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" \
 - `log.md` 有本次活动记录，并链接到任务页。
 - 如新增 lessons/metrics 页面，任务页必须链接过去；新增页面必须链接回任务页和项目入口。
 - 如果没有可链接的既有知识页，任务页必须显式记录 `wiki_context.found=false` 或”未找到可复用页面”，但仍要链接项目入口和 `log.md`。
-- 上述归档验收通过后，必须完成一次 `post_archive_html_report` 结构化询问；用户选择生成时，HTML server 启动成功并输出 `127.0.0.1` 或本机 IP 访问地址后，才算收尾完成。
+- 上述归档验收通过后，必须完成一次 `post_archive_html_report` 结构化询问；用户选择生成时，当前任务的 `reports/final-report.html` 或 `reports/final-report.md` 存在，且输出的 URL/路径指向该报告页后，才算收尾完成。
 
 **链接质量约束**：
 - 不为了图谱密度链接所有出现过的词，只链接能帮助后续召回、规划、复盘或溯源的页面。

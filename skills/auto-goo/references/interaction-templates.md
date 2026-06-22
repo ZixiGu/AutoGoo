@@ -526,6 +526,28 @@
 
 ```json
 {
+  "header": "远程资源",
+  "id": "remote_resource_usage",
+  "question": "检测到已配置远程服务器。是否为本次任务使用远程资源？",
+  "options": [
+    {
+      "label": "本地执行 (Recommended)",
+      "description": "保持 plan step 的 execution_target=local；不连接服务器执行任务。"
+    },
+    {
+      "label": "使用推荐服务器",
+      "description": "根据资源探测摘要选择最匹配的服务器，并把对应 step 标记为 remote。"
+    },
+    {
+      "label": "手动选择服务器",
+      "description": "通过 Other 输入服务器名称或选择器；必须能匹配 config 中的 servers[]。"
+    }
+  ]
+}
+```
+
+```json
+{
   "header": "关键路径失败",
   "id": "failed_step_action",
   "question": "关键路径步骤失败，会阻塞后续步骤。请选择处理方式。",
@@ -616,17 +638,17 @@
 
 ```json
 {
-  "header": "HTML 报告",
+  "header": "任务报告",
   "id": "post_archive_html_report",
-  "question": "任务归档已完成，是否生成并启动 HTML 报告？",
+  "question": "任务归档已完成，是否生成并启动本次任务总结报告？",
   "options": [
     {
       "label": "生成并启动 (Recommended)",
-      "description": "运行 goo-publish.py --serve --host 0.0.0.0 --port 9877，打印 localhost 和本机 IP 访问地址。"
+      "description": "生成当前任务的 final-report.html，内容包含结果、指标对比、验证结论、产物和归档链接，并打印报告页 URL。"
     },
     {
       "label": "跳过",
-      "description": "只保留 Goo-wiki/fallback 归档和 .goo 状态，不启动 HTML server。"
+      "description": "只保留 Goo-wiki/fallback 归档和 .goo 状态，不启动报告页 server。"
     }
   ]
 }

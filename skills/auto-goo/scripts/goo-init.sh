@@ -405,11 +405,16 @@ append_server_json() {
   local purpose="$7"
   local secrets_file="$8"
 
-  python3 - "$current_json" "$name" "$host" "$user" "$port" "$server_type" "$purpose" "$secrets_file" <<'PY'
+  local workdir="${9:-}"
+  local setup_commands="${10:-}"
+  local data_dir="${11:-}"
+  local artifacts_dir="${12:-}"
+
+  python3 - "$current_json" "$name" "$host" "$user" "$port" "$server_type" "$purpose" "$secrets_file" "$workdir" "$setup_commands" "$data_dir" "$artifacts_dir" <<'PY'
 import json
 import sys
 
-current_json, name, host, user, port, server_type, purpose, secrets_file = sys.argv[1:9]
+current_json, name, host, user, port, server_type, purpose, secrets_file, workdir, setup_commands, data_dir, artifacts_dir = sys.argv[1:13]
 try:
     servers = json.loads(current_json)
 except (json.JSONDecodeError, ValueError):
@@ -426,6 +431,20 @@ server = {
     "purpose": purpose,
     "secrets_file": secrets_file,
 }
+defaults = {}
+if workdir:
+    defaults["workdir"] = workdir
+if setup_commands:
+    defaults["setup_commands"] = [item.strip() for item in setup_commands.split(";") if item.strip()]
+paths = {}
+if data_dir:
+    paths["data_dir"] = data_dir
+if artifacts_dir:
+    paths["artifacts_dir"] = artifacts_dir
+if paths:
+    defaults["paths"] = paths
+if defaults:
+    server["defaults"] = defaults
 if not name:
     server.pop("name", None)
 servers.append(server)
@@ -456,6 +475,10 @@ user = values.get("user")
 port = values.get("port") or "22"
 server_type = (values.get("type") or "cpu").lower()
 purpose = values.get("purpose") or "-"
+workdir = values.get("workdir") or values.get("workspace") or values.get("working_dir") or ""
+setup = values.get("setup") or values.get("setup_commands") or values.get("env_setup") or ""
+data_dir = values.get("data_dir") or values.get("data") or ""
+artifacts_dir = values.get("artifacts_dir") or values.get("outputs_dir") or values.get("output_dir") or ""
 
 if not host:
     print("error: --server requires host=HOST or ip=HOST", file=sys.stderr)
@@ -470,7 +493,7 @@ if server_type not in {"cpu", "gpu"}:
     print("error: --server type must be cpu or gpu", file=sys.stderr)
     raise SystemExit(2)
 
-for value in (name, host, user, port, server_type, purpose):
+for value in (name, host, user, port, server_type, purpose, workdir, setup, data_dir, artifacts_dir):
     print(value)
 PY
 }
@@ -576,7 +599,7 @@ for spec in "${SERVER_SPECS[@]}"; do
   if ! mapfile -t SERVER_FIELDS < <(parse_server_spec "$spec"); then
     exit 2
   fi
-  if [[ "${#SERVER_FIELDS[@]}" -lt 6 ]]; then
+  if [[ "${#SERVER_FIELDS[@]}" -lt 10 ]]; then
     echo "error: failed to parse --server spec" >&2
     exit 2
   fi
@@ -586,8 +609,12 @@ for spec in "${SERVER_SPECS[@]}"; do
   SERVER_PORT="${SERVER_FIELDS[3]}"
   SERVER_TYPE="${SERVER_FIELDS[4]}"
   SERVER_PURPOSE="${SERVER_FIELDS[5]}"
+  SERVER_WORKDIR="${SERVER_FIELDS[6]}"
+  SERVER_SETUP="${SERVER_FIELDS[7]}"
+  SERVER_DATA_DIR="${SERVER_FIELDS[8]}"
+  SERVER_ARTIFACTS_DIR="${SERVER_FIELDS[9]}"
   save_server_secrets "$SECRETS_FILE" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" ""
-  SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF")"
+  SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF" "$SERVER_WORKDIR" "$SERVER_SETUP" "$SERVER_DATA_DIR" "$SERVER_ARTIFACTS_DIR")"
 done
 
 if [[ "${#SERVER_SPECS[@]}" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
@@ -620,10 +647,14 @@ if [[ "${#SERVER_SPECS[@]}" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
         echo "Purpose is required, skipping this server."
         break
       fi
+      read -r -p "Default remote workdir (optional, e.g. /home/ubuntu/project): " SERVER_WORKDIR
+      read -r -p "Environment setup commands (optional, separate with ';'): " SERVER_SETUP
+      read -r -p "Default remote data dir (optional): " SERVER_DATA_DIR
+      read -r -p "Default remote artifacts/output dir (optional): " SERVER_ARTIFACTS_DIR
       SERVER_PASS="$(prompt_secret "Password (input hidden, Enter to skip)")"
 
       save_server_secrets "$SECRETS_FILE" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" "$SERVER_PASS"
-      SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF")"
+      SERVERS_JSON="$(append_server_json "$SERVERS_JSON" "$SERVER_NAME" "$SERVER_HOST" "$SERVER_USER" "$SERVER_PORT" "$SERVER_TYPE" "$SERVER_PURPOSE" "$SECRETS_REF" "$SERVER_WORKDIR" "$SERVER_SETUP" "$SERVER_DATA_DIR" "$SERVER_ARTIFACTS_DIR")"
       SERVER_INDEX=$((SERVER_INDEX + 1))
 
       if ! confirm "Add another server?" "n"; then
@@ -969,7 +1000,12 @@ PY
       WRITE_PROJECT_WORKSPACE_CLAUDE=1
     fi
   elif [[ "$YES" -eq 1 || ! -t 0 ]]; then
-    echo "Project CLAUDE.md was not updated; rerun with --update-claude-md to add configuration."
+    if [[ "$SERVERS_JSON" != "[]" ]]; then
+      SHOULD_UPDATE_CLAUDE_MD=1
+      echo "Project CLAUDE.md will be updated with remote server summary and safety constraints."
+    else
+      echo "Project CLAUDE.md was not updated; rerun with --update-claude-md to add configuration."
+    fi
   elif [[ "$PROJECT_LAYOUT_DIR_COUNT" -gt 0 ]]; then
     if confirm "Write project directory conventions to $PROJECT_CLAUDE_MD?" "y"; then
       SHOULD_UPDATE_CLAUDE_MD=1
@@ -1008,6 +1044,10 @@ PY
     else
       echo "Skipped project CLAUDE.md update by user choice."
     fi
+  fi
+  if [[ "$SERVERS_JSON" != "[]" && "$SHOULD_UPDATE_CLAUDE_MD" -eq 0 ]]; then
+    SHOULD_UPDATE_CLAUDE_MD=1
+    echo "Project CLAUDE.md will be updated with remote server summary and safety constraints."
   fi
 
   if [[ "$SHOULD_UPDATE_CLAUDE_MD" -eq 1 ]]; then

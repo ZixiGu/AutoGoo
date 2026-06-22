@@ -10,13 +10,14 @@
 5. **判断 goal 关系** — 独立 goal 优先拆成多个 plan；共享前置步骤则保留一个 DAG 并分支；强依赖 goal 按依赖链串联；冲突或优先级不清时先问用户
 6. **上下文约束合并** — 将 wiki 里的历史决策、已验证命令、路径、指标口径、失败经验写入规划依据
 7. **对话方案固化** — 将当前对话中已确认的方案、取舍、用户偏好、约束、验收标准和未决问题写入 `context_digest`；长文本优先写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/` 并在 `context_artifacts` 引用，Goo-wiki 不可用时降级到 `.goo/obsidian/<project-slug>/context/`
-8. **逆向拆解** — 从每个 goal 倒推："要交付这个，需要先有什么？" 持续追问直到拆成原子步骤
-9. **标注依赖关系** — 步骤 A 必须在 B 之前完成 → B `depends_on` A；每个非归档 step 必须绑定 `goal_id` 或 `goal_ids`
-10. **并行优先审计** — 移除仅由叙事顺序、文档顺序或保守习惯造成的伪依赖；能独立读输入、独立写产物、独立验收的步骤放入同一 `tier`
-11. **识别优化标记** — 包含"性能/速度/延迟/吞吐/效率/内存/GPU/耗时" → `type: "optimize"`
-12. **范围约束** — 每个步骤目标严格取自任务描述，不添加未要求的功能
-13. **归档历史 plan** — 只有旧 plan 已完成，或用户明确选择新建/继续并确认替换当前 plan 时，才把旧 plan 复制到 `.goo/plans/history/plan-<timestamp>.json`；复制 history 不是覆盖未完成现场的许可
-14. **输出 plan.json**
+8. **远程资源预检** — 如果配置中存在 `servers[]`，先用 `remote-resources.py --probe` 生成 CPU/内存/磁盘/GPU 摘要并展示，再用 `AskUserQuestion` 复用 `id=remote_resource_usage` 询问本次是否使用服务器。用户确认前，不因为任务包含 GPU、长跑或远程关键词就写 remote step；用户选择本地时在 `runtime.remote_resource_decision` 记录 `use_remote=false`
+9. **逆向拆解** — 从每个 goal 倒推："要交付这个，需要先有什么？" 持续追问直到拆成原子步骤
+10. **标注依赖关系** — 步骤 A 必须在 B 之前完成 → B `depends_on` A；每个非归档 step 必须绑定 `goal_id` 或 `goal_ids`
+11. **并行优先审计** — 移除仅由叙事顺序、文档顺序或保守习惯造成的伪依赖；能独立读输入、独立写产物、独立验收的步骤放入同一 `tier`
+12. **识别优化标记** — 包含"性能/速度/延迟/吞吐/效率/内存/GPU/耗时" → `type: "optimize"`
+13. **范围约束** — 每个步骤目标严格取自任务描述，不添加未要求的功能
+14. **归档历史 plan** — 只有旧 plan 已完成，或用户明确选择新建/继续并确认替换当前 plan 时，才把旧 plan 复制到 `.goo/plans/history/plan-<timestamp>.json`；复制 history 不是覆盖未完成现场的许可
+15. **输出 plan.json**，并在审阅摘要中展示并行组、必要串行链、远程资源选择和主要风险
 
 ## 多 Goal 任务
 
@@ -224,6 +225,12 @@ DAG 结构总结：
       "mode": "worktree",
       "checked_at": "YYYY-MM-DDTHH-MM-SS",
       "reason": "project_git_head_available"
+    },
+    "remote_resource_decision": {
+      "use_remote": false,
+      "checked_at": "YYYY-MM-DDTHH-MM-SS",
+      "summary": [],
+      "reason": "user_chose_local"
     }
   },
   "wiki_context": {
@@ -428,6 +435,7 @@ DAG 结构总结：
 | `completed_at` | plan 完成时间，所有步骤完成或标记失败时设置 |
 | `max_concurrent` | 最大并发槽位数，默认 6 |
 | `runtime.subagent_isolation` | 执行启动或恢复时按当前 AutoGoo 项目根一次性确定的 Subagent worktree 配置缓存。`mode="worktree"` 表示用户已启用 worktree 隔离，当前项目根本身有可解析 `HEAD`，后续 Agent tool 可传 `isolation: "worktree"`；`mode="none"` 表示用户未启用 worktree，后续派发省略 `isolation`。必须记录 `project_root`，同 thread 恢复时若 `project_root` 与当前项目根一致则直接复用缓存，不再做 Git 检查或再次询问。缓存缺失、`project_root` 不匹配或执行目录明确变更时，用 `AskUserQuestion` 的 `id=git_init_project` 模板询问是否启用 worktree。若 `mode="none"` 省略 `isolation` 后实际派发仍报 `Failed to resolve base branch "HEAD"` / `git rev-parse failed`，写入 `compatibility.agent_requires_git_head=true`，把当前 step 标记 `blocked`/`needs_user_approval`，重新询问是否启用 worktree；不得反复重派或创建 probe agent。用户启用后，只检查当前项目根，不向父目录、跨文件系统或备用路径寻找 Git root；若不是 Git repo，运行 `git init -b main`，不支持 `-b` 时初始化后 `git branch -M main`；若无 `HEAD`，先检查 `git status --short` 和敏感文件风险，安全后 `git add -A` 并提交 `chore: initialize repository for AutoGoo worktree isolation`。只有 `HEAD` 可解析后才能写入 `mode="worktree"` 并派发 worktree；启用后仍无 `HEAD` 时标记 blocked，不降级普通派发 |
+| `runtime.remote_resource_decision` | 本 thread 对已配置远程服务器的执行位置选择缓存。检测到 `servers[]` 时，先用 `remote-resources.py --probe` 展示 CPU/内存/磁盘/GPU 摘要，再用 `id=remote_resource_usage` 询问用户。用户选择本地时写 `{"use_remote":false,"checked_at":"<iso>","summary":[...],"reason":"user_chose_local"}`；用户选择服务器时写 `{"use_remote":true,"server":"<servers[].name 或 selector>","checked_at":"<iso>","summary":[...],"reason":"user_confirmed_remote"}`，并只把匹配的 step 标为 remote。该字段缺失或用户要求重新选择时，`goo-start` / `goo-continue` 必须重新预检和询问 |
 | `goals` | 交付目标列表。单目标任务也写一个默认 goal；多目标任务按 goal 拆验收标准、最终产物和依赖关系 |
 | `goals[].id` | goal 稳定 ID，如 `g1` |
 | `goals[].status` | goal 状态：`pending` / `running` / `completed` / `failed` / `deferred` |
@@ -455,6 +463,7 @@ DAG 结构总结：
 | `execution_target` | 执行位置，默认 `local`；需要远程服务器时写 `remote` |
 | `remote_server` | 远程服务器选择器，仅 `execution_target=remote` 时使用；优先匹配 config `servers[].name`，也可匹配 index、`host`、`host:port`、`user@host` 或 `user@host:port`。计划里优先写名称，避免模型记 IP |
 | `remote_reason` | 为什么必须远程执行，例如需要 GPU、远程依赖、长跑环境或用户明确要求 |
+| `remote_defaults` | 可选，仅 `execution_target=remote` 时从匹配的 `servers[].defaults` 摘要复制非敏感默认值，例如 `workdir`、`setup_commands[]`、`paths.data_dir`、`paths.artifacts_dir`。远程 step 的 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths` 和 `validation` 应优先引用这些默认路径；不得包含 token、密码、API key、私钥或带凭据的命令 |
 | `risk_level` | 风险等级，建议 `low` / `medium` / `high`；涉及覆盖、远程、批量改写、发布等通常不应为 low |
 | `requires_user_confirm` | 是否需要用户确认后才能执行；高风险或不可逆步骤必须为 `true` |
 | `status` | `pending` → `running` → `blocked` / `completed` / `failed`。主会话派发、检测到权限阻塞或完成时更新 |

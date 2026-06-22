@@ -631,6 +631,7 @@ body[data-page="plan"] { --page-accent: var(--blue); }
 body[data-page="activity"] { --page-accent: var(--violet); }
 body[data-page="brainstorm"] { --page-accent: var(--amber); }
 body[data-page="status"] { --page-accent: var(--green); }
+body[data-page="observe"] { --page-accent: var(--amber); }
 body[data-page="subagents"] { --page-accent: var(--cyan); }
 body[data-page="artifacts"] { --page-accent: var(--violet); }
 body[data-page="requests"] { --page-accent: var(--amber); }

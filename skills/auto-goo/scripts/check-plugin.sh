@@ -156,6 +156,7 @@ required = {
     "existing_plan_action",
     "plan_review",
     "start_plan_review",
+    "remote_resource_usage",
     "failed_step_action",
     "research_followup",
     "usage_view",
@@ -211,7 +212,7 @@ fi
 echo ""
 echo "── 4. 命令文件 ──"
 
-CMDS=("goo-init" "goo-brainstorm" "goo-plan" "goo-start" "goo-research" "goo-benchmark" "goo-continue" "goo-improve" "goo-status" "goo-daily-report" "goo-usage" "goo-usage-analyse" "goo-publish")
+CMDS=("goo-init" "goo-brainstorm" "goo-plan" "goo-start" "goo-research" "goo-benchmark" "goo-continue" "goo-improve" "goo-status" "goo-observe" "goo-daily-report" "goo-usage" "goo-usage-analyse" "goo-publish")
 for cmd in "${CMDS[@]}"; do
   f="$ROOT/commands/$cmd.md"
   if [[ -f "$f" ]]; then
@@ -294,7 +295,7 @@ done
 echo ""
 echo "── 6. 脚本文件 ──"
 
-SCRIPTS=("goo-init.sh" "init-plan.sh" "goo-status.py" "update-step.py" "thread-state.py" "thread-locks.py" "change-requests.py" "wiki-graph-assist.py" "daily-report-sessions.py" "goo-usage.py" "goo-publish.py" "goo-ssh.sh" "check-plugin.sh")
+SCRIPTS=("goo-init.sh" "init-plan.sh" "goo-status.py" "goo-observe.py" "update-step.py" "thread-state.py" "thread-locks.py" "change-requests.py" "brainstorm-validate.py" "wiki-graph-assist.py" "daily-report-sessions.py" "goo-usage.py" "goo-publish.py" "goo-ssh.sh" "remote-resources.py" "check-plugin.sh")
 for s in "${SCRIPTS[@]}"; do
   f="$ROOT/skills/auto-goo/scripts/$s"
   if [[ -f "$f" ]]; then
@@ -504,6 +505,84 @@ PY
     pass "  change-requests.py 支持 claim/status 状态机"
   else
     fail "  change-requests.py smoke test 失败"
+  fi
+
+  BRAINSTORM_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-check-brainstorm-$$"
+  mkdir -p "$BRAINSTORM_SMOKE_DIR/project/.goo"
+  python3 - "$BRAINSTORM_SMOKE_DIR/project/.goo/brainstorm.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+goals = []
+for idx in range(1, 4):
+    goals.append({
+        "id": f"cg{idx}",
+        "name": f"候选目标 {idx}",
+        "why": "来自 wiki 信号和当前上下文",
+        "expected_output": f"产物 {idx}",
+        "acceptance_criteria": [f"验收 {idx}"],
+        "evidence": [f"证据 {idx}"],
+        "risk": "低风险",
+        "prerequisites": ["用户确认范围"],
+        "readiness_checklist": ["路径已确认"],
+        "first_step": "读取相关上下文",
+        "priority_hint": "high" if idx == 1 else "medium",
+    })
+path.write_text(json.dumps({
+    "task": "示例 brainstorm",
+    "thread": {
+        "id": "demo-thread",
+        "brainstorm_path": ".goo/threads/demo-thread/brainstorm.json",
+        "plan_path": ".goo/threads/demo-thread/plan.json",
+        "logs_dir": ".goo/threads/demo-thread/logs",
+    },
+    "status": "pending_decision",
+    "wiki_context": {"sources": ["wiki/projects/demo.md"], "signals": ["未完成事项"]},
+    "global_prerequisites": ["用户确认优先级"],
+    "divergence_axes": [
+        {"axis": "快速交付", "signals": ["短期 unblock"], "candidate_goal_ids": ["cg1"]},
+        {"axis": "长期架构", "signals": ["结构演进"], "candidate_goal_ids": ["cg2"]},
+        {"axis": "风险债务", "signals": ["历史问题"], "candidate_goal_ids": ["cg2"]},
+        {"axis": "验证评测", "signals": ["缺测试"], "candidate_goal_ids": ["cg3"]},
+        {"axis": "自动化工具化", "signals": ["重复操作"], "candidate_goal_ids": ["cg3"]},
+    ],
+    "candidate_goals": goals,
+    "self_check": {
+        "coverage": ["快速交付", "长期架构", "风险债务", "验证评测", "自动化工具化"],
+        "deduped_or_merged": [],
+        "evidence_gaps": [],
+        "risk_calibration": [],
+        "recommendation_rationale": "cg1 成本最低且能快速验证方向。",
+    },
+    "recommended_goal_ids": ["cg1", "cg2"],
+    "decision_needed": True,
+    "review": {"status": "pending_user_review", "summary": "等待用户选择候选目标。"},
+    "next_action": "/auto-goo:goo-plan <明确目标>",
+    "archive": {"status": "pending_user_review"},
+}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  cp "$BRAINSTORM_SMOKE_DIR/project/.goo/brainstorm.json" "$BRAINSTORM_SMOKE_DIR/project/.goo/bad-brainstorm.json"
+  python3 - "$BRAINSTORM_SMOKE_DIR/project/.goo/bad-brainstorm.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+data.pop("self_check")
+data["recommended_goal_ids"] = ["missing-goal"]
+data["archive"] = {"status": "completed"}
+path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+  if python3 "$ROOT/skills/auto-goo/scripts/brainstorm-validate.py" \
+      "$BRAINSTORM_SMOKE_DIR/project/.goo/brainstorm.json" --mode draft >/dev/null 2>&1 \
+    && ! python3 "$ROOT/skills/auto-goo/scripts/brainstorm-validate.py" \
+      "$BRAINSTORM_SMOKE_DIR/project/.goo/bad-brainstorm.json" --mode draft >/dev/null 2>&1; then
+    pass "  brainstorm-validate.py 校验草案结构和自检字段"
+  else
+    fail "  brainstorm-validate.py smoke test 失败"
   fi
 fi
 
@@ -744,7 +823,7 @@ PY
       --root "$PUBLISH_SMOKE_DIR/project" \
       --output "$PUBLISH_SMOKE_DIR/project/.goo/site/index.html" >/dev/null 2>&1; then
     missing_pages=0
-    for page in index.html threads.html plan.html activity.html brainstorm.html status.html agents.html artifacts.html requests.html workflow-theme.css; do
+    for page in index.html threads.html plan.html activity.html brainstorm.html status.html observe.html agents.html artifacts.html requests.html workflow-theme.css; do
       if [[ ! -f "$PUBLISH_SMOKE_DIR/project/.goo/site/$page" ]]; then
         missing_pages=$((missing_pages + 1))
       fi
@@ -780,6 +859,11 @@ config_path.write_text(json.dumps({
         "port": 22,
         "type": "gpu",
         "purpose": "smoke",
+        "defaults": {
+            "workdir": "/home/ubuntu/project",
+            "setup_commands": ["source ~/.bashrc", "conda activate smoke"],
+            "paths": {"data_dir": "/data/smoke", "artifacts_dir": "/outputs/smoke"}
+        },
         "secrets_file": ".goo/secrets.json",
     }]
 }, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -817,6 +901,15 @@ PY
     pass "  goo-ssh.sh 支持密码 dry-run / sshpass 模式"
   else
     fail "  goo-ssh.sh 密码 dry-run 失败"
+  fi
+
+  if python3 "$ROOT/skills/auto-goo/scripts/remote-resources.py" \
+      --config "$REMOTE_SMOKE_DIR/project/.goo/config.json" \
+      --root "$ROOT" 2>/dev/null \
+      | grep -q 'workdir:  /home/ubuntu/project'; then
+    pass "  remote-resources.py 可读取远程服务器配置摘要"
+  else
+    fail "  remote-resources.py 配置摘要 smoke test 失败"
   fi
 fi
 

@@ -70,6 +70,17 @@
       "user": "ubuntu",
       "type": "cpu",
       "purpose": "data preprocessing and model evaluation",
+      "defaults": {
+        "workdir": "/home/ubuntu/projects/<project-slug>",
+        "setup_commands": [
+          "source ~/miniconda3/etc/profile.d/conda.sh",
+          "conda activate data-env"
+        ],
+        "paths": {
+          "data_dir": "/data/<project-slug>",
+          "artifacts_dir": "/data/<project-slug>/outputs"
+        }
+      },
       "secrets_file": "~/.auto-goo/secrets.json"
     },
     {
@@ -80,6 +91,17 @@
       "user": "ubuntu",
       "type": "gpu",
       "purpose": "model training and inference",
+      "defaults": {
+        "workdir": "/home/ubuntu/projects/<project-slug>",
+        "setup_commands": [
+          "source ~/miniconda3/etc/profile.d/conda.sh",
+          "conda activate train-env"
+        ],
+        "paths": {
+          "data_dir": "/mnt/data/<project-slug>",
+          "artifacts_dir": "/mnt/outputs/<project-slug>"
+        }
+      },
       "secrets_file": "~/.auto-goo/secrets.json"
     }
   ]

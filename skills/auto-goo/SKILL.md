@@ -1,7 +1,7 @@
 ---
 name: goo-workflow
-description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', '/auto-goo:goo-publish', 'brainstorm', '找目标', '开始任务', 'run:', '读论文', '论文', 'paper', '日报', '周报', 'usage', 'token统计', 'token降本', '发布HTML', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status, HTML publishing, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion tools."
-version: 0.3.10
+description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', '/auto-goo:goo-observe', '/auto-goo:goo-publish', 'brainstorm', '找目标', '开始任务', 'run:', '读论文', '论文', 'paper', '日报', '周报', 'usage', 'token统计', 'token降本', '后台观察', '发布HTML', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status/observe, HTML publishing, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion tools."
+version: 0.3.11
 tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 ---
 
@@ -25,9 +25,10 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 - `/auto-goo:goo-daily-report [日期|范围]`：扫描 Claude Code / Codex 会话，生成 Goo-wiki 日报或周报素材。
 - `/auto-goo:goo-usage [参数]`：扫描 Claude Code usage 日志，参考 Claude-Code-Usage-Monitor 的终端界面风格渲染今天总 token、项目分布、模型分布和可选 cost 面板。
 - `/auto-goo:goo-usage-analyse [项目|范围]`：结合 usage 热点和 Goo-wiki 项目知识，归因 token 开销并生成可落地节省方案。
+- `/auto-goo:goo-observe`：观察 Agent View 入口、当前 thread running step、heartbeat、step log 尾部和 shell 长任务日志模板。
 - `/auto-goo:goo-publish`：无需 config，把 `.goo/` 工作流状态发布成静态多页 HTML，包含活动热力图、头脑风暴、计划、任务流程图、DAG、运行状态和产物索引。
 
-**内容输出归档铁律**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令最终都必须归档到 Goo-wiki。包括 `/auto-goo:goo-brainstorm` 的候选 goals、`/auto-goo:goo-research paper` 的论文资料包和深度笔记、`/auto-goo:goo-usage-analyse` 的降本报告、`/auto-goo:goo-daily-report` 的日报/周报、`/auto-goo:goo-improve` 的改进建议、benchmark/plan/start/continue 的计划与执行经验。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。`goo-brainstorm` 和 `goo-plan` 必须先让用户审阅，用户确认前只写本地 `.goo/brainstorm.json` / `.goo/plan.json` 草案，不急着归档最终知识页。每次任务最终归档完成后，主 Agent 必须用 `AskUserQuestion` 复用 `id=post_archive_html_report` 模板询问是否生成 HTML 报告；用户选择生成时，解析 AutoGoo 根目录后运行 `goo-publish.py --root . --output .goo/site/index.html --serve --host 0.0.0.0 --port 9877`，并把脚本打印的 `127.0.0.1` 与本机 IP URL 告诉用户，确保本地 PC 可访问。
+**内容输出归档铁律**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令最终都必须归档到 Goo-wiki。包括 `/auto-goo:goo-brainstorm` 的候选 goals、`/auto-goo:goo-research paper` 的论文资料包和深度笔记、`/auto-goo:goo-usage-analyse` 的降本报告、`/auto-goo:goo-daily-report` 的日报/周报、`/auto-goo:goo-improve` 的改进建议、benchmark/plan/start/continue 的计划与执行经验。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。`goo-brainstorm` 和 `goo-plan` 必须先让用户审阅，用户确认前只写本地 `.goo/brainstorm.json` / `.goo/plan.json` 草案，不急着归档最终知识页。每次任务最终归档完成后，主 Agent 必须用 `AskUserQuestion` 复用 `id=post_archive_html_report` 模板询问是否生成任务总结报告页；用户选择生成时，网址必须指向本次任务的最终总结报告（例如模型指标对比、验证结论、关键产物、归档链接和后续建议），不能指向 `/auto-goo:goo-publish` 生成的项目级 `.goo/site/` 工作流状态站点。
 
 **Thread 任务线**：AutoGoo thread 是一条 brainstorm/plan/execution 任务线，保存在 `.goo/threads/<thread_id>/`，包含 `thread.json`、`brainstorm.json`、`plan.json`、`logs/`、`artifacts/` 和 `reports/`。`.goo/current_thread.json` 记录默认 thread；`.goo/plan.json` 是兼容入口，指向或复制当前 thread 的 active plan。用户启动新 plan 时，如果当前 thread/plan 未完成，必须优先用 `AskUserQuestion` 复用 `references/interaction-templates.md` 的 `id=thread_action` 模板询问：新建 thread、继续当前 thread、取消。用户未明确选择前，不得覆盖当前 thread 的 plan。每个 plan 顶层必须写入 `thread.id`、`thread.plan_path`、`thread.logs_dir` 和 `thread.artifacts_dir`；每次执行状态变化后必须同步 `.goo/threads/<thread_id>/thread.json.status` 和 `.goo/threads/index.json`。
 
@@ -41,7 +42,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 
 **用户交互契约**：任何需要用户选择、确认、重试、跳过、合并、改写或授权的步骤，必须优先调用结构化选择 UI / `AskUserQuestion`，让 Claude Code 渲染可用方向键移动、Enter 确认的选择控件；不得在工具可用时用普通文本要求用户手打 `1/2`、ID 或命令参数。每个问题至少给 2 个显式选项，推荐项放第一项并标注 Recommended；多候选问题必须把候选 ID/编号放进选项说明。只有结构化选择 UI / `AskUserQuestion` 不可用、调用失败或按钮没有渲染时，才允许降级为纯文本编号列表，并明确这是 fallback。用户未明确选择前，不得用推荐项静默继续。
 
-**远程服务器机制**：`goo-init` 收集到远程服务器非敏感参数后，最终脚本调用必须追加 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`，可重复传多台；`name` 是给模型、plan 和 `remote_server` 使用的稳定名称，`host` 是 SSH 连接地址，`ip` 仅作为兼容字段可选。密码不得进入聊天、命令行、plan、日志或 prompt，只能由用户填入 chmod 600 的 secrets 文件。`goo-plan` / `goo-start` 只有在步骤确实需要远程算力、远程依赖、长跑环境或用户明确要求时，才写入并执行 `execution_target="remote"`、`remote_server` 和 `remote_reason`；`remote_server` 优先写 `servers[].name`，不要让模型记 IP。远程 step 必须 `requires_user_confirm=true`，并通过 `skills/auto-goo/scripts/goo-ssh.sh --config <config> --server <remote_server> -- <remote command>` 执行，不默认使用第一台服务器。
+**远程服务器机制**：`goo-init` 收集到远程服务器非敏感参数后，最终脚本调用必须追加 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>,workdir=<远程工作目录>,setup=<命令1;命令2>,data_dir=<远程数据目录>,artifacts_dir=<远程产物目录>'`，可重复传多台，后四项可省略；`name` 是给模型、plan 和 `remote_server` 使用的稳定名称，`host` 是 SSH 连接地址，`ip` 仅作为兼容字段可选。密码不得进入聊天、命令行、plan、日志或 prompt，只能由用户填入 chmod 600 的 secrets 文件。`servers[].defaults` 可保存非敏感默认环境约定：`workdir`、`setup_commands[]`、`paths.data_dir`、`paths.artifacts_dir`；不得保存 token、API key、私钥、密码或带凭据的 export 命令。后续 `goo-plan` / `goo-start` / `goo-continue` 如果发现项目或用户配置里有 `servers[]`，必须先运行 `skills/auto-goo/scripts/remote-resources.py --probe` 获取 CPU/内存/磁盘/GPU 摘要，展示给用户后用 `AskUserQuestion` 复用 `id=remote_resource_usage` 模板确认本次是否使用服务器；探测失败只说明不可用原因，不自动转远程。用户确认使用远程后，才写入或执行 `execution_target="remote"`、`remote_server` 和 `remote_reason`；远程 step 的 `allowed_read_paths`、`allowed_write_paths`、`inputs`、`outputs` 和 `validation` 必须优先引用该服务器的 `defaults.workdir`、`defaults.setup_commands` 和 `defaults.paths`，缺失时再让用户确认。用户选择本地或未明确确认时保持 `execution_target="local"`。`remote_server` 优先写 `servers[].name`，不要让模型记 IP。远程 step 必须 `requires_user_confirm=true`，并通过 `skills/auto-goo/scripts/goo-ssh.sh --config <config> --server <remote_server> -- <remote command>` 执行，不默认使用第一台服务器。
 
 **AskUserQuestion 固定结构**：需要 Enter-select 交互时必须按 `skills/auto-goo/references/interaction-templates.md` 中的 JSON 模板组织并实际调用 `AskUserQuestion`，不得只把结构写成自然语言题目或自由改写选项。字段固定为 `header`、`id`、`question`、`options[].label`、`options[].description`；推荐项放第一项，label 必须包含 `(Recommended)`。系统自动提供的 Other 只用于自定义输入，不算显式选项。凡能固定的问题必须复用模板；涉及路径、IP、端口、用户名、goal ID、分支目录、用户修改要求等输入时，模板必须提供默认选项并说明 Other 输入如何落盘、校验或继续追问。
 
@@ -64,7 +65,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 11. 如果是 `--project`，确定 `project_slug`：默认用项目根目录名，可用 `--project-slug <slug>` 覆盖；创建或复用 `<wiki_dir>/wiki/projects/<project_slug>/` 作为项目归档根路径。
 12. 如果项目是 Git repo，读取 `origin` remote（没有 origin 时读取第一个 remote），写入 `.goo/config.json.archive.git_remote_url`，并同步到 `<wiki_dir>/wiki/projects/<project_slug>/<project_slug>.md` 的项目元信息块。
 13. 写入目标 config，默认结构参考 `skills/auto-goo/templates/config.example.json`；项目级配置必须记录 `archive.project_slug`、`archive.project_dir`、`archive.fallback_project_dir`、固定 `.goo` 的 `workspace.paths`，以及可选 `project_workspace`；有远程服务器时写入 `servers`。
-14. 如果是 `--project` 且创建了业务目录，必须用 `AskUserQuestion` 复用 `id=project_workspace_claude_md` 模板询问用户是否在项目 `CLAUDE.md` 中加入或更新 AutoGoo marker 包裹的目录约定；如果 Goo-wiki 可用，也可继续询问是否写入归档原则和要求；只改该段，不覆盖用户已有项目指引。非交互场景默认不写，需传 `--update-claude-md` 明确写入；用户传 `--skip-claude-md` 时跳过。
+14. 如果是 `--project` 且创建了业务目录，必须用 `AskUserQuestion` 复用 `id=project_workspace_claude_md` 模板询问用户是否在项目 `CLAUDE.md` 中加入或更新 AutoGoo marker 包裹的目录约定；如果 Goo-wiki 可用，也可继续询问是否写入归档原则和要求；只改该段，不覆盖用户已有项目指引。`--project` 且配置了远程服务器时，初始化后必须更新该 marker 段中的服务器概要、何时使用和安全约束，除非用户显式传 `--skip-claude-md`；远程 `workdir`、`setup_commands`、数据目录和产物目录细节仍只从 `.goo/config.json` 读取。非交互场景没有服务器时默认不写，需传 `--update-claude-md` 明确写入。
 15. 展示推荐 SessionStart hooks，但不要自动覆盖 `.claude/settings.json`，除非用户明确要求。
 16. 配置完成后，脚本不得尝试连接服务器（不做 ssh、ping、端口探测等任何网络连接）；仅写入配置文件。
 
@@ -94,16 +95,17 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 2. 检索 `wiki/projects/`、`journal/weekly/`、`wiki/concepts/` 和 `log.md`。
 3. 提取未完成事项、反复问题、风险、近期计划、指标缺口、文档缺口、测试缺口、发布阻塞和可复用经验。
 4. 提炼共同前置条件 `global_prerequisites`，例如数据路径、账号权限、远程资源、评价指标、用户取舍和安全确认。
-5. 生成 3-7 个候选 goals，每个包含 `id`、`name`、`why`、`expected_output`、`acceptance_criteria`、`evidence`、`risk`、`prerequisites`、`readiness_checklist`、`first_step`、`priority_hint`。
-6. 写入 `.goo/brainstorm.json`，状态为 `pending_decision`。如果旧 `.goo/brainstorm.json` 已存在，先原样复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。
-7. 向用户展示推荐顺序、共同前置条件和每个候选 goal 的 ready checklist，等待用户选择、合并、改写或要求继续 brainstorm；用户确认前只保留本地 `.goo/brainstorm.json` 草案，不写 Goo-wiki/fallback 最终归档。
-8. 用户确认最终候选目标后，再将候选 goals、共同前置条件、推荐顺序、用户选择/合并依据和关键证据归档到同一任务归档根的 `brainstorm/` 子目录；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/` fallback，并在 `.goo/brainstorm.json.archive` 记录 `task_archive_root` 和 `brainstorm_dir`。
+5. 多轴发散候选方向：至少覆盖快速交付、长期架构、风险/债务、验证/评测、文档/知识沉淀、自动化/工具化、用户体验/流程改进、低成本试探中的 5 类；先生成 5-9 个初始候选，再合并为 3-7 个最终候选，每个包含 `id`、`name`、`why`、`expected_output`、`acceptance_criteria`、`evidence`、`risk`、`prerequisites`、`readiness_checklist`、`first_step`、`priority_hint`。
+6. 用户审阅前先做自我检查：去重合并、补证据缺口说明、校准风险/成本/依赖、确认每个 goal 有产物和验收方式，并在 `.goo/brainstorm.json.self_check` 记录覆盖角度、删改原因、证据缺口、风险校准和推荐排序依据。
+7. 写入 `.goo/brainstorm.json`，状态为 `pending_decision`。如果旧 `.goo/brainstorm.json` 已存在，先原样复制到 `.goo/brainstorms/history/brainstorm-<timestamp>.json`。
+8. 向用户展示推荐顺序、共同前置条件、自检摘要和每个候选 goal 的 ready checklist，等待用户选择、合并、改写或要求继续 brainstorm；用户确认前只保留本地 `.goo/brainstorm.json` 草案，不写 Goo-wiki/fallback 最终归档。
+9. 用户确认最终候选目标后，再将候选 goals、共同前置条件、推荐顺序、用户选择/合并依据、自检摘要和关键证据归档到同一任务归档根的 `brainstorm/` 子目录；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/tasks/<task-slug>/brainstorm/` fallback，并在 `.goo/brainstorm.json.archive` 记录 `task_archive_root` 和 `brainstorm_dir`。
 
 边界：
 - 不写 `.goo/plan.json`。
 - 不生成执行 DAG。
 - 不派发 Subagent 执行。
-- 不修改业务文件；只允许写 `.goo/brainstorm.json` 和 Goo-wiki/fallback 归档笔记。
+- 不修改业务文件；用户确认前只允许写 `.goo/brainstorm.json`，不要写 Goo-wiki/fallback 归档笔记。
 - 不运行实现、评测、训练、安装、远程或删除命令。
 - 用户明确一个或多个 goals 后，再调用 `/auto-goo:goo-plan <明确目标>`。
 
@@ -422,13 +424,17 @@ Subagent prompt 模板（exec / optimize / eval 三种变体）、上下文传�
 - 为节省 token，Recorder 优先在解析 AutoGoo 根目录后调用 `skills/auto-goo/scripts/wiki-graph-assist.py` 生成紧凑 graph packet，并在任务页写好后用该脚本的 `--update-index --append-log` 维护项目入口和活动日志；只有候选链接不足时才读取完整 Markdown
 - YAML frontmatter 规范、wikilink 格式、log.md 追加格式 → `references/obsidian-archive.md`
 
-**归档后 HTML 报告**：最终任务归档验收通过后，主 Agent 必须立刻用 `AskUserQuestion` 复用 `references/interaction-templates.md` 的 `id=post_archive_html_report` 模板询问是否生成并启动 HTML 报告。用户选择“生成并启动”时，先解析 AutoGoo 根目录，再运行：
+**归档后任务总结报告**：最终任务归档验收通过后，主 Agent 必须立刻用 `AskUserQuestion` 复用 `references/interaction-templates.md` 的 `id=post_archive_html_report` 模板询问是否生成并启动任务总结报告。用户选择“生成并启动”时，生成的是当前任务的最终报告页，而不是项目级 publish 网站。报告至少包含：任务目标、执行摘要、关键变更或产物、验证命令和结果、指标/模型对比表（如适用）、风险和限制、Goo-wiki/fallback 归档链接、后续建议。
 
 ```bash
-python3 "$auto_goo_root/skills/auto-goo/scripts/goo-publish.py" --root . --output .goo/site/index.html --serve --host 0.0.0.0 --port 9877
+report_dir=".goo/threads/<thread_id>/reports"
+mkdir -p "$report_dir"
+# 先把本次任务总结写成 "$report_dir/final-report.html" 或 "$report_dir/final-report.md"。
+# 如果生成 HTML，server URL 必须指向 /final-report.html；如果只有 Markdown，最终答复报告文件路径。
+python3 -m http.server 9877 --bind 0.0.0.0 --directory "$report_dir"
 ```
 
-`goo-publish.py` 会在 `9877` 被占用时尝试后续端口，并打印 `AutoGoo HTML server`、`Remote URL` 和 `.goo/site/server.json`。最终答复必须包含实际端口、`http://127.0.0.1:<port>/`、至少一个 `http://<本机IP>:<port>/`（如果脚本输出了 Remote URL）和 `.goo/site/index.html` 路径；远程开发/SSH 场景下提醒用户用本地 PC 浏览器访问 `Remote URL` 或配置端口转发。用户选择“跳过”时，不启动 server，只报告归档路径。
+最终答复必须包含报告路径（优先 `.goo/threads/<thread_id>/reports/final-report.html`）和实际可访问 URL（例如 `http://127.0.0.1:<port>/final-report.html`，远程环境再补本机 IP 或端口转发提示）。不得把 `.goo/site/index.html` 或 `goo-publish.py` 的总览页当成本次任务总结报告。用户选择“跳过”时，不启动 server，只报告归档路径。
 
 Goo-wiki vault 检测：默认检查 `~/workspace/Goo-wiki/CLAUDE.md`。路径可配置，见 `references/setup.md`。
 
@@ -524,8 +530,10 @@ Phase 4 归档完成后，在任务日志末尾追加 `## 流程问题` 反思�
 
 ### Scripts
 - **`skills/auto-goo/scripts/init-plan.sh`** — 初始化 plan.json 模板；调用前先解析 AutoGoo 根目录
+- **`skills/auto-goo/scripts/brainstorm-validate.py`** — 校验 `.goo/brainstorm.json` 的候选目标、发散角度、自检结果、推荐 ID 和 review/archive 状态；生成 brainstorm 草案后用 `--mode draft` 检查
 - **`skills/auto-goo/scripts/wiki-graph-assist.py`** — 生成紧凑 Goo-wiki 关联图谱上下文，并可维护项目 index/log 链接；调用前先解析 AutoGoo 根目录
 - **`skills/auto-goo/scripts/check-plugin.sh`** — 插件结构完整性自检脚本（安装后运行确认所有组件就绪）；调用前先解析 AutoGoo 根目录
+- **`skills/auto-goo/scripts/goo-observe.py`** — 观察当前 thread 的后台 step、heartbeat、step log 和 shell log 跟踪模板；`goo-publish` 的 `observe.html` 复用同一数据模型
 - **`skills/auto-goo/scripts/goo-ssh.sh`** — 连接已配置的远程服务器；有密码时从 `secrets.json` 读取并用 `sshpass`，无密码时走普通 `ssh`。调用前先解析 AutoGoo 根目录
 
 ### Agents

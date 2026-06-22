@@ -117,7 +117,7 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 - 归档完成前必须验收 Markdown 连接图谱：任务页链接项目入口、复用知识、上下文材料和关键概念/问题/指标/历史任务页；项目 `<project-slug>.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口
 - 归档内容必须服务下一次任务复用，而不是只做事后报告
 
-该更新是幂等的，只替换 AutoGoo marker 内的内容，不覆盖项目已有指引。非交互场景默认不写，需传 `--update-claude-md` 明确写入目录约定、服务器配置和归档原则；需要跳过时传 `--skip-claude-md`。
+该更新是幂等的，只替换 AutoGoo marker 内的内容，不覆盖项目已有指引。配置远程服务器时，项目级 init 默认更新 `CLAUDE.md` 中的服务器概要和安全约束；远程 `workdir`、`setup_commands`、数据目录和产物目录细节仍只写 `.goo/config.json`。非交互场景没有远程服务器时默认不写，需传 `--update-claude-md` 明确写入目录约定和归档原则；需要跳过所有 `CLAUDE.md` 更新时传 `--skip-claude-md`。
 
 如果项目配置了远程服务器，AutoGoo marker 块还会写入：
 
@@ -260,13 +260,22 @@ bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project \
 
 secrets 文件权限为 `chmod 600`，项目级 secrets 文件自动加入 `.gitignore`。
 
-config 中记录 `servers[].{name, host, ip?, port, user, type, purpose, secrets_file}`，不存储密码。`name` 是给模型、plan 和 `remote_server` 使用的稳定名称；`host` 是 SSH 连接地址，可以是 DNS 名、SSH config Host 或 IP；`ip` 仅作为兼容字段可选。使用服务器时，从 `secrets_file` 读取密码。`port` 默认 22，`type` 为 `cpu` 或 `gpu`，默认 `cpu`。`purpose` 为服务器用途说明，用于 CLAUDE.md 中告知何时使用该服务器。
+config 中记录 `servers[].{name, host, ip?, port, user, type, purpose, defaults?, secrets_file}`，不存储密码。`name` 是给模型、plan 和 `remote_server` 使用的稳定名称；`host` 是 SSH 连接地址，可以是 DNS 名、SSH config Host 或 IP；`ip` 仅作为兼容字段可选。使用服务器时，从 `secrets_file` 读取密码。`port` 默认 22，`type` 为 `cpu` 或 `gpu`，默认 `cpu`。`purpose` 为服务器用途说明，用于 CLAUDE.md 中告知何时使用该服务器。
+
+`servers[].defaults` 用于记录远程机器上的非敏感默认环境约定：
+
+- `workdir`：默认进入的远程工作目录，例如 `/home/ubuntu/projects/<project-slug>`
+- `setup_commands[]`：执行任务前需要运行的环境初始化命令，例如 `source ~/miniconda3/etc/profile.d/conda.sh`、`conda activate train-env`
+- `paths.data_dir`：默认远程数据目录
+- `paths.artifacts_dir`：默认远程产物或输出目录
+
+这些字段会进入 plan 和 Subagent prompt，必须只写非敏感命令和路径。不要把 token、API key、私钥、密码、带凭据的 `export` 命令或私有 registry 凭据写入 `defaults`；这类信息应留在远程机器自身环境或 secrets 文件中，并且不得展开到日志、命令行、plan 或 prompt。
 
 非交互初始化示例：
 
 ```bash
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~/workspace/Goo-wiki \
-  --server 'name=gpu-a100,host=gpu-a100,user=ubuntu,port=22,type=gpu,purpose=模型训练与推理'
+  --server 'name=gpu-a100,host=gpu-a100,user=ubuntu,port=22,type=gpu,purpose=模型训练与推理,workdir=/home/ubuntu/projects/demo,setup=source ~/miniconda3/etc/profile.d/conda.sh;conda activate train-env,data_dir=/mnt/data/demo,artifacts_dir=/mnt/outputs/demo'
 ```
 
 该命令只写入非敏感配置，并创建 chmod 600 的 secrets 占位文件。用户需要稍后手动编辑 `.goo/secrets.json` 或 `~/.auto-goo/secrets.json` 填入密码；不得在聊天、计划、命令行或日志里展开密码。

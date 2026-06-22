@@ -12,7 +12,7 @@ http://127.0.0.1:9877/
 http://<server-ip>:9877/
 ```
 
-`goo-start` / `goo-continue` 每次最终任务归档完成后，都必须先用 `AskUserQuestion` 复用 `id=post_archive_html_report` 模板询问是否生成 HTML 报告。用户选择生成时，主 Agent 调用本命令的脚本形态并启动 server；用户选择跳过时，不启动 HTML server，只报告归档路径。
+`goo-publish` 是项目级工作流状态站点，适合查看 `.goo/` 中的 thread、plan、activity、status、agents、artifacts 和 change requests。它不是任务完成归档后的总结报告入口；`goo-start` / `goo-continue` 的归档后 URL 应指向当前任务的 `reports/final-report.html`，例如模型指标对比分析、验证结论和归档链接，而不是本命令生成的 `.goo/site/index.html`。
 
 默认静态站点输出：
 
@@ -28,7 +28,7 @@ skills/auto-goo/templates/publish/workflow-shell.html
 
 正式发布主题位于 `skills/auto-goo/templates/publish/workflow-theme.css`。`goo-publish.py` 每次构建都必须把它复制为站点目录中的 `workflow-theme.css`，由运行时 shell 自动引用；不得依赖发布后手工注入 CSS 或 `/tmp` 中的概念稿样式。
 
-默认生成 `index.html`、`threads.html`、`plan.html`、`activity.html`、`brainstorm.html`、`status.html`、`agents.html`、`artifacts.html` 和 `requests.html`。左侧工作区导航展示总览、Threads、头脑风暴、计划、运行状态、代理执行、产物归档和修改请求；总览包含 Token 活动热力图和文本型工作流活动，悬浮格子显示该日或周期的消耗明细，点击或聚焦格子会在下方说明所选时间段实际完成的工作。活动页会把当前项目 Claude Code usage 日志中的 token 消耗按 turn/session 聚合进时间线，列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情；不发布 assistant 回复或完整对话正文。
+默认生成 `index.html`、`threads.html`、`plan.html`、`activity.html`、`brainstorm.html`、`status.html`、`observe.html`、`agents.html`、`artifacts.html` 和 `requests.html`。左侧工作区导航展示总览、Threads、头脑风暴、计划、运行状态、观察、代理执行、产物归档和修改请求；总览包含 Token 活动热力图和文本型工作流活动，悬浮格子显示该日或周期的消耗明细，点击或聚焦格子会在下方说明所选时间段实际完成的工作。活动页会把当前项目 Claude Code usage 日志中的 token 消耗按 turn/session 聚合进时间线，列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情；不发布 assistant 回复或完整对话正文。
 
 `goo-publish --serve` 支持在 Web 上提交修改请求，但只写入 `.goo/change-requests/*.json`，不会直接改业务文件、plan、brainstorm 或 Goo-wiki。后续由 AutoGoo 主 Agent 通过 `skills/auto-goo/scripts/change-requests.py` 列出、claim、更新请求状态，把请求同步到 thread plan 或 context artifact，再派发模型修改并审计。
 
@@ -104,13 +104,14 @@ http://<server-ip>:9877/
 
 如果 `9877` 被占用，脚本会自动尝试后续端口，并在输出中打印实际地址。server 默认直接读取已生成的 `.goo/site/index.html`，打开页面很快；需要每次刷新都重新扫描 `.goo/` 时再加 `--live`。
 
-归档后自动报告场景必须使用 `--host 0.0.0.0 --port 9877`，并把脚本实际打印的 `AutoGoo HTML server` 与 `Remote URL` 原样转述给用户。远程开发、SSH 或 VS Code Remote 场景下，本地 PC 通常应访问 `Remote URL`；如果网络不可直连，提示用户对实际端口配置端口转发。
+手动预览项目级工作流状态站点时，建议使用 `--host 0.0.0.0 --port 9877`，并把脚本实际打印的 `AutoGoo HTML server` 与 `Remote URL` 原样转述给用户。远程开发、SSH 或 VS Code Remote 场景下，本地 PC 通常应访问 `Remote URL`；如果网络不可直连，提示用户对实际端口配置端口转发。任务归档后的总结报告不要走本命令，报告 URL 应指向当前 thread 的 `reports/final-report.html`。
 
 ## 发布内容
 
 - `index.html`：总览、任务流程和最近执行记录。
 - `threads.html`：所有 thread 的 id、状态、plan 路径、logs 路径和进度。
 - `status.html`：当前计划运行状态和步骤进度。
+- `observe.html`：后台观察入口，展示 Agent View 使用提示、running step heartbeat、step log 尾部、blocked/failed 和 shell log 模板。
 - `agents.html`：本次代理执行、状态、耗时、产出和日志。
 - `plan.html`：当前计划、目标、计划步骤、任务流程图和 DAG。
 - `activity.html`：工作流活动和 token 使用记录。

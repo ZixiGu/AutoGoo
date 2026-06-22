@@ -1,7 +1,7 @@
 # AutoGoo
 
 ![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)
-![Version](https://img.shields.io/badge/version-0.3.10-green)
+![Version](https://img.shields.io/badge/version-0.3.11-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行计划、并行调用 subagent、记录运行状态，并把结果同步到 Goo-wiki / Obsidian。
@@ -76,6 +76,7 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 | [`goo-start`](commands/goo-start.md) | 执行当前计划。 |
 | [`goo-continue`](commands/goo-continue.md) | 从中断或阻塞状态继续。 |
 | [`goo-status`](commands/goo-status.md) | 查看计划状态、日志和下一步。 |
+| [`goo-observe`](commands/goo-observe.md) | 观察后台 subagent、shell 日志和 Agent View 入口。 |
 | [`goo-publish`](commands/goo-publish.md) | 发布 HTML 工作流状态页。 |
 | [`goo-research`](commands/goo-research.md) | 研究资料和论文归档。 |
 | [`goo-usage`](commands/goo-usage.md) | 用量监控和降本分析。 |
@@ -176,7 +177,7 @@ bash skills/auto-goo/scripts/check-plugin.sh
 
 ## 版本
 
-当前版本：**v0.3.10**。
+当前版本：**v0.3.11**。
 
 ## 许可证
 

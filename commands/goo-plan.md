@@ -17,14 +17,15 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 6. **任务解析** — 将任务拆解为 DAG 步骤；每个非归档步骤绑定 `goal_id` 或 `goal_ids`
 7. **并行优先审计** — 对所有非归档 step 做依赖审计：没有真实数据依赖、控制依赖、共享写入冲突或高风险确认门槛的步骤，不得为了叙事顺序串行化；必须写成相同 `tier` 和空/相同 `depends_on`，让执行阶段可并行派发
 8. **对话方案固化** — 抽取当前对话中已经形成的方案、取舍、约束、验收标准和用户明确偏好，写入 `context_digest`；内容过长时写入 Goo-wiki 项目路径 `wiki/projects/<project-slug>/context/<timestamp>-planning-context.md` 并在 plan 中引用
-9. **远程执行目标标注** — 读取项目 `.goo/config.json` 和用户级 `~/.auto-goo/config.json` 中的 `servers[]`。只有当任务确实需要远程算力、远程依赖、长跑后台环境或用户明确要求远程时，才在对应 step 写入 `execution_target="remote"` 和 `remote_server`；否则默认 `execution_target="local"`。
-10. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
-11. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
-12. **Thread 落盘** — 用户选择新建 thread 时，创建 `.goo/threads/<thread_id>/thread.json`、`plan.json`、`logs/`、`artifacts/`，更新 `.goo/threads/index.json` 和 `.goo/current_thread.json`；用户选择继续当前 thread 时，更新该 thread 的 plan。
-13. **历史计划归档** — 如果要替换当前 thread 的已有 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`；不得静默覆盖未完成 plan。
-14. **计划落盘** — 输出或更新当前 thread 的 `plan.json`，并把 `thread.id` 写入 plan；兼容路径 `.goo/plan.json` 可指向或复制当前 thread 的 active plan，标记为待用户审阅。
-15. **等待确认** — 先发送一条普通可读消息展示 thread id、计划摘要、目标/交付物、DAG 步骤概览、并行组、必要串行链、主要风险和需要确认的点；确认用户已经能在聊天正文看到计划概述后，必须实际调用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。不得只显示结构化审阅控件，也不得在未尝试调用 `AskUserQuestion` 时直接输出纯文本 fallback。用户确认前不要归档 plan 摘要。
-16. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
+9. **远程资源预检与确认** — 读取项目 `.goo/config.json` 和用户级 `~/.auto-goo/config.json` 中的 `servers[]`。如果存在已配置服务器，先运行 `skills/auto-goo/scripts/remote-resources.py --probe` 生成 CPU/内存/磁盘/GPU 可用资源摘要；探测失败只记录不可用原因，不阻塞本地 plan。展示摘要后必须优先用 `AskUserQuestion` 复用 `id=remote_resource_usage` 模板询问用户本次是否使用服务器。用户选择本地或未明确确认时，所有 step 默认 `execution_target="local"`；用户确认使用远程后，才把匹配的 step 写入 `execution_target="remote"`、`remote_server`、`remote_reason` 和 `requires_user_confirm=true`。如果结构化选择不可用，使用明确标注 fallback 的文本选项继续收集选择。
+10. **远程执行目标标注** — 只有当用户在远程资源预检中确认使用服务器，或用户在任务中已明确要求远程执行时，才在对应 step 写入 `execution_target="remote"` 和 `remote_server`。即使任务看起来需要 GPU、远程依赖或长跑环境，也必须先展示资源摘要并获得确认；否则默认 `execution_target="local"`。
+11. **上下文注入** — 把可复用经验写入 `wiki_context`，把对话方案写入 `context_digest` 或 `context_artifacts`
+12. **归档任务补齐** — 默认在 DAG 最后追加 Wiki 归档步骤，依赖所有最终交付步骤，并按 goal 汇总归档
+13. **Thread 落盘** — 用户选择新建 thread 时，创建 `.goo/threads/<thread_id>/thread.json`、`plan.json`、`logs/`、`artifacts/`，更新 `.goo/threads/index.json` 和 `.goo/current_thread.json`；用户选择继续当前 thread 时，更新该 thread 的 plan。
+14. **历史计划归档** — 如果要替换当前 thread 的已有 plan，先复制到 `.goo/plans/history/plan-<timestamp>.json`；不得静默覆盖未完成 plan。
+15. **计划落盘** — 输出或更新当前 thread 的 `plan.json`，并把 `thread.id` 写入 plan；兼容路径 `.goo/plan.json` 可指向或复制当前 thread 的 active plan，标记为待用户审阅。
+16. **等待确认** — 先发送一条普通可读消息展示 thread id、计划摘要、目标/交付物、DAG 步骤概览、并行组、必要串行链、远程资源选择、主要风险和需要确认的点；确认用户已经能在聊天正文看到计划概述后，必须实际调用 `AskUserQuestion` / 结构化选择 UI 让用户确认、修改、拆分/合并步骤或回到 brainstorm。不得只显示结构化审阅控件，也不得在未尝试调用 `AskUserQuestion` 时直接输出纯文本 fallback。用户确认前不要归档 plan 摘要。
+17. **确认后归档** — 用户确认计划后，或用户明确启动 `/auto-goo:goo-start` / `/auto-goo:goo-continue` 前，再归档计划摘要、关键约束和可复用规划经验；不派发 Subagent，不修改业务文件，不运行实现命令，除非用户进入执行命令。
 
 ## 现有 plan 冲突处理
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import importlib.util
 import json
 import math
 import re
@@ -68,6 +69,18 @@ DEFAULT_WORKSPACE_PATHS = {
     "obsidian_dir": ".goo/obsidian",
     "site_dir": ".goo/site",
 }
+
+
+def load_observe_module():
+    path = Path(__file__).with_name("goo-observe.py")
+    if not path.exists():
+        return None
+    spec = importlib.util.spec_from_file_location("autogoo_observe", path)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):
@@ -1220,6 +1233,103 @@ def render_status(plan: dict[str, Any] | None, _events: list[dict[str, Any]]) ->
     """
 
 
+def render_observe(observe: dict[str, Any]) -> str:
+    running = observe.get("running") if isinstance(observe.get("running"), list) else []
+    blocked = observe.get("blocked") if isinstance(observe.get("blocked"), list) else []
+    failed = observe.get("failed") if isinstance(observe.get("failed"), list) else []
+    shell_logs = observe.get("shell_logs") if isinstance(observe.get("shell_logs"), list) else []
+    commands = observe.get("commands") if isinstance(observe.get("commands"), dict) else {}
+
+    def step_card(item: dict[str, Any]) -> str:
+        status = str(item.get("status") or "pending")
+        tail_lines = item.get("log_tail") if isinstance(item.get("log_tail"), list) else []
+        tail_html = "".join(f"<li>{esc(shorten(line, 150))}</li>" for line in tail_lines[-6:])
+        return f"""
+        <article class="observe-step {esc(STATUS_CLASS.get(status, 'pending'))}">
+          <div class="node-top">
+            <strong>#{esc(item.get('id'))} {esc(shorten(item.get('name'), 72))}</strong>
+            <span class="chip {esc(STATUS_CLASS.get(status, 'pending'))}">{esc(status_label(status))}</span>
+          </div>
+          <div class="progress"><span style="width:{esc(item.get('progress') or 0)}%"></span></div>
+          <div class="step-meta">
+            <span><strong>进度</strong>{esc(item.get('progress') or 0)}%</span>
+            <span><strong>Heartbeat</strong>{esc(item.get('heartbeat_age') or '无心跳')}</span>
+            <span><strong>Agent</strong>{esc(item.get('subagent') or '未指定')} / {esc(item.get('task_agent') or '未指定')}</span>
+            <span><strong>Agent ID</strong><code>{esc(item.get('agent_id') or '无')}</code></span>
+            <span><strong>Log</strong><code>{esc(item.get('log_path') or '无')}</code></span>
+            <span><strong>Output</strong><code>{esc(item.get('output') or '无')}</code></span>
+          </div>
+          <div class="observe-log-tail">
+            <strong>最近日志</strong>
+            <ul>{tail_html or '<li class="muted">暂无日志尾部。</li>'}</ul>
+          </div>
+        </article>
+        """
+
+    attention = blocked + failed
+    shell_items = []
+    for item in shell_logs[:8]:
+        lines = item.get("tail") if isinstance(item.get("tail"), list) else []
+        shell_items.append(
+            f"""
+            <article class="observe-shell-log">
+              <div class="node-top"><strong><code>{esc(item.get('path'))}</code></strong><span>{len(lines)} 行尾部</span></div>
+              <ul>{''.join(f'<li>{esc(shorten(line, 150))}</li>' for line in lines) or '<li class="muted">暂无输出。</li>'}</ul>
+            </article>
+            """
+        )
+
+    return f"""
+    <section class="panel observe-hero">
+      <div class="section-head"><h2>后台观察</h2><span>Agent View + AutoGoo step heartbeat</span></div>
+      <div class="observe-grid">
+        <div class="observe-card">
+          <span class="muted">Claude Code</span>
+          <strong>{esc(observe.get('claude_version') or '未检测到')}</strong>
+          <p>使用 <code>{esc(commands.get('agent_view') or 'claude agents')}</code> 查看后台 session / shell job。</p>
+        </div>
+        <div class="observe-card">
+          <span class="muted">当前 Thread</span>
+          <strong>{esc((observe.get('current_thread') or {}).get('id') or 'legacy/current')}</strong>
+          <p><code>{esc(observe.get('plan_path') or '未找到 plan')}</code></p>
+        </div>
+        <div class="observe-card">
+          <span class="muted">运行中 Step</span>
+          <strong>{len(running)}</strong>
+          <p>内部 subagent 不会单独出现在 Agent View 行里，细节看这里。</p>
+        </div>
+        <div class="observe-card">
+          <span class="muted">需处理</span>
+          <strong>{len(attention)}</strong>
+          <p>blocked / failed step。</p>
+        </div>
+      </div>
+    </section>
+    <section class="panel observe-command-panel">
+      <div class="section-head"><h2>Agent View 与 Shell</h2><span>快速入口</span></div>
+      <div class="observe-command-grid">
+        <div><strong>后台会话</strong><code>{esc(commands.get('agent_view') or 'claude agents')}</code><p>Space peek，Enter/Right attach。</p></div>
+        <div><strong>AutoGoo 状态</strong><code>{esc(commands.get('status') or '/auto-goo:goo-status')}</code><p>查看 per-step progress、heartbeat 和告警。</p></div>
+        <div><strong>Live 发布</strong><code>{esc(commands.get('publish_live') or '/auto-goo:goo-publish --live')}</code><p>刷新页面时重新扫描 .goo 状态。</p></div>
+        <div><strong>Shell 留痕</strong><code>{esc(commands.get('shell_template') or '')}</code><p>长任务输出写入 shell log，避免 Agent View 临时输出被清理。</p></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="section-head"><h2>Running Steps</h2><span>{len(running)} 个</span></div>
+      <div class="observe-step-list">{''.join(step_card(item) for item in running) or '<p class="muted">暂无运行中的 AutoGoo step。</p>'}</div>
+    </section>
+    <section class="panel">
+      <div class="section-head"><h2>Blocked / Failed</h2><span>{len(attention)} 个</span></div>
+      <div class="observe-step-list">{''.join(step_card(item) for item in attention) or '<p class="muted">暂无阻塞或失败。</p>'}</div>
+    </section>
+    <section class="panel">
+      <div class="section-head"><h2>Shell Logs</h2><span>{len(shell_logs)} 个</span></div>
+      <p class="muted">Shell 日志目录：<code>{esc(observe.get('shell_log_dir') or '')}</code></p>
+      <div class="observe-shell-list">{''.join(shell_items) or '<p class="muted">暂无 shell 日志。</p>'}</div>
+    </section>
+    """
+
+
 def render_threads(threads: list[dict[str, Any]], root: Path) -> str:
     cards = []
     for thread in threads:
@@ -1716,6 +1826,7 @@ def nav_targets() -> dict[str, str]:
         "brainstorm": "brainstorm.html",
         "plan": "plan.html",
         "status": "status.html",
+        "observe": "observe.html",
         "subagents": "agents.html",
         "artifacts": "artifacts.html",
         "requests": "requests.html",
@@ -2106,6 +2217,17 @@ def generated_content_css() -> str:
 .status-card strong { display: block; margin-top: 4px; font-size: 22px; }
 .status-list { display: grid; gap: 8px; margin-top: 12px; }
 .status-row { display: grid; grid-template-columns: 14px minmax(0, 1fr) 92px minmax(120px, .4fr); gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 10px; color: var(--text); background: var(--panel-bg); text-decoration: none; }
+.observe-grid, .observe-command-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.observe-card, .observe-command-grid > div { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--soft-bg); min-width: 0; }
+.observe-card strong { display: block; margin-top: 6px; font-size: 20px; }
+.observe-card p, .observe-command-grid p { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+.observe-command-grid code { display: block; margin-top: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-bg); overflow-wrap: anywhere; white-space: pre-wrap; font-size: 12px; }
+.observe-step-list, .observe-shell-list { display: grid; gap: 10px; }
+.observe-step, .observe-shell-log { border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 8px; padding: 12px; background: var(--panel-bg); }
+.observe-step.running { border-left-color: var(--blue); } .observe-step.failed, .observe-step.blocked { border-left-color: var(--red); }
+.observe-log-tail, .observe-shell-log ul { margin-top: 10px; }
+.observe-log-tail ul, .observe-shell-log ul { list-style: none; display: grid; gap: 5px; margin: 8px 0 0; padding: 0; }
+.observe-log-tail li, .observe-shell-log li { padding: 6px 8px; border-radius: 6px; background: var(--soft-bg); color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
 .chip { display: inline-flex; align-items: center; min-height: 24px; padding: 4px 8px; border-radius: 999px; color: var(--muted); background: var(--chip-bg); font-size: 12px; font-weight: 650; }
 .done { color: var(--green); } .running { color: var(--blue); } .failed { color: var(--red); } .paused { color: var(--amber); } .blocked { color: var(--red); }
 .progress { height: 10px; background: #eaeef2; border-radius: 999px; overflow: hidden; margin-top: 14px; }
@@ -2359,6 +2481,7 @@ body[data-page="plan"] { --page-accent: var(--blue); }
 body[data-page="activity"] { --page-accent: var(--violet); }
 body[data-page="brainstorm"] { --page-accent: var(--amber); }
 body[data-page="status"] { --page-accent: var(--green); }
+body[data-page="observe"] { --page-accent: var(--amber); }
 body[data-page="subagents"] { --page-accent: var(--cyan); }
 body[data-page="artifacts"] { --page-accent: var(--violet); }
 body[data-page="requests"] { --page-accent: var(--amber); }
@@ -2459,6 +2582,7 @@ def render_overview(
     brainstorm_href = "brainstorm.html"
     artifacts_href = "artifacts.html"
     subagents_href = "agents.html"
+    observe_href = "observe.html"
     lower_sections = f"""
     <div class="grid">
       <div>{render_flow_graph(plan)}</div>
@@ -2475,6 +2599,7 @@ def render_overview(
       <a class="summary-card" href="{activity_href}"><span class="muted">活动</span><strong>{len(events)}</strong><p>工作流事件</p></a>
       <a class="summary-card" href="{brainstorm_href}"><span class="muted">头脑风暴</span><strong>{candidate_count}</strong><p>候选目标</p></a>
       <a class="summary-card" href="{subagents_href}"><span class="muted">代理执行</span><strong>{sum(1 for step in (plan or {}).get('steps', []) if isinstance(step, dict) and step.get('subagent'))}</strong><p>当前计划代理步骤</p></a>
+      <a class="summary-card" href="{observe_href}"><span class="muted">后台观察</span><strong>{sum(1 for step in (plan or {}).get('steps', []) if isinstance(step, dict) and step.get('status') == 'running')}</strong><p>运行中的 step 与 shell logs</p></a>
       <a class="summary-card" href="{artifacts_href}"><span class="muted">产物归档</span><strong>{len(artifacts)}</strong><p>最近文件</p></a>
       </section>
     </section>
@@ -2506,6 +2631,8 @@ def build_site(root: Path, output: Path) -> dict[str, str]:
     change_requests = collect_change_requests(root, config)
     artifacts = collect_artifacts(root, config)
     events = collect_activity(root, config, artifacts)
+    observe_module = load_observe_module()
+    observe = observe_module.snapshot(root) if observe_module else {}
     project_slug = config.get("archive", {}).get("project_slug") if isinstance(config.get("archive"), dict) else None
     title = project_slug or root.name
     generated_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -2565,6 +2692,13 @@ def build_site(root: Path, output: Path) -> dict[str, str]:
                 subtitle,
                 site_dir / "status.html",
                 render_status(plan, events),
+            ),
+            "observe.html": page_shell(
+                f"观察 · {title}",
+                "observe",
+                subtitle,
+                site_dir / "observe.html",
+                render_observe(observe),
             ),
             "agents.html": page_shell(
                 f"代理执行 · {title}",
@@ -2643,6 +2777,7 @@ def make_server(root: Path, output: Path, host: str, port: int, *, live: bool) -
         "activity.html",
         "brainstorm.html",
         "status.html",
+        "observe.html",
         "agents.html",
         "artifacts.html",
         "requests.html",
