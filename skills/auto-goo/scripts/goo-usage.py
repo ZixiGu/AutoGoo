@@ -32,6 +32,20 @@ TAB_LABELS = {
 }
 TAB_KEYS = {"overview": "1", "projects": "2", "models": "3", "history": "4"}
 
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
 HISTORY_PERIODS = ["7d", "30d", "all"]
 HISTORY_PERIOD_LABELS = {"7d": "7 Days", "30d": "30 Days", "all": "All Time"}
 
@@ -295,7 +309,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-builtin-pricing", action="store_true",
                    help="Disable built-in model pricing")
     p.add_argument("--serve", action="store_true", help="Start HTTP server with HTML dashboard")
-    p.add_argument("--host", default="0.0.0.0", help="HTTP host (default: 0.0.0.0)")
+    p.add_argument("--host", default="127.0.0.1", help="HTTP host (default: 127.0.0.1)")
     p.add_argument("--port", type=int, default=9876, help="HTTP server port (default: 9876)")
     return p.parse_args()
 
@@ -450,10 +464,10 @@ def iter_records(input_dir: Path, since: str | None, until: str | None):
                     "sessionId": str(obj.get("sessionId", "")),
                     "cwd": str(obj.get("cwd", "")),
                     "model": str(message.get("model", "")),
-                    "input_tokens": int(usage.get("input_tokens", 0)),
-                    "output_tokens": int(usage.get("output_tokens", 0)),
-                    "cache_creation_input_tokens": int(usage.get("cache_creation_input_tokens", 0)),
-                    "cache_read_input_tokens": int(usage.get("cache_read_input_tokens", 0)),
+                    "input_tokens": _safe_int(usage.get("input_tokens")),
+                    "output_tokens": _safe_int(usage.get("output_tokens")),
+                    "cache_creation_input_tokens": _safe_int(usage.get("cache_creation_input_tokens")),
+                    "cache_read_input_tokens": _safe_int(usage.get("cache_read_input_tokens")),
                     "turnId": str(user_turn.get("uuid", obj.get("parentUuid", ""))),
                 }
 
@@ -475,7 +489,7 @@ def normalize_price_entry(raw: object) -> dict[str, float]:
     for key, value in raw.items():
         canonical = PRICE_FIELD_ALIASES.get(str(key))
         if canonical:
-            entry[canonical] = float(value)
+            entry[canonical] = _safe_float(value)
     return entry
 
 
@@ -497,9 +511,9 @@ def load_pricing(path: Path | None, inline_prices: list[str],
         if len(values) != 3:
             raise ValueError(f"--price needs 3 comma-separated rates: {spec}")
         pricing[model.strip()] = {
-            "input_tokens": float(values[0]),
-            "output_tokens": float(values[1]),
-            "cache_read_input_tokens": float(values[2]),
+            "input_tokens": _safe_float(values[0]),
+            "output_tokens": _safe_float(values[1]),
+            "cache_read_input_tokens": _safe_float(values[2]),
         }
     if use_builtin and not path and not inline_prices:
         for model, (inp, out, cache) in DEFAULT_PRICING.items():
@@ -775,7 +789,7 @@ def render_overview(args: argparse.Namespace, pricing: dict[str, dict[str, float
     hourly = data["hourly"]
     if any(h > 0 for h in hourly):
         print(cbold("  ◆  Hourly Activity", WHITE))
-        spark = sparkline([float(h) for h in hourly], width=50)
+        spark = sparkline([_safe_float(h) for h in hourly], width=50)
         print(f"  {c(spark, GREEN)}")
         peak_hour = max(range(24), key=lambda h: hourly[h])
         print(f"  {c('Peak:', MUTED)} {c(f'{peak_hour:02d}:00', WHITE)}  "
@@ -926,7 +940,7 @@ def render_history(args: argparse.Namespace, pricing: dict[str, dict[str, float]
     print(f"  {fmt_col(c('Total Tokens', MUTED), 22, '<')} {cbold(fmt_int_full(total_tokens), GREEN)}")
     print(f"  {fmt_col(c('Total Messages', MUTED), 22, '<')} {c(fmt_int_full(total_msgs), CYAN)}")
     if pricing:
-        total_cost = sum(float(d["cost"]) for d in daily)
+        total_cost = sum(_safe_float(d.get("cost")) for d in daily)
         if total_cost > 0:
             print(f"  {fmt_col(c('Total Cost', MUTED), 22, '<')} {cbold(fmt_money(total_cost), YELLOW)}")
     print()

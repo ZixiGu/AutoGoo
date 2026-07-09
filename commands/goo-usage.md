@@ -1,6 +1,6 @@
 ---
 name: auto-goo:goo-usage
-description: 显示 Claude Code token 和 usage 监控面板 — 多色可视化终端仪表盘
+description: 显示 Claude Code token 和 usage 监控面板 — 多色可视化终端仪表盘，可选 --serve 启动 HTML 仪表盘
 ---
 
 ## 执行流程

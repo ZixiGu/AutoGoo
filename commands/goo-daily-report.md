@@ -19,9 +19,46 @@ description: 生成 Goo-wiki 日报/周报 — 扫描 Claude Code 和 Codex 会�
 
 也适用于用户说"日报"、"写日报"、"生成日报"、"总结今天"、"今天干了什么"、"周报"、"周总结"、"weekly report" 或 "daily report"。
 
+## 交互提问
+
+收到 `/auto-goo:goo-daily-report` 后，不要直接扫描会话，必须先通过交互提问确认报告类型和日期范围。所有交互问题必须使用 `AskUserQuestion` / 结构化选择 UI 渲染可点击选项；不得只输出标题后等待用户，也不得要求用户手打编号。必须复用 `skills/auto-goo/references/interaction-templates.md` 中已定义的 `id` 模板；没有匹配 `id` 时按相同 JSON 格式构造新模板。
+
+1. 第一个问题——报告类型（如 `references/interaction-templates.md` 中存在匹配 `id` 则复用，否则新建）：
+   - header: 报告类型
+   - question: 请选择报告类型。
+   - options:
+     - label: 日报 (Recommended)
+       description: 生成单日日报，扫描指定日期的会话记录。
+     - label: 周报
+       description: 生成一周汇总，扫描本周一至今日的会话记录。
+
+2. 第二个问题——日期范围（仅当日报模式时询问；周报模式默认本周一到今天）：
+   - header: 日期
+   - question: 请选择报告日期。
+   - options:
+     - label: 今天 (Recommended)
+       description: 生成今天的日报。
+     - label: 昨天
+       description: 生成昨天的日报。
+     - label: 指定日期
+       description: 通过 Other 输入具体日期（YYYY-MM-DD）。
+
+如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
+
+```
+请选择报告类型：
+1. 日报 (默认) — 生成单日日报
+2. 周报       — 生成一周汇总
+
+请选择日期：
+1. 今天 (默认)
+2. 昨天
+3. 输入具体日期 (YYYY-MM-DD)
+```
+
 ## 行为
 
-1. 确定日期范围：无参数默认今天；"昨天"、"今天"、"本周"必须转成具体日期。
+1. 确定日期范围：已通过交互提问获得；无参数默认今天；"昨天"、"今天"、"本周"必须转成具体日期。
 2. 按配置优先级解析 Goo-wiki 路径：`AUTO_GOO_WIKI_DIR` → `.goo/config.json` → `~/.auto-goo/config.json` → `~/workspace/Goo-wiki`。
 3. 运行插件脚本提取会话摘要：
 

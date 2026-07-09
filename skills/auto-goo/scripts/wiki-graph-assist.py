@@ -262,6 +262,9 @@ def main() -> int:
         if not project_dir:
             raise SystemExit("--update-index requires --project-dir or --project-slug")
         index_path = (wiki_dir / project_dir / f"{args.project_slug}.md") if args.project_slug else (wiki_dir / project_dir / "index.md")
+        # Guard against path traversal
+        if not index_path.resolve().is_relative_to(wiki_dir.resolve()):
+            raise SystemExit("index path must stay inside wiki-dir")
         if replace_or_append_recent(index_path, wikilink(args.task_page, title), title, date.today().isoformat()):
             changed.append(index_path.relative_to(wiki_dir).as_posix())
 

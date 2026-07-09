@@ -3,6 +3,14 @@
 
 from __future__ import annotations
 
+from _paths import (
+    dump_json,
+    find_config_dir,
+    load_json,
+    now,
+    workspace_path,
+    workspace_paths,
+)
 import argparse
 import json
 import os
@@ -12,65 +20,6 @@ from typing import Any
 
 
 LOCK_TYPES = ("files", "wiki", "servers", "ports")
-DEFAULT_WORKSPACE_PATHS = {
-    "locks_dir": ".goo/locks",
-}
-
-
-def now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def load_json(path: Path, default: Any) -> Any:
-    if not path.exists():
-        return default
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def dump_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
-
-
-def project_root_from_config_dir(config_dir: Path) -> Path:
-    return config_dir.resolve().parent if config_dir.name == ".goo" else Path.cwd().resolve()
-
-
-def find_config_dir(start: Path) -> Path:
-    resolved = start.resolve()
-    for candidate in [resolved, *resolved.parents]:
-        if candidate.name == ".goo":
-            return candidate
-        if candidate.name == ".goo" and (candidate / "config.json").exists():
-            return candidate
-        config_dir = candidate / ".goo"
-        if (config_dir / "config.json").exists():
-            return config_dir
-    return Path.cwd() / ".goo"
-
-
-def workspace_paths(config_dir: Path) -> dict[str, str]:
-    merged = dict(DEFAULT_WORKSPACE_PATHS)
-    config = load_json(config_dir / "config.json", {})
-    workspace = config.get("workspace") if isinstance(config.get("workspace"), dict) else {}
-    paths = workspace.get("paths") if isinstance(workspace.get("paths"), dict) else {}
-    for key, value in paths.items():
-        if key in merged and value:
-            merged[key] = str(value)
-    return merged
-
-
-def workspace_path(config_dir: Path, key: str) -> Path:
-    raw = Path(workspace_paths(config_dir)[key]).expanduser()
-    if raw.is_absolute():
-        return raw
-    default = DEFAULT_WORKSPACE_PATHS.get(key)
-    if default and raw.as_posix() == default and config_dir.name == ".goo" and not (config_dir / "config.json").exists():
-        return config_dir.resolve() / raw.relative_to(".goo")
-    return project_root_from_config_dir(config_dir) / raw
-
 
 def locks_file(goo_dir: Path, lock_type: str) -> Path:
     return workspace_path(goo_dir, "locks_dir") / f"{lock_type}.json"
@@ -90,6 +39,24 @@ def normalize_resource(lock_type: str, resource: str) -> str:
     return text.rstrip("/")
 
 
+STALE_LOCK_AGE_SECONDS = 600  # 10 minutes
+
+
+def is_stale(lock: dict[str, Any]) -> bool:
+    created = lock.get("created_at")
+    if not created:
+        return True
+    try:
+        dt = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - dt).total_seconds() > STALE_LOCK_AGE_SECONDS
+    except (ValueError, TypeError):
+        return True
+
+
+def prune_stale(locks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [item for item in locks if not is_stale(item)]
+
+
 def load_locks(goo_dir: Path, lock_type: str) -> list[dict[str, Any]]:
     data = load_json(locks_file(goo_dir, lock_type), {"locks": []})
     if isinstance(data, dict) and isinstance(data.get("locks"), list):
@@ -98,7 +65,7 @@ def load_locks(goo_dir: Path, lock_type: str) -> list[dict[str, Any]]:
 
 
 def save_locks(goo_dir: Path, lock_type: str, locks: list[dict[str, Any]]) -> None:
-    dump_json(locks_file(goo_dir, lock_type), {"locks": locks, "updated_at": now()})
+    dump_json(locks_file(goo_dir, lock_type), {"locks": prune_stale(locks), "updated_at": now()})
 
 
 def resources_conflict(lock_type: str, left: str, right: str) -> bool:

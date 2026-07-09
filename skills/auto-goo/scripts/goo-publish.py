@@ -49,7 +49,7 @@ DEFAULT_PUBLISH_CONFIG = {
     "enabled": True,
     "site_dir": ".goo/site",
     "index_file": ".goo/site/index.html",
-    "host": "0.0.0.0",
+    "host": "127.0.0.1",
     "port": 9877,
     "open_browser": True,
     "include_workflow_activity": True,
@@ -68,6 +68,7 @@ DEFAULT_WORKSPACE_PATHS = {
     "change_requests_dir": ".goo/change-requests",
     "obsidian_dir": ".goo/obsidian",
     "site_dir": ".goo/site",
+    "locks_dir": ".goo/locks",
 }
 
 
@@ -93,7 +94,7 @@ def read_json(path: Path) -> dict[str, Any] | list[Any] | None:
         return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return None
 
 
@@ -439,7 +440,7 @@ def change_request_path(root: Path, config: dict[str, Any], rel_text: Any) -> Pa
 
 
 def update_change_request_status(root: Path, config: dict[str, Any], data: dict[str, Any]) -> Path:
-    allowed = {"pending_model_update", "completed", "needs_revision"}
+    allowed = {"pending_model_update", "needs_revision", "in_progress", "completed", "rejected", "superseded"}
     status = str(data.get("status") or "").strip()
     if status not in allowed:
         raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
@@ -447,11 +448,28 @@ def update_change_request_status(root: Path, config: dict[str, Any], data: dict[
     item = read_json(path)
     if not isinstance(item, dict):
         raise ValueError("change request json is invalid")
+    previous = str(item.get("status") or "")
+    transitions = {
+        "pending_model_update": {"in_progress", "rejected", "superseded"},
+        "needs_revision": {"in_progress", "rejected", "superseded"},
+        "in_progress": {"pending_model_update", "needs_revision", "completed", "rejected", "superseded"},
+        "completed": set(),
+        "rejected": set(),
+        "superseded": set(),
+    }
+    allowed_next = transitions.get(previous, allowed)
+    if status not in allowed_next:
+        raise ValueError(f"invalid transition: {previous} -> {status}")
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     item["status"] = status
     note = str(data.get("note") or "").strip()
     if note:
         item["status_note"] = note
-    item["updated_at"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    item["updated_at"] = now
+    history = item.get("history", [])
+    if isinstance(history, list):
+        history.append({"from": previous, "to": status, "at": now, "note": note or None})
+        item["history"] = history
     path.write_text(json.dumps(item, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -635,7 +653,7 @@ def collect_token_activity(root: Path, limit: int = 120) -> list[dict[str, Any]]
                     row["time"] = when
                 total = 0
                 for field in TOKEN_FIELDS:
-                    amount = int(usage.get(field) or 0)
+                    amount = _safe_int(usage.get(field))
                     row[field] = int(row.get(field) or 0) + amount
                     total += amount
                 row["tokens"] = int(row.get("tokens") or 0) + total
@@ -2821,6 +2839,9 @@ def make_server(root: Path, output: Path, host: str, port: int, *, live: bool) -
                     return
                 if not target.is_file():
                     self.send_bytes(404, b"Not Found", "text/plain; charset=utf-8")
+                    return
+                if target.stat().st_size > 50 * 1024 * 1024:
+                    self.send_bytes(413, b"Payload Too Large", "text/plain; charset=utf-8")
                     return
                 payload = target.read_bytes()
                 content_type = "text/plain; charset=utf-8"

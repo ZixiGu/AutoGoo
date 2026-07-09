@@ -699,3 +699,51 @@
   ]
 }
 ```
+
+### Context 同步确认（goo-continue 恢复前新增上下文）
+
+```json
+{
+  "id": "context_sync_confirm",
+  "header": "上下文确认",
+  "question": "检测到 plan 生成后新增了对话内容，请选择处理方式。",
+  "options": [
+    {
+      "label": "同步并继续执行 (Recommended)",
+      "description": "把新增上下文写入 context_digest，然后按计划继续执行。"
+    },
+    {
+      "label": "先修改 plan",
+      "description": "通过 Other 输入修改意见，更新 plan 后再继续。"
+    },
+    {
+      "label": "停止并保留当前 plan",
+      "description": "不合并新增内容，保持 plan 不变并暂停。"
+    }
+  ]
+}
+```
+
+### Plan 审阅启动（goo-plan 草案写入后确认审阅方式）
+
+```json
+{
+  "id": "plan_review_start",
+  "header": "Plan 审阅",
+  "question": "Plan 草案已写入 .goo/plan.json，请选择下一步。",
+  "options": [
+    {
+      "label": "确认并继续执行 (Recommended)",
+      "description": "审阅无误，标记 review.status=confirmed 并开始执行。"
+    },
+    {
+      "label": "修改草案",
+      "description": "通过 Other 输入修改意见，更新 plan 后重新审阅。"
+    },
+    {
+      "label": "停止/稍后再说",
+      "description": "暂不执行，保持 pending_user_review 状态。"
+    }
+  ]
+}
+```

@@ -1,6 +1,6 @@
 ---
 name: goo-workflow
-description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', '/auto-goo:goo-observe', '/auto-goo:goo-publish', 'brainstorm', '找目标', '开始任务', 'run:', '读论文', '论文', 'paper', '日报', '周报', 'usage', 'token统计', 'token降本', '后台观察', '发布HTML', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status/observe, HTML publishing, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion tools."
+description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', '/auto-goo:goo-observe', '/auto-goo:goo-publish', '找目标', '开始任务', 'run:', '日报', '周报', 'usage', 'token统计', 'token降本', '后台观察', '发布HTML', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status/observe, HTML publishing, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Requires Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion tools."
 version: 0.3.11
 tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 ---
@@ -38,7 +38,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion]
 
 **同一任务归档根**：同一条任务链路的 brainstorm、plan 和 execution 知识归档默认放在同一个 `task_archive_root` 下，用子目录区分阶段：`brainstorm/` 保存候选目标、推荐顺序和选择依据；`plan/` 保存正式 DAG、上下文摘要和计划取舍；`execution/` 保存步骤证据、验证结果和最终经验。`task_archive_root` 优先位于 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-task-slug>/`；Goo-wiki 不可用时使用 `.goo/obsidian/<project-slug>/tasks/<task-slug>/`。同一 thread 内 `.goo/threads/<thread_id>/brainstorm.json.archive.task_archive_root` 与 `.goo/threads/<thread_id>/plan.json.archive.task_archive_root` 必须保持一致，除非用户明确要求分开归档。注意：这不同于本地 JSON 历史快照；旧 `.goo/plan.json` 仍保存到 `.goo/plans/history/`，旧 `.goo/brainstorm.json` 保存到 `.goo/brainstorms/history/`。
 
-**HTML 发布层**：`/auto-goo:goo-publish` 是工作流展示层，无需运行 `goo-init` 或创建 `.goo/config.json`，默认从 `.goo/threads/`、`.goo/current_thread.json`、兼容 `.goo/brainstorm.json`、`.goo/plan.json`、历史快照、当前 thread logs/artifacts/reports、`.goo/change-requests/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/` 多页站点。`skills/auto-goo/templates/publish/workflow-shell.html` 是唯一运行时页面外壳，`skills/auto-goo/templates/publish/workflow-theme.css` 是唯一正式视觉主题；脚本填充标题、活动导航链接、正文、路径和交互脚本，并把主题复制到站点目录，禁止依赖发布后手工注入 CSS 或 `/tmp` 概念稿。正式主题采用紧凑工作台布局、浅色/暗色模式和页面语义色：计划/流程为蓝色、完成状态为绿色、代理执行为青色、头脑风暴为琥珀色、活动与归档为紫色、失败与风险为红色。默认生成总览、Threads、计划、活动、头脑风暴、运行状态、代理执行、产物归档和修改请求页面，关键页面标签优先使用中文；桌面端固定左侧导航，移动端恢复自然滚动。Token 格子悬浮时显示消耗明细，点击或聚焦后由下方文本型工作流活动说明所选时间段实际完成的工作；活动记录列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情，但不发布 assistant 回复或完整对话正文。它会启动 `0.0.0.0:9877` server、尝试弹出浏览器，同时打印 `127.0.0.1` 和本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读取已生成的 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。发布 HTML 不替代 Goo-wiki 归档，不直接修改业务文件、plan 或 brainstorm；Web 表单只允许新增 `.goo/change-requests/*.json`，后续由主 Agent 纳入 thread plan 并审计。
+**HTML 发布层**：`/auto-goo:goo-publish` 是工作流展示层，无需运行 `goo-init` 或创建 `.goo/config.json`，默认从 `.goo/threads/`、`.goo/current_thread.json`、兼容 `.goo/brainstorm.json`、`.goo/plan.json`、历史快照、当前 thread logs/artifacts/reports、`.goo/change-requests/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/` 多页站点。`skills/auto-goo/templates/publish/workflow-shell.html` 是唯一运行时页面外壳，`skills/auto-goo/templates/publish/workflow-theme.css` 是唯一正式视觉主题；脚本填充标题、活动导航链接、正文、路径和交互脚本，并把主题复制到站点目录，禁止依赖发布后手工注入 CSS 或 `/tmp` 概念稿。正式主题采用紧凑工作台布局、浅色/暗色模式和页面语义色：计划/流程为蓝色、完成状态为绿色、代理执行为青色、头脑风暴为琥珀色、活动与归档为紫色、失败与风险为红色。默认生成总览、Threads、计划、活动、头脑风暴、运行状态、代理执行、产物归档和修改请求页面，关键页面标签优先使用中文；桌面端固定左侧导航，移动端恢复自然滚动。Token 格子悬浮时显示消耗明细，点击或聚焦后由下方文本型工作流活动说明所选时间段实际完成的工作；活动记录列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情，但不发布 assistant 回复或完整对话正文。它会启动 `127.0.0.1:9877` server、尝试弹出浏览器，同时打印本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读取已生成的 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。发布 HTML 不替代 Goo-wiki 归档，不直接修改业务文件、plan 或 brainstorm；Web 表单只允许新增 `.goo/change-requests/*.json`，后续由主 Agent 纳入 thread plan 并审计。
 
 **用户交互契约**：任何需要用户选择、确认、重试、跳过、合并、改写或授权的步骤，必须优先调用结构化选择 UI / `AskUserQuestion`，让 Claude Code 渲染可用方向键移动、Enter 确认的选择控件；不得在工具可用时用普通文本要求用户手打 `1/2`、ID 或命令参数。每个问题至少给 2 个显式选项，推荐项放第一项并标注 Recommended；多候选问题必须把候选 ID/编号放进选项说明。只有结构化选择 UI / `AskUserQuestion` 不可用、调用失败或按钮没有渲染时，才允许降级为纯文本编号列表，并明确这是 fallback。用户未明确选择前，不得用推荐项静默继续。
 
@@ -270,7 +270,7 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 - step 的 `description` 必须写清楚做什么、边界、输入、输出和验收点，不能依赖"刚才讨论的方案"。
 - 多 goal plan 中，非归档 step 必须包含 `goal_id` 或 `goal_ids`；归档 step 用 `goal_ids` 覆盖所有被归档目标。
 - step 应包含 `inputs`、`outputs`、`allowed_read_paths`、`allowed_write_paths`、`validation`、`risk_level` 和 `requires_user_confirm`，让执行阶段不用猜读写范围、验收方式和是否需要用户确认。
-- `goo-start` / `goo-continue` 执行前默认执行 context sync：检查 plan 生成后当前对话是否新增方案、取舍、约束、验收标准、用户偏好或 open question。短内容写入 `context_digest.post_plan_updates`；长内容写入 Goo-wiki 项目路径 `context/` 并追加到 `context_artifacts`，Goo-wiki 不可用时写 `.goo/obsidian/<project-slug>/context/`。同步前必须先把旧 plan 复制到 `.goo/plans/history/`；只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才问用户确认。确认问题必须优先使用结构化选项：`同步并继续执行`、`先修改 plan`、`停止并保留当前 plan`。
+- `goo-start` / `goo-continue` 执行前默认执行 context sync：检查 plan 生成后当前对话是否新增方案、取舍、约束、验收标准、用户偏好或 open question。短内容写入 `context_digest.post_plan_updates`；长内容写入 Goo-wiki 项目路径 `context/` 并追加到 `context_artifacts`，Goo-wiki 不可用时写 `.goo/obsidian/<project-slug>/context/`。同步前必须先把旧 plan 复制到 `.goo/plans/history/`；只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才问用户确认。确认问题必须优先用 `AskUserQuestion` 复用 `references/interaction-templates.md` 的 `id=context_sync_confirm` 模板。
 - `goo-start` / `goo-continue` 一旦准备把 plan 从待执行状态推进到执行状态，必须先检查 `.goo/brainstorm.json` 和 `.goo/plan.json` 的 `review.status`。如果仍是 `pending_user_review`，先停下来让用户审阅和确认；确认后如 brainstorm 还没有归档，再派发 `recorder` 归档最终版 brainstorm。该归档完成前，不启动业务 step 调度。
 - Subagent prompt 只允许使用当前 step、`context_digest`、相关 `wiki_context`、`context_artifacts` 路径和上游产物摘要；不传完整聊天记录。
 
@@ -278,7 +278,7 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 
 **当前 thread plan 是执行状态源**。派发、完成、失败均实时回写 `.goo/threads/<thread_id>/plan.json` 或兼容 `.goo/plan.json`。历史 plan 只归档在 `.goo/plans/history/`，不得作为恢复来源，除非用户明确指定。执行时不得依赖主会话隐含上下文；所有执行必需信息必须在当前 plan、引用的 Markdown/context artifact、wiki 摘要或上游产物中。每次 `update-step.py` 或 `goo-status.py --update-status` 后，必须同步 thread metadata。
 
-**Brainstorm/Plan 审阅闸门**：执行调度开始前必须确认 `.goo/brainstorm.json` 和 `.goo/plan.json` 不是待审草案。若 `review.status="pending_user_review"`，先让用户审阅、修改或确认，并优先用结构化选项展示：`确认并继续`、`修改草案`、`停止/稍后再说`；不能自动归档或执行。用户确认后，如果 `.goo/brainstorm.json` 存在且未能证明已归档，再归档最终版 brainstorm，然后开始执行 plan steps。归档内容至少包括候选 goals、推荐顺序、用户最终选择、未选原因或合并依据、前置条件、ready checklist、关键 wiki 证据，以及该 brainstorm 如何转成当前 `.goo/plan.json`；归档完成后回写 `archive.status="completed"`、`archive.task_archive_root`、`archive.brainstorm_dir`、fallback 状态和 `log.md` 更新状态。若当前 plan 已有 `archive.task_archive_root`，brainstorm 必须补写到同一个 root 的 `brainstorm/` 子目录；若没有，则创建 root 并同步写回 plan 与 brainstorm。
+**Brainstorm/Plan 审阅闸门**：执行调度开始前必须确认 `.goo/brainstorm.json` 和 `.goo/plan.json` 不是待审草案。若 `review.status="pending_user_review"`，先让用户审阅、修改或确认，并优先用 `AskUserQuestion` 复用 `references/interaction-templates.md` 的 `id=plan_review_start` 模板；不能自动归档或执行。用户确认后，如果 `.goo/brainstorm.json` 存在且未能证明已归档，再归档最终版 brainstorm，然后开始执行 plan steps。归档内容至少包括候选 goals、推荐顺序、用户最终选择、未选原因或合并依据、前置条件、ready checklist、关键 wiki 证据，以及该 brainstorm 如何转成当前 `.goo/plan.json`；归档完成后回写 `archive.status="completed"`、`archive.task_archive_root`、`archive.brainstorm_dir`、fallback 状态和 `log.md` 更新状态。若当前 plan 已有 `archive.task_archive_root`，brainstorm 必须补写到同一个 root 的 `brainstorm/` 子目录；若没有，则创建 root 并同步写回 plan 与 brainstorm。
 
 **槽位调度模型**：固定 6 个并发槽位 + 动态就绪队列 + 连续下发。agent 完成即释放槽位，其下游立即入队，不用等同层其他 agent。
 
@@ -431,7 +431,7 @@ report_dir=".goo/threads/<thread_id>/reports"
 mkdir -p "$report_dir"
 # 先把本次任务总结写成 "$report_dir/final-report.html" 或 "$report_dir/final-report.md"。
 # 如果生成 HTML，server URL 必须指向 /final-report.html；如果只有 Markdown，最终答复报告文件路径。
-python3 -m http.server 9877 --bind 0.0.0.0 --directory "$report_dir"
+python3 -m http.server 9877 --bind 127.0.0.1 --directory "$report_dir"
 ```
 
 最终答复必须包含报告路径（优先 `.goo/threads/<thread_id>/reports/final-report.html`）和实际可访问 URL（例如 `http://127.0.0.1:<port>/final-report.html`，远程环境再补本机 IP 或端口转发提示）。不得把 `.goo/site/index.html` 或 `goo-publish.py` 的总览页当成本次任务总结报告。用户选择“跳过”时，不启动 server，只报告归档路径。
@@ -522,6 +522,7 @@ Phase 4 归档完成后，在任务日志末尾追加 `## 流程问题` 反思�
 - **`references/obsidian-archive.md`** — Goo-wiki 归档规范、Recorder prompt、笔记类型与命名
 - **`references/self-improvement.md`** — 插件自改进机制、触发条件、流程与决策规则
 - **`references/python-standards.md`** — 代码风格、项目结构、核心接口约定
+- **`references/heartbeat.md`** — subagent 心跳检测、zombie/stuck 判定规则和 heartbeat 更新协议
 
 ### Examples
 - **`examples/csv-analysis-workflow.md`** — 完整工作流示例（CSV 销售数据分析）

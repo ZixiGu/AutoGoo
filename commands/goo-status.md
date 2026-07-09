@@ -9,15 +9,6 @@ description: 显示当前 AutoGoo 任务执行进度 — 优先读取当前 thre
 
 如果用户说“查看所有任务线 / threads / 多个 plan 状态”，运行：
 
-```bash
-python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --threads
-```
-
-如果用户指定 thread id，读取 `.goo/threads/<thread_id>/plan.json`；没有指定时优先读取 `.goo/current_thread.json` 指向的 thread plan，缺失时回退 `.goo/plan.json`。
-
-必须优先运行插件脚本，而不是手写临时渲染逻辑：
-
-```bash
 auto_goo_root="$(
   python3 - <<'PY' 2>/dev/null || true
 import json
@@ -66,6 +57,16 @@ if matches:
     print(sorted(matches)[-1][1])
 PY
 )"
+
+```bash
+python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --threads
+```
+
+如果用户指定 thread id，读取 `.goo/threads/<thread_id>/plan.json`；没有指定时优先读取 `.goo/current_thread.json` 指向的 thread plan，缺失时回退 `.goo/plan.json`。
+
+必须优先运行插件脚本，而不是手写临时渲染逻辑：
+
+```bash
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" ]; then
   echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127

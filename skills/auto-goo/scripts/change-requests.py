@@ -3,6 +3,14 @@
 
 from __future__ import annotations
 
+from _paths import (
+    dump_json,
+    find_config_dir,
+    load_json,
+    now,
+    workspace_path,
+    workspace_paths,
+)
 import argparse
 import json
 from datetime import datetime, timezone
@@ -13,68 +21,18 @@ from typing import Any
 ACTIVE_STATUSES = {"pending_model_update", "needs_revision"}
 DONE_STATUSES = {"completed", "rejected", "superseded"}
 VALID_STATUSES = ACTIVE_STATUSES | DONE_STATUSES | {"in_progress"}
-DEFAULT_WORKSPACE_PATHS = {
-    "change_requests_dir": ".goo/change-requests",
+
+# Allowed state transitions: current_status → {allowed_next_statuses}
+_TRANSITIONS: dict[str, set[str]] = {
+    "pending_model_update": {"in_progress", "rejected", "superseded"},
+    "needs_revision": {"in_progress", "rejected", "superseded"},
+    "in_progress": {"pending_model_update", "needs_revision", "completed", "rejected", "superseded"},
+    "completed": set(),  # terminal
+    "rejected": set(),    # terminal
+    "superseded": set(),  # terminal
 }
 
 
-def now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def dump_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
-
-
-def project_root_from_config_dir(config_dir: Path) -> Path:
-    return config_dir.resolve().parent if config_dir.name == ".goo" else Path.cwd().resolve()
-
-
-def find_config_dir(start: Path) -> Path:
-    resolved = start.resolve()
-    for candidate in [resolved, *resolved.parents]:
-        if candidate.name == ".goo":
-            return candidate
-        if candidate.name == ".goo" and (candidate / "config.json").exists():
-            return candidate
-        config_dir = candidate / ".goo"
-        if (config_dir / "config.json").exists():
-            return config_dir
-    return Path.cwd() / ".goo"
-
-
-def workspace_paths(config_dir: Path) -> dict[str, str]:
-    merged = dict(DEFAULT_WORKSPACE_PATHS)
-    config_path = config_dir / "config.json"
-    if not config_path.exists():
-        return merged
-    try:
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return merged
-    workspace = config.get("workspace") if isinstance(config.get("workspace"), dict) else {}
-    paths = workspace.get("paths") if isinstance(workspace.get("paths"), dict) else {}
-    for key, value in paths.items():
-        if key in merged and value:
-            merged[key] = str(value)
-    return merged
-
-
-def workspace_path(config_dir: Path, key: str) -> Path:
-    raw = Path(workspace_paths(config_dir)[key]).expanduser()
-    if raw.is_absolute():
-        return raw
-    default = DEFAULT_WORKSPACE_PATHS.get(key)
-    if default and raw.as_posix() == default and config_dir.name == ".goo" and not (config_dir / "config.json").exists():
-        return config_dir.resolve() / raw.relative_to(".goo")
-    return project_root_from_config_dir(config_dir) / raw
 
 
 def requests_dir(goo_dir: Path) -> Path:
@@ -140,6 +98,14 @@ def set_status(
         raise SystemExit(f"invalid status: {status}")
     data = load_json(path)
     previous = str(data.get("status") or "pending_model_update")
+    allowed = _TRANSITIONS.get(previous)
+    if allowed is None:
+        raise ValueError(f"unknown previous status: {previous!r}; must be one of {sorted(VALID_STATUSES)}")
+    if status not in allowed:
+        raise ValueError(
+            f"invalid transition: {previous} → {status}; "
+            f"allowed: {sorted(allowed) or 'none (terminal state)'}"
+        )
     data["status"] = status
     data["updated_at"] = now()
     history = data.get("history")

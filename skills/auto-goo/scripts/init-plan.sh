@@ -21,13 +21,13 @@ import json
 import shutil
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 
 def timestamp() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
 
 
 def project_root() -> Path:
@@ -70,7 +70,7 @@ def slugify(value: str, limit: int = 42) -> str:
 
 
 def thread_id_for(task: str, goo_dir: Path) -> str:
-    base = f"tg-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{slugify(task)}"
+    base = f"tg-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{slugify(task)}"
     candidate = base
     index = 1
     while (goo_dir / "threads" / candidate).exists():
@@ -93,7 +93,7 @@ def read_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
 
 
 def write_thread_meta(goo_dir: Path, thread_id: str, task: str, status: str = "planning") -> dict[str, Any]:
-    stamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     thread_dir = goo_dir / "threads" / thread_id
     for child in ("logs", "artifacts", "reports"):
         (thread_dir / child).mkdir(parents=True, exist_ok=True)

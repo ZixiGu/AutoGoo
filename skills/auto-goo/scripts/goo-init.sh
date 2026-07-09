@@ -926,7 +926,7 @@ config = {
         "enabled": True,
         "site_dir": workspace_site_dir,
         "index_file": workspace_index_file,
-        "host": "0.0.0.0",
+        "host": "127.0.0.1",
         "port": 9877,
         "open_browser": True,
         "include_workflow_activity": True,

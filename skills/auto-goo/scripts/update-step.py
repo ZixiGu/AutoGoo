@@ -4,108 +4,30 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
-DEFAULT_WORKSPACE_PATHS = {
-    "threads_dir": ".goo/threads",
-    "logs_dir": ".goo/logs",
-    "compat_plan_file": ".goo/plan.json",
-}
-
-
-def now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def dump_json(path: Path, data: dict[str, Any]) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
+from _paths import (
+    compute_plan_status,
+    dump_json,
+    find_config_dir,
+    load_json,
+    logs_dir_from_plan,
+    now,
+    project_root_from_config_dir,
+    project_root_from_plan,
+    resolve_plan_path,
+    workspace_paths,
+)
 
 
 def safe_name(value: Any, limit: int = 48) -> str:
+    """Convert a value to a safe filename fragment."""
     text = str(value or "step").strip()
     text = re.sub(r"[^\w.\-]+", "_", text, flags=re.UNICODE).strip("_")
     return (text or "step")[:limit]
 
-
-def find_config_dir(start: Path) -> Path | None:
-    resolved = start.resolve()
-    for candidate in [resolved, *resolved.parents]:
-        if candidate.name == ".goo" and (candidate / "config.json").exists():
-            return candidate
-        config_dir = candidate / ".goo"
-        if (config_dir / "config.json").exists():
-            return config_dir
-    return None
-
-
-def workspace_paths(config_dir: Path | None) -> dict[str, str]:
-    merged = dict(DEFAULT_WORKSPACE_PATHS)
-    if not config_dir:
-        return merged
-    try:
-        config = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return merged
-    workspace = config.get("workspace") if isinstance(config.get("workspace"), dict) else {}
-    paths = workspace.get("paths") if isinstance(workspace.get("paths"), dict) else {}
-    for key, value in paths.items():
-        if key in merged and value:
-            merged[key] = str(value)
-    return merged
-
-
-def project_root_from_config_dir(config_dir: Path | None, fallback: Path) -> Path:
-    if config_dir and config_dir.name == ".goo":
-        return config_dir.parent.resolve()
-    return fallback.resolve()
-
-
-def project_root_from_plan(plan_path: Path) -> Path:
-    config_dir = find_config_dir(plan_path)
-    fallback = plan_path.parent.parent.parent.parent if plan_path.parent.parent.name == "threads" else plan_path.parent
-    return project_root_from_config_dir(config_dir, fallback)
-
-
-def resolve_plan_path(value: str) -> Path:
-    plan_path = Path(value)
-    if plan_path.exists() or value != ".goo/plan.json":
-        return plan_path
-    config_dir = find_config_dir(plan_path)
-    paths = workspace_paths(config_dir)
-    raw = Path(paths["compat_plan_file"])
-    if raw.is_absolute():
-        return raw
-    return project_root_from_config_dir(config_dir, Path.cwd()) / raw
-
-
-def logs_dir_from_plan(plan_path: Path) -> Path:
-    parent = plan_path.parent
-    config_dir = find_config_dir(plan_path)
-    project_root = project_root_from_plan(plan_path)
-    paths = workspace_paths(config_dir)
-    threads_dir = Path(paths["threads_dir"])
-    if not threads_dir.is_absolute():
-        threads_dir = project_root / threads_dir
-    try:
-        plan_path.resolve().relative_to(threads_dir.resolve())
-        return parent / "logs"
-    except ValueError:
-        pass
-    logs_dir = Path(paths["logs_dir"])
-    if logs_dir.is_absolute():
-        return logs_dir
-    return project_root / logs_dir
 
 
 def ensure_log_path(plan_path: Path, step: dict[str, Any], stamp: str) -> Path:
@@ -161,36 +83,11 @@ def log_event(plan_path: Path, step: dict[str, Any], stamp: str, action: str, de
     if detail:
         suffix += f" detail={detail}"
     lines.append(f"- {stamp} {action}{suffix}")
-    log_path.write_text(
-        (log_path.read_text(encoding="utf-8") if log_path.exists() else "") + "\n".join(lines) + "\n",
-        encoding="utf-8",
-    )
-
-
-def compute_plan_status(data: dict[str, Any]) -> str:
-    if data.get("status") == "paused":
-        return "paused"
-    steps = data.get("steps", [])
-    if not steps:
-        return "pending"
-    total = len(steps)
-    completed = sum(1 for step in steps if step.get("status") == "completed")
-    failed = sum(1 for step in steps if step.get("status") == "failed")
-    blocked = sum(1 for step in steps if step.get("status") == "blocked")
-    running = sum(1 for step in steps if step.get("status") == "running")
-    if completed == total:
-        return "completed"
-    if blocked:
-        return "blocked"
-    if running:
-        return "running"
-    if failed:
-        return "failed"
-    if completed:
-        return "running"
-    return "pending"
-
-
+    if is_new:
+        log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    else:
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
 def update_plan_status(data: dict[str, Any], stamp: str) -> None:
     new_status = compute_plan_status(data)
     old_status = data.get("status")
@@ -232,6 +129,14 @@ def main() -> int:
     parser.add_argument("--block", action="store_true", help="set status=blocked, optional approval/error summary")
     parser.add_argument("--note", help="append a short step-log note for this update")
     args = parser.parse_args()
+
+    # Mutually exclusive action flags
+    _action_flags = [args.start, args.complete, args.fail, args.block]
+    if sum(bool(f) for f in _action_flags) > 1:
+        raise SystemExit(
+            "only one of --start, --complete, --fail, --block may be used at a time"
+        )
+
 
     plan_path = resolve_plan_path(args.plan)
     data = load_json(plan_path)

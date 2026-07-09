@@ -3,27 +3,23 @@
 
 from __future__ import annotations
 
+from _paths import (
+    compute_plan_status,
+    dump_json,
+    find_config_dir,
+    load_json,
+    now,
+    project_root_from_config_dir,
+    stamp,
+    workspace_path,
+    workspace_paths,
+)
 import argparse
 import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
-
-DEFAULT_WORKSPACE_PATHS = {
-    "threads_dir": ".goo/threads",
-    "current_thread_file": ".goo/current_thread.json",
-    "compat_plan_file": ".goo/plan.json",
-}
-
-
-def now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def stamp() -> str:
-    return datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
 def slugify(value: str, limit: int = 42) -> str:
@@ -33,66 +29,9 @@ def slugify(value: str, limit: int = 42) -> str:
     return (text or "thread")[:limit].strip("-_.") or "thread"
 
 
-def load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
-    if not path.exists():
-        return default
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def dump_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(path)
-
-
-def project_root_from_config_dir(config_dir: Path) -> Path:
-    return config_dir.resolve().parent if config_dir.name == ".goo" else Path.cwd().resolve()
-
-
-def find_config_dir(start: Path | None = None) -> Path:
-    if start:
-        resolved = start.resolve()
-        for candidate in [resolved, *resolved.parents]:
-            if candidate.name == ".goo":
-                return candidate
-            config_dir = candidate / ".goo"
-            if (config_dir / "config.json").exists():
-                return config_dir
-    for candidate in [Path.cwd().resolve(), *Path.cwd().resolve().parents]:
-        if candidate.name == ".goo" and (candidate / "config.json").exists():
-            return candidate
-        config_dir = candidate / ".goo"
-        if (config_dir / "config.json").exists():
-            return config_dir
-    return Path.cwd() / ".goo"
-
-
-def workspace_paths(config_dir: Path) -> dict[str, str]:
-    config = load_json(config_dir / "config.json", {})
-    workspace = config.get("workspace") if isinstance(config.get("workspace"), dict) else {}
-    paths = workspace.get("paths") if isinstance(workspace.get("paths"), dict) else {}
-    merged = dict(DEFAULT_WORKSPACE_PATHS)
-    for key, value in paths.items():
-        if key in merged and value:
-            merged[key] = str(value)
-    return merged
-
-
-def workspace_path(config_dir: Path, key: str) -> Path:
-    paths = workspace_paths(config_dir)
-    raw = Path(paths[key]).expanduser()
-    if raw.is_absolute():
-        return raw
-    default = DEFAULT_WORKSPACE_PATHS.get(key)
-    if default and raw.as_posix() == default and config_dir.name == ".goo" and not (config_dir / "config.json").exists():
-        return config_dir.resolve() / raw.relative_to(".goo")
-    return project_root_from_config_dir(config_dir) / raw
-
-
 def display_path(config_dir: Path, path: Path) -> str:
     try:
-        return path.resolve().relative_to(project_root_from_config_dir(config_dir)).as_posix()
+        return path.resolve().relative_to(project_root_from_config_dir(config_dir, Path.cwd())).as_posix()
     except ValueError:
         return path.as_posix()
 
@@ -109,6 +48,8 @@ def resolve_plan_path(config_dir: Path, value: str) -> Path:
 
 
 def thread_dir(goo_dir: Path, thread_id: str) -> Path:
+    if not thread_id or "/" in thread_id or "\\" in thread_id or ".." in thread_id:
+        raise ValueError(f"invalid thread_id: {thread_id!r}")
     return workspace_path(goo_dir, "threads_dir") / thread_id
 
 
@@ -116,30 +57,6 @@ def current_thread_id(goo_dir: Path) -> str | None:
     data = load_json(workspace_path(goo_dir, "current_thread_file"), {})
     value = data.get("thread_id")
     return str(value) if value else None
-
-
-def compute_plan_status(plan: dict[str, Any]) -> str:
-    if plan.get("status") == "paused":
-        return "paused"
-    steps = [step for step in plan.get("steps", []) if isinstance(step, dict)]
-    if not steps:
-        return str(plan.get("status") or "pending")
-    total = len(steps)
-    completed = sum(1 for step in steps if step.get("status") == "completed")
-    failed = sum(1 for step in steps if step.get("status") == "failed")
-    blocked = sum(1 for step in steps if step.get("status") == "blocked")
-    running = sum(1 for step in steps if step.get("status") == "running")
-    if completed == total:
-        return "completed"
-    if blocked:
-        return "blocked"
-    if running:
-        return "running"
-    if failed:
-        return "failed"
-    if completed:
-        return "running"
-    return "pending"
 
 
 def unique_thread_id(goo_dir: Path, title: str) -> str:

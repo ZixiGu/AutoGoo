@@ -11,12 +11,71 @@ description: 观察 AutoGoo 后台 subagent、shell 日志和 Agent View 使用�
 2. AutoGoo 当前 thread 的 running / blocked / failed step。
 3. 当前 step log 和 shell 长任务日志路径。
 
+## 交互提问
+
+`/auto-goo:goo-observe` 是纯观察命令，无需用户输入目标，但首次使用时应确认观察范围：
+
+- 默认只观察当前 thread（通过 `.goo/current_thread.json` 定位）
+- 如存在多个 thread，可加 `--all-threads` 观察所有活跃线程
+
 ## 行为
 
-必须优先运行插件脚本，而不是手写临时检查：
+必须优先运行插件脚本，而不是手写临时检查。先解析插件根目录，再调用脚本：
 
 ```bash
-python3 "$auto_goo_root/skills/auto-goo/scripts/goo-observe.py" --root .
+auto_gooroot="$(
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+
+home = Path.home()
+matches = []
+
+def usable(path):
+    return path.exists() and not (path / ".orphaned_at").exists()
+
+registry = home / ".claude/plugins/installed_plugins.json"
+if registry.exists():
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    for key, entries in data.get("plugins", {}).items():
+        if key.split("@", 1)[0] != "auto-goo":
+            continue
+        for entry in entries:
+            path = Path(entry.get("installPath", "")).expanduser()
+            if usable(path):
+                matches.append((entry.get("lastUpdated", ""), str(path)))
+
+if not matches:
+    settings = home / ".claude/settings.json"
+    if settings.exists():
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        enabled = data.get("enabledPlugins", {})
+        marketplaces = data.get("extraKnownMarketplaces", {})
+        for key, is_enabled in enabled.items():
+            if not is_enabled or "@" not in key:
+                continue
+            plugin, marketplace = key.split("@", 1)
+            if plugin != "auto-goo":
+                continue
+            source = marketplaces.get(marketplace, {}).get("source", {})
+            if source.get("source") != "directory":
+                continue
+            path_text = source.get("path")
+            if not path_text:
+                continue
+            path = Path(path_text).expanduser()
+            if usable(path):
+                matches.append(("settings:" + marketplace, str(path)))
+
+if matches:
+    print(sorted(matches)[-1][1])
+PY
+)"
+if [ -z "$auto_gooroot" ] || [ ! -f "$auto_gooroot/skills/auto-goo/scripts/goo-observe.py" ]; then
+  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
+  exit 127
+fi
+python3 "$auto_gooroot/skills/auto-goo/scripts/goo-observe.py" --root .
 ```
 
 如果需要给 Web 或其他工具消费，使用：

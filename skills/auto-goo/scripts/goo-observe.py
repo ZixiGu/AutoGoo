@@ -88,8 +88,8 @@ def current_plan(root: Path, config: dict[str, Any]) -> tuple[dict[str, Any] | N
     paths = workspace_paths(config)
     current_path = resolve_path(root, paths["current_thread_file"])
     current = read_json(current_path)
-    if isinstance(current, dict) and current.get("id"):
-        thread_plan = resolve_path(root, paths["threads_dir"]) / str(current["id"]) / "plan.json"
+    if isinstance(current, dict) and current.get("thread_id"):
+        thread_plan = resolve_path(root, paths["threads_dir"]) / str(current["thread_id"]) / "plan.json"
         data = read_json(thread_plan)
         if isinstance(data, dict):
             return data, thread_plan, current

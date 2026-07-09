@@ -193,7 +193,7 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
     "enabled": true,
     "site_dir": ".goo/site",
     "index_file": ".goo/site/index.html",
-    "host": "0.0.0.0",
+    "host": "127.0.0.1",
     "port": 9877,
     "open_browser": true,
     "include_workflow_activity": true,

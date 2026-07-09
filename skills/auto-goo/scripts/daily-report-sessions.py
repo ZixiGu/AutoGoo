@@ -22,7 +22,10 @@ def extract_claude_sessions(date_str):
     session_meta_dir = os.path.join(home, ".claude", "sessions")
 
     # Convert date to timestamps for filtering
-    date_start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    try:
+        date_start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise SystemExit(f"invalid date: {date_str!r}, expected YYYY-MM-DD")
     date_end = datetime(date_start.year, date_start.month, date_start.day, 23, 59, 59, tzinfo=timezone.utc)
     start_ts = int(date_start.timestamp() * 1000)
     end_ts = int(date_end.timestamp() * 1000)
@@ -150,7 +153,10 @@ def _parse_claude_jsonl(fpath):
 def extract_codex_sessions(date_str):
     """Extract summaries from Codex VSCode session files."""
     home = os.path.expanduser("~")
-    year, month, day = date_str.split("-")
+    try:
+        year, month, day = date_str.split("-")
+    except ValueError:
+        return []
     sessions_dir = os.path.join(home, ".codex", "sessions", year, month, day)
 
     if not os.path.isdir(sessions_dir):
@@ -373,4 +379,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

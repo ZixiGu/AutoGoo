@@ -11,9 +11,34 @@ description: 分析 Claude Code usage 与 Goo-wiki 项目知识，找出可落�
 /auto-goo:goo-usage-analyse [项目/时间范围/问题]
 ```
 
+## 交互提问
+
+收到 `/auto-goo:goo-usage-analyse` 后，不要直接运行全量分析，必须先通过交互提问确认分析范围。所有交互问题必须使用 `AskUserQuestion` / 结构化选择 UI 渲染可点击选项；不得只输出标题后等待用户，也不得要求用户手打编号。
+
+1. 第一个问题——分析范围：
+   - header: 分析范围
+   - question: 请选择本次 token 降本分析的范围。
+   - options:
+     - label: 全部项目 (Recommended)
+       description: 扫描所有项目的 usage 数据，找出整体可优化点。
+     - label: 指定项目
+       description: 通过 Other 输入项目名或路径，聚焦单个高耗项目。
+     - label: 近 N 天
+       description: 通过 Other 输入天数（如 7、30），分析近期趋势。
+
+如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，使用以下纯文本 fallback：
+
+```
+请选择分析范围：
+1. 全部项目 (默认)
+2. 指定项目
+3. 近 N 天
+```
+
 ## 行为
 
-1. **Usage 快照** — 调用 `skills/auto-goo/scripts/goo-usage.py` 获取项目、模型、时间段和 token 类型分布。默认先用 `--once --no-color`，需要趋势时再读取 `daily` 或 `monthly` 聚合。
+1. 通过交互提问确认分析范围（见上方）。
+2. **Usage 快照** — 调用 `skills/auto-goo/scripts/goo-usage.py` 获取项目、模型、时间段和 token 类型分布。默认先用 `--once --no-color`，需要趋势时再读取 `daily` 或 `monthly` 聚合。
 2. **Wiki 召回** — 按 AutoGoo 配置优先级解析 Goo-wiki，优先用 `scripts/wiki-graph-assist.py` 检索高耗项目相关的项目页、`log.md`、日报/周报、问题页、流程规范和历史任务页。
 3. **成本归因** — 把 usage 热点和 wiki 信号对齐，识别导致 token 消耗的模式，例如反复读大文档、缺少项目入口页、plan 上下文未沉淀、subagent 输入过宽、重复排查同类问题、日报/归档缺失、模型选择不匹配、cache 命中低。
 4. **节省方案生成** — 输出按优先级排序的节省机会，每项包含依据、预计节省机制、改动位置、验证方式和风险。

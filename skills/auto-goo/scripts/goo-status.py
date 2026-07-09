@@ -3,6 +3,16 @@
 
 from __future__ import annotations
 
+from _paths import (
+    compute_plan_status,
+    dump_json,
+    find_config_dir,
+    load_json,
+    logs_dir_from_plan,
+    project_root_from_config_dir,
+    resolve_plan_path,
+    workspace_paths,
+)
 import argparse
 import json
 import re
@@ -13,18 +23,15 @@ from typing import Any
 WIDTH = 88
 STALE_SECONDS = 120
 LOG_REQUIRED_STATUSES = {"running", "blocked", "failed"}
-DEFAULT_WORKSPACE_PATHS = {
-    "threads_dir": ".goo/threads",
-    "logs_dir": ".goo/logs",
-    "compat_plan_file": ".goo/plan.json",
-}
-
 
 def parse_time(value: str | None) -> datetime | None:
     if not value:
         return None
     raw = value.replace("Z", "+00:00")
     try:
+        # Handle legacy hyphenated format: 2026-05-07T11-10-00
+        if len(raw) == 19 and raw[10] == "T" and raw[13] == "-" and raw[16] == "-":
+            raw = raw[:10] + "T" + raw[11:13] + ":" + raw[14:16] + ":" + raw[17:]
         dt = datetime.fromisoformat(raw)
     except ValueError:
         return None
@@ -49,7 +56,7 @@ def bar(percent: int, width: int = 20) -> str:
 def output_preview(output: str | None) -> str:
     if not output:
         return "..."
-    first = output.split(",")[0].strip()
+    first = output.split(";")[0].strip()
     path = Path(first)
     if path.exists() and path.is_file():
         try:
@@ -92,70 +99,6 @@ def deps_completed(step: dict[str, Any], steps_by_id: dict[str, dict[str, Any]])
 
 def status_of(step: dict[str, Any]) -> str:
     return str(step.get("status", "pending") or "pending")
-
-
-def find_config_dir(start: Path) -> Path | None:
-    resolved = start.resolve()
-    for candidate in [resolved, *resolved.parents]:
-        if candidate.name == ".goo" and (candidate / "config.json").exists():
-            return candidate
-        config_dir = candidate / ".goo"
-        if (config_dir / "config.json").exists():
-            return config_dir
-    return None
-
-
-def project_root_from_config_dir(config_dir: Path | None, fallback: Path) -> Path:
-    if config_dir and config_dir.name == ".goo":
-        return config_dir.parent.resolve()
-    return fallback.resolve()
-
-
-def workspace_paths(config_dir: Path | None) -> dict[str, str]:
-    merged = dict(DEFAULT_WORKSPACE_PATHS)
-    if not config_dir:
-        return merged
-    try:
-        config = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return merged
-    workspace = config.get("workspace") if isinstance(config.get("workspace"), dict) else {}
-    paths = workspace.get("paths") if isinstance(workspace.get("paths"), dict) else {}
-    for key, value in paths.items():
-        if key in merged and value:
-            merged[key] = str(value)
-    return merged
-
-
-def logs_dir_from_plan(plan_path: Path) -> Path:
-    config_dir = find_config_dir(plan_path)
-    fallback_root = plan_path.parent.parent.parent.parent if plan_path.parent.parent.name == "threads" else plan_path.parent
-    project_root = project_root_from_config_dir(config_dir, fallback_root)
-    paths = workspace_paths(config_dir)
-    threads_dir = Path(paths["threads_dir"])
-    if not threads_dir.is_absolute():
-        threads_dir = project_root / threads_dir
-    try:
-        plan_path.resolve().relative_to(threads_dir.resolve())
-        return plan_path.parent / "logs"
-    except ValueError:
-        pass
-    logs_dir = Path(paths["logs_dir"])
-    if logs_dir.is_absolute():
-        return logs_dir
-    return project_root / logs_dir
-
-
-def resolve_plan_path(value: str) -> Path:
-    plan_path = Path(value)
-    if plan_path.exists() or value != ".goo/plan.json":
-        return plan_path
-    config_dir = find_config_dir(plan_path)
-    paths = workspace_paths(config_dir)
-    raw = Path(paths["compat_plan_file"])
-    if raw.is_absolute():
-        return raw
-    return project_root_from_config_dir(config_dir, Path.cwd()) / raw
 
 
 def collect_step_logs(logs_dir: Path) -> dict[str, list[Path]]:
@@ -213,33 +156,6 @@ def print_step_line(prefix: str, step: dict[str, Any], detail: str) -> None:
     print(f"{prefix} {step_id(step):>4}  {name:<30}  {detail}")
 
 
-def compute_plan_status(data: dict[str, Any], steps: list[dict[str, Any]]) -> str:
-    """Compute plan status from steps if not explicitly set."""
-    if data.get("status") == "paused":
-        return data["status"]
-
-    total = len(steps)
-    if total == 0:
-        return "pending"
-
-    completed = sum(1 for s in steps if s.get("status") == "completed")
-    failed = sum(1 for s in steps if s.get("status") == "failed")
-    blocked = sum(1 for s in steps if s.get("status") == "blocked")
-    running = sum(1 for s in steps if s.get("status") == "running")
-
-    if completed == total:
-        return "completed"
-    if blocked > 0:
-        return "blocked"
-    if running > 0:
-        return "running"
-    if failed > 0:
-        return "failed"
-    if completed > 0:
-        return "running"
-    return "pending"
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Render AutoGoo status")
     parser.add_argument("--plan", default=".goo/plan.json", help="plan.json path")
@@ -257,7 +173,9 @@ def main() -> int:
     if not plan_path.exists():
         raise SystemExit(f"plan not found: {plan_path}")
 
-    data = json.loads(plan_path.read_text(encoding="utf-8"))
+    data = load_json(plan_path)
+    if not isinstance(data, dict):
+        raise SystemExit(f"invalid plan: {plan_path}")
     steps = data.get("steps", [])
     steps_by_id = {id_key(step.get("id")): step for step in steps if step.get("id") is not None}
     logs_dir = logs_dir_from_plan(plan_path)
@@ -266,16 +184,14 @@ def main() -> int:
 
     # Auto-update plan status if requested
     if args.update_status:
-        new_status = compute_plan_status(data, steps)
+        new_status = compute_plan_status(data)
         if data.get("status") != new_status:
             data["status"] = new_status
             if new_status == "running" and not data.get("started_at"):
                 data["started_at"] = now.isoformat().replace("+00:00", "Z")
             if new_status in ("completed", "failed"):
                 data["completed_at"] = now.isoformat().replace("+00:00", "Z")
-            tmp = plan_path.with_suffix(plan_path.suffix + ".tmp")
-            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            tmp.replace(plan_path)
+            dump_json(plan_path, data)
         sync_thread_status(plan_path)
 
     total = len(steps)
@@ -291,7 +207,7 @@ def main() -> int:
     avg = round(sum(int(s.get("progress", 100 if s.get("status") == "completed" else 0) or 0) for s in steps) / total) if total else 0
     task = data.get("task", "AutoGoo")
     stored_plan_status = data.get("status")
-    plan_status = compute_plan_status(data, steps)
+    plan_status = compute_plan_status(data)
     max_concurrent = data.get("max_concurrent", data.get("execution", {}).get("max_concurrent", 6))
 
     status_icon = {"pending": "⏳", "running": "▶", "completed": "✅", "failed": "❌", "blocked": "⛔", "paused": "⏸"}.get(plan_status, "?")

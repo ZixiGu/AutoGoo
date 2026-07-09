@@ -54,7 +54,7 @@ def load_json(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise SystemExit(f"brainstorm file not found: {path}") from None
-    except json.JSONDecodeError as exc:
+    except (OSError, json.JSONDecodeError) as exc:
         raise SystemExit(f"invalid JSON: {path}: {exc}") from None
     if not isinstance(data, dict):
         raise SystemExit("brainstorm root must be a JSON object")
