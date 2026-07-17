@@ -70,6 +70,27 @@ PRICE_OUTPUT_FIELDS = {
 }
 
 # Built-in pricing (USD per 1M tokens): input / output / cache_read
+
+# Built-in pricing for Codex/OpenAI models (USD per 1M tokens)
+DEFAULT_CODEX_PRICING: dict[str, tuple[float, float, float]] = {
+    "gpt-5.5":              (15.00, 60.00, 0.10),
+    "gpt-5.4":              (3.00,  15.00, 0.30),
+    "gpt-5.4-mini":         (0.25,  2.00,  0.03),
+    "gpt-5.3-codex":        (3.00,  15.00, 0.30),
+    "gpt-5.2":              (3.00,  15.00, 0.30),
+    "LongCat-2.0":          (0.00,  0.00,  0.00),
+    "gpt-4o":               (2.50,  10.00, 1.25),
+    "gpt-4o-mini":          (0.15,  0.60,  0.08),
+    "gpt-4-turbo":          (10.00, 30.00, 0.10),
+    "o1":                   (15.00, 60.00, 0.10),
+    "o3":                   (2.00,  8.00,  0.10),
+    "o3-mini":              (1.10,  4.40,  0.10),
+}
+
+CODEX_SOURCE_LABELS = {
+    "claude": "Claude Code",
+    "codex":  "Codex CLI",
+}
 DEFAULT_PRICING: dict[str, tuple[float, float, float]] = {
     "claude-opus-4-7":      (15.00, 75.00, 1.50),
     "claude-opus-4-6":      (15.00, 75.00, 1.50),
@@ -311,6 +332,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--serve", action="store_true", help="Start HTTP server with HTML dashboard")
     p.add_argument("--host", default="127.0.0.1", help="HTTP host (default: 127.0.0.1)")
     p.add_argument("--port", type=int, default=9876, help="HTTP server port (default: 9876)")
+    p.add_argument("--codex", action="store_true",
+                   help="Also read Codex CLI usage from ~/.codex/sessions")
+    p.add_argument("--codex-dir", type=Path,
+                   default=Path.home() / ".codex" / "sessions",
+                   help="Codex CLI sessions directory (default: ~/.codex/sessions)")
     return p.parse_args()
 
 
@@ -472,9 +498,78 @@ def iter_records(input_dir: Path, since: str | None, until: str | None):
                 }
 
 
+
+
+def iter_codex_records(sessions_dir: Path, since: str | None, until: str | None):
+    """Read Codex CLI rollout JSONL files and yield normalized usage rows."""
+    if not sessions_dir.exists():
+        return
+    state_db = sessions_dir.parent / "state_5.sqlite"
+    thread_info: dict[str, tuple[str, str]] = {}
+    if state_db.exists():
+        try:
+            import sqlite3 as _sql
+            _conn = _sql.connect(str(state_db))
+            for _r in _conn.execute("SELECT id, cwd, model FROM threads"):
+                thread_info[_r[0]] = (_r[1] or "", _r[2] or "unknown")
+            _conn.close()
+        except Exception:
+            pass
+
+    for jsonl in sorted(sessions_dir.rglob("rollout-*.jsonl")):
+        session_id = None
+        cwd = ""
+        model_name = "unknown"
+        with jsonl.open(encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("type") == "session_meta":
+                    session_id = obj["payload"].get("session_id", "")
+                    _tinfo = thread_info.get(session_id or "", ("", "unknown"))
+                    cwd = _tinfo[0]
+                    model_name = _tinfo[1]
+                    continue
+                if obj.get("type") != "event_msg":
+                    continue
+                if obj["payload"].get("type") != "token_count":
+                    continue
+                info = obj["payload"].get("info") or {}
+                ltu = info.get("last_token_usage") or {}
+                if not ltu:
+                    continue
+                timestamp = obj.get("timestamp", "")
+                if since and timestamp < since:
+                    continue
+                if until and timestamp > until:
+                    continue
+                inp = _safe_int(ltu.get("input_tokens"))
+                out = _safe_int(ltu.get("output_tokens"))
+                cached = _safe_int(ltu.get("cached_input_tokens"))
+                reasoning = _safe_int(ltu.get("reasoning_output_tokens"))
+                pass  # cwd already set from thread_info
+                yield {
+                    "timestamp": timestamp,
+                    "sessionId": f"codex:{session_id}" if session_id else "",
+                    "cwd": cwd,
+                    "model": model_name or "unknown",
+                    "input_tokens": inp,
+                    "output_tokens": out + reasoning,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": cached,
+                    "turnId": timestamp,
+                    "source": "codex",
+                }
+
+
 def load_records(input_dir: Path, since: str | None, until: str | None,
-                 include_synthetic: bool) -> list[dict[str, object]]:
+                 include_synthetic: bool,
+                 codex_dir: Path | None = None) -> list[dict[str, object]]:
     rows = list(iter_records(input_dir, since, until))
+    if codex_dir:
+        rows.extend(iter_codex_records(codex_dir, since, until))
     if not include_synthetic:
         rows = [r for r in rows if str(r.get("model") or "") != "<synthetic>"]
     return rows
@@ -586,7 +681,8 @@ def collect(args: argparse.Namespace, tz: timezone | ZoneInfo) -> tuple[list[dic
     since_dt, until_dt = window_bounds(args, tz)
     since = iso_bound(since_dt)
     until = iso_bound(until_dt)
-    rows = load_records(args.input_dir, since, until, args.include_synthetic)
+    codex_dir = args.codex_dir if getattr(args, "codex", False) else None
+    rows = load_records(args.input_dir, since, until, args.include_synthetic, codex_dir=codex_dir)
     return rows, since, until
 
 
@@ -713,10 +809,12 @@ def aggregate_period(rows: list[dict[str, object]], period: str,
 
 # ── Header / Footer Rendering ────────────────────────────────────────────────
 
-def render_header(tz: timezone | ZoneInfo, time_format: str) -> None:
+def render_header(tz: timezone | ZoneInfo, time_format: str, args=None) -> None:
     now = datetime.now(tz)
     tz_name = getattr(tz, "key", now.tzname() or "local")
-    print(cbold("  ✦ ✧ ✦ ✧  CLAUDE CODE USAGE  ✦ ✧ ✦ ✧", CYAN))
+    _srcs = _active_sources(args) if args is not None else ["claude"]
+    _label = " + ".join(s.upper() for s in _srcs) if len(_srcs) > 1 else _srcs[0].split()[0] if " " in _srcs[0] else _srcs[0]
+    print(cbold(f"  ✦ ✧ ✦ ✧  {_label} USAGE  ✦ ✧ ✦ ✧", CYAN))
     print(c(f"  {now.strftime('%Y-%m-%d')}  │  {tz_name}  │  {format_clock(now, time_format)}", MUTED))
     print()
 
@@ -1028,7 +1126,7 @@ def render(args: argparse.Namespace, tab: str | None = None, pricing=None, tz=No
 
     active_tab = tab or getattr(args, "tab", "overview")
 
-    render_header(tz, args.time_format)
+    render_header(tz, args.time_format, args=args)
     render_tab_bar(active_tab)
     print()
 
@@ -1052,6 +1150,12 @@ def _json_safe(obj):
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
+def _active_sources(args) -> list[str]:
+    srcs = ["claude"]
+    if getattr(args, "codex", False):
+        srcs.append("codex")
+    return srcs
+
 def api_data(args, pricing, tz):
     rows, since, until = collect(args, tz)
     data = summarize(rows, pricing)
@@ -1059,6 +1163,7 @@ def api_data(args, pricing, tz):
     data["until"] = until
     data["updated"] = datetime.now(tz).isoformat()
     data["interval"] = args.interval
+    data["sources"] = _active_sources(args)
     return data
 
 
@@ -1072,7 +1177,8 @@ def api_history(args, pricing, tz, period="7d"):
         since_dt = now - timedelta(days=7)
     since_iso = iso_bound(since_dt)
     until_iso = iso_bound(now)
-    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic)
+    codex_dir = args.codex_dir if getattr(args, "codex", False) else None
+    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic, codex_dir=codex_dir)
     return aggregate_period(all_rows, "daily", pricing, tz)
 
 
