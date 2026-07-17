@@ -1,10 +1,11 @@
 # AutoGoo
 
-![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-Plugin-blue)
-![Version](https://img.shields.io/badge/version-0.3.11-green)
+![Claude Code](https://img.shields.io/badge/Claude%20Code-Plugin-blue)
+![Codex](https://img.shields.io/badge/Codex-Compatible-purple)
+![Version](https://img.shields.io/badge/version-0.4.0-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行计划、并行调用 subagent、记录运行状态，并把结果同步到 Goo-wiki / Obsidian。
+AutoGoo 是一个同时兼容 Claude Code 和 Codex 的智能体编排插件，用来把开放式任务拆成可执行计划、并行调用 subagent、记录运行状态，并把结果同步到 Goo-wiki / Obsidian。
 
 ![AutoGoo workflow](docs/assets/autogoo-workflow.svg)
 
@@ -18,7 +19,9 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 
 ## 安装
 
-### 从 marketplace 安装
+### Claude Code
+
+从 marketplace 安装：
 
 ```text
 /plugin marketplace add ZixiGu/AutoGoo
@@ -27,7 +30,7 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 /reload-plugins
 ```
 
-### 从本地 checkout 安装
+或从本地 checkout 安装：
 
 ```text
 /plugin marketplace add /path/to/AutoGoo
@@ -35,18 +38,61 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 /reload-plugins
 ```
 
-这里 `auto-goo@AutoGoo` 的前半段来自 `.claude-plugin/plugin.json` 的 `name`，后半段来自 `.claude-plugin/marketplace.json` 的 `name`。`/plugin install` 默认安装到用户级；显式 `--scope user` 是为了避免和项目级安装混用。
+> `auto-goo@AutoGoo` 前半段来自 `.claude-plugin/plugin.json` 的 `name`，后半段来自 `.claude-plugin/marketplace.json` 的 `name`。更新旧版本用 `/plugin update auto-goo`。
 
-如果提示 `already installed globally`，说明用户级已安装，直接运行 `/reload-plugins`。如需启用已禁用的用户级插件，在 shell 里运行 `claude plugin enable auto-goo@AutoGoo --scope user`，不要用 `/plugin enable`。
+### Codex
 
-如果已经安装旧版本，先运行：
+```bash
+# 1. 链接插件到标准路径
+mkdir -p ~/plugins && ln -sf /path/to/AutoGoo ~/plugins/auto-goo
 
-```text
-/plugin marketplace update
-/plugin update auto-goo
+# 2. 安装到 Codex
+codex plugin add auto-goo@personal
 ```
 
-## 快速开始
+> 首次使用需确保 `~/.agents/plugins/marketplace.json` 已创建（参见 `.codex-plugin/plugin.json`）。
+
+### Pi Coding Agent
+
+Pi Coding Agent 使用本地扩展方式安装，需要手动配置 `.pi/settings.json`。
+
+**方法一：直接编辑配置文件**
+
+在项目的 `.pi/settings.json` 中添加扩展路径：
+
+```json
+{
+  "extensions": ["/path/to/AutoGoo/.pi/extensions/auto-goo/index.ts"]
+}
+```
+
+**方法二：使用 pi CLI（如果支持）**
+
+```bash
+# 进入项目目录
+cd /path/to/your/project
+
+# 链接 AutoGoo 扩展
+pi extension add /path/to/AutoGoo/.pi/extensions/auto-goo
+```
+
+**方法三：全局配置**
+
+在用户级 `~/.pi/settings.json` 中添加，所有项目可用：
+
+```json
+{
+  "extensions": ["/path/to/AutoGoo/.pi/extensions/auto-goo/index.ts"]
+}
+```
+
+> Pi 扩展版本：**v0.4.0**。使用 Pi 原生 API（`ctx.ui`、自定义工具、事件系统）。
+
+## 在 Claude Code 中使用
+
+通过 slash command 触发，命令前有 `/auto-goo:` 前缀。
+
+### 快速开始
 
 ```text
 /auto-goo:goo-init --user
@@ -58,15 +104,7 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 /auto-goo:goo-continue
 ```
 
-常见节奏：
-
-1. `goo-init` 创建用户级或项目级配置。
-2. `goo-plan` 自动询问继续当前 thread 还是新建 thread，并生成计划。
-3. `goo-start` 执行已确认计划。
-4. `goo-status` 查看状态、日志和阻塞项。
-5. `goo-continue` 从当前状态续跑。
-
-## 常用命令
+### 常用命令
 
 | 命令 | 用途 |
 | --- | --- |
@@ -84,11 +122,83 @@ AutoGoo 是一个 Claude Code 插件，用来把开放式任务拆成可执行�
 | [`goo-benchmark`](commands/goo-benchmark.md) | 记录任务质量基线。 |
 | [`goo-improve`](commands/goo-improve.md) | 根据历史记录改进流程。 |
 
+### 典型工作流
+
+```
+1. /auto-goo:goo-init --project           → 创建 .goo/config.json
+2. /auto-goo:goo-plan "整理成可发布状态"    → 生成 .goo/plan.json
+3. /auto-goo:goo-start                    → 按 DAG 并行/串行调度 subagent
+4. /auto-goo:goo-status                   → 查看 plan 状态、日志、阻塞项
+5. /auto-goo:goo-continue                 → 从中断处续跑
+```
+
+## 在 Codex 中使用
+
+通过自然语言描述触发 AutoGoo skill，不需要记忆命令名。
+
+### 常用场景
+
+| 你想做什么 | 在 Codex 中这样说 |
+| --- | --- |
+| 初始化配置 | `帮我初始化 AutoGoo 用户级配置` |
+| 发散方案 | `帮我对 <方向> 做 brainstorm` |
+| 制定计划 | `帮我规划一下：<任务描述>` |
+| 执行计划 | `开始执行当前计划` |
+| 查看状态 | `当前计划进度怎么样？` |
+| 继续任务 | `继续上次的任务` |
+| 后台观察 | `观察一下后台 subagent 的状态` |
+| 发布 HTML | `把当前工作流状态发布成 HTML 页面` |
+| 研究归档 | `调研 <主题> 并归档到 Goo-wiki` |
+| 用量分析 | `分析一下最近的 token 用量和成本` |
+| 生成日报 | `生成今天的日报` |
+| 流程改进 | `根据历史任务改进 AutoGoo 流程` |
+
+### 典型工作流
+
+```
+1. "帮我初始化 AutoGoo 项目级配置"        → 创建 .goo/config.json
+2. "帮我规划一下：把项目整理成可发布状态"  → 生成 .goo/plan.json
+3. "开始执行"                             → 按 DAG 并行/串行调度 subagent
+4. "看看进度"                             → 查看 plan 状态、日志、阻塞项
+5. "继续"                                 → 从中断处续跑
+```
+
+## 在 Pi Coding Agent 中使用
+
+通过 `/auto-goo:goo-xxx` 或 `/goo-xxx` 命令触发，由 Pi 扩展拦截并路由到对应 handler。
+
+### 快速开始
+
+```text
+/goo-init
+/goo-plan "把当前项目整理成可执行发布计划"
+/goo-start
+/goo-status
+/goo-continue
+```
+
+### 与 Claude Code 版本的区别
+
+Pi 扩展使用原生 API 注册自定义工具（`auto_goo_execute`、`auto_goo_dispatch`、`auto_goo_worktree_*` 等），所有平台差异封装在工具内部，model 不需要检测平台。支持 `ctx.ui.select/confirm/input` 作为用户交互，支持 `session_start`/`session_shutdown` hooks。
+
+## 平台对比
+
+| 功能 | Claude Code | Codex | Pi Coding Agent |
+| --- | --- | --- | --- |
+| 安装方式 | `/plugin install` | `codex plugin add` | `.pi/settings.json` |
+| 命令触发 | `/auto-goo:goo-init` slash command | 自然语言，skill 自动匹配 | `/goo-xxx` 或 `/auto-goo:goo-xxx` |
+| 用户交互 | `AskUserQuestion` | `request_user_input`（仅 Plan mode）或纯文本 fallback | `ctx.ui.select/confirm/input` |
+| Subagent 派发 | `Agent` 工具 | `spawn_agent` + `wait_agent` | `pi.registerTool` 自定义工具 |
+| Worktree 隔离 | 支持（`isolation: "worktree"`） | 不支持，自动降级 `mode="none"` | 支持（`auto_goo_worktree_*` 工具） |
+| Hooks | `SessionStart` 等 | 不支持 | `session_start`/`session_shutdown` |
+| 自定义工具 | 无（依赖平台工具） | 无（依赖平台工具） | 13 个注册工具 |
+| 交互控件 | 方向键 + Enter | Plan mode 结构化 / Default mode 纯文本 | `ctx.ui` 原生控件 |
+
 ## 核心约定
 
 - **Thread 状态**：每条任务线保存在 `.goo/threads/<thread_id>/`；兼容入口 `.goo/plan.json` 指向当前 thread 的 active plan。
 - **计划状态**：plan 是任务执行的源头，步骤状态包括 `pending`、`running`、`completed`、`blocked`、`failed`。
-- **用户确认**：涉及范围、方案、优先级或不可自动决定的选项时，优先用 `AskUserQuestion` 的固定选项模板。
+- **用户确认**：涉及范围、方案、优先级或不可自动决定的选项时，优先用结构化选择 UI 的固定选项模板。
 - **并行执行**：同层级且互不依赖的步骤会优先并行；串行依赖需要在计划里写明原因。
 - **日志记录**：subagent 的过程信息写入当前 thread 的 `logs/`，前台只展示摘要、阻塞和下一步。
 - **归档记忆**：默认写入 Goo-wiki；没有配置时回退到 `.goo/obsidian/`。
@@ -171,13 +281,13 @@ bash skills/auto-goo/scripts/check-plugin.sh
 
 ## 运行要求
 
-- Claude Code 支持插件和 slash command。
+- Claude Code 或 Codex 环境。
 - 本机可运行 `bash`、`python3`、`git`。
 - 使用 Goo-wiki 时，需要配置 `wiki_dir` 或让 AutoGoo 回退到 `.goo/obsidian/`。
 
 ## 版本
 
-当前版本：**v0.3.11**。
+当前版本：**v0.4.0**。
 
 ## 许可证
 
