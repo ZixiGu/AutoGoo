@@ -1,0 +1,39 @@
+{
+  "name": "auto-goo",
+  "version": "0.4.0",
+  "description": "AutoGoo 自动化智能体编排框架。接收任务后自动解析为 DAG，按依赖关系并行/串行执行，性能场景自动优化迭代，结果归档到 Goo-wiki Obsidian vault。",
+  "author": {
+    "name": "zixigu"
+  },
+  "homepage": "https://github.com/ZixiGu/AutoGoo",
+  "repository": "https://github.com/ZixiGu/AutoGoo",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "orchestration",
+    "dag",
+    "planning",
+    "obsidian",
+    "goo-wiki",
+    "subagent"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AutoGoo",
+    "shortDescription": "DAG 驱动的多智能体编排框架，支持并行执行、状态跟踪与 Goo-wiki 归档",
+    "longDescription": "AutoGoo 把开放式任务拆成 DAG 计划，按依赖关系并行/串行调度 Subagent 执行，支持性能优化迭代、后台状态观察、HTML 发布，以及将决策和产物归档到 Goo-wiki Obsidian vault。兼容 Claude Code 与 Codex。",
+    "developerName": "zixigu",
+    "category": "Workflow",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "帮我规划一个复杂任务并分步执行",
+      "分析当前项目状态并生成日报",
+      "启动一个多步骤的调研+实现工作流"
+    ],
+    "websiteURL": "https://github.com/ZixiGu/AutoGoo"
+  }
+}
