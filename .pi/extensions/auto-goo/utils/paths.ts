@@ -1,0 +1,238 @@
+/**
+ * AutoGoo Pi Extension — Path resolution utilities.
+ *
+ * Locates the AutoGoo repo root, Python scripts, templates, and runtime
+ * directories from within the extension's own location.
+ */
+
+import { existsSync } from "node:fs";
+import { readFile, access } from "node:fs/promises";
+import { resolve, dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// ── Extension location ──────────────────────────────────────────────────────
+
+const _dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * AutoGoo repo root, derived from the extension's location:
+ *   <repo>/.pi/extensions/auto-goo/  →  <repo>/
+ */
+export const REPO_ROOT = resolve(_dirname, "../../../..");
+
+/**
+ * Whether the resolved REPO_ROOT looks like the actual AutoGoo repo.
+ */
+export function isRepoValid(): boolean {
+  return (
+    existsSync(join(REPO_ROOT, "skills/auto-goo/scripts/_paths.py")) &&
+    existsSync(join(REPO_ROOT, ".pi/extensions/auto-goo"))
+  );
+}
+
+/** Python scripts directory. */
+export function scriptsDir(): string {
+  return join(REPO_ROOT, "skills/auto-goo/scripts");
+}
+
+/** Resolve a Python script path, verifying it exists. */
+export function scriptPath(name: string): string {
+  const p = join(scriptsDir(), name);
+  if (!existsSync(p)) {
+    throw new Error(`AutoGoo script not found: ${p}`);
+  }
+  return p;
+}
+
+/** Update-step.py path. */
+export const UPDATE_STEP_PY = scriptPath("update-step.py");
+
+/** Goo-status.py path. */
+export const GOO_STATUS_PY = scriptPath("goo-status.py");
+
+/** Resolve-root.sh path. */
+export const RESOLVE_ROOT_SH = scriptPath("resolve-root.sh");
+
+/** Thread-state.py path. */
+export const THREAD_STATE_PY = scriptPath("thread-state.py");
+
+/** Remote-resources.py path. */
+export const REMOTE_RESOURCES_PY = scriptPath("remote-resources.py");
+
+/** Wiki-graph-assist.py path. */
+export const WIKI_GRAPH_ASSIST_PY = scriptPath("wiki-graph-assist.py");
+
+/** Goo-publish.py path. */
+export const GOO_PUBLISH_PY = scriptPath("goo-publish.py");
+
+/** References directory. */
+export function referencesDir(): string {
+  return join(REPO_ROOT, "skills/auto-goo/references");
+}
+
+/** Templates directory. */
+export function templatesDir(): string {
+  return join(REPO_ROOT, "skills/auto-goo/templates");
+}
+
+/** Publish templates directory. */
+export function publishTemplatesDir(): string {
+  return join(REPO_ROOT, "skills/auto-goo/templates/publish");
+}
+
+// ── Run-time project paths (relative to ctx.cwd) ───────────────────────────
+
+export function projectGooDir(cwd: string): string {
+  return join(cwd, ".goo");
+}
+
+export function projectConfigPath(cwd: string): string {
+  return join(cwd, ".goo/config.json");
+}
+
+export function projectPlanPath(cwd: string): string {
+  return join(cwd, ".goo/plan.json");
+}
+
+export function projectBrainstormPath(cwd: string): string {
+  return join(cwd, ".goo/brainstorm.json");
+}
+
+export function projectCurrentThreadPath(cwd: string): string {
+  return join(cwd, ".goo/current_thread.json");
+}
+
+export function projectThreadsDir(cwd: string): string {
+  return join(cwd, ".goo/threads");
+}
+
+export function projectThreadDir(cwd: string, threadId: string): string {
+  return join(cwd, `.goo/threads/${threadId}`);
+}
+
+export function projectPlansHistoryDir(cwd: string): string {
+  return join(cwd, ".goo/plans/history");
+}
+
+export function projectLogsDir(cwd: string): string {
+  return join(cwd, ".goo/logs");
+}
+
+export function projectObsidianDir(cwd: string): string {
+  return join(cwd, ".goo/obsidian");
+}
+
+export function projectSecretsPath(cwd: string): string {
+  return join(cwd, ".goo/secrets.json");
+}
+
+export function userConfigPath(): string {
+  return join(process.env.HOME || "~", ".auto-goo/config.json");
+}
+
+export function userConfigDir(): string {
+  return join(process.env.HOME || "~", ".auto-goo");
+}
+
+// ── Config loading ──────────────────────────────────────────────────────────
+
+export interface AutoGooConfig {
+  version?: number;
+  wiki_dir?: string;
+  wiki?: { search_paths?: string[] };
+  archive?: {
+    enabled?: boolean;
+    fallback_dir?: string;
+    plan_history_dir?: string;
+    project_slug?: string;
+    project_dir?: string;
+    fallback_project_dir?: string;
+    git_remote_url?: string;
+  };
+  workspace?: {
+    root?: string;
+    layout?: string;
+    paths?: Record<string, string>;
+  };
+  project_workspace?: {
+    layout?: string;
+    dirs?: string[];
+  };
+  publish?: {
+    enabled?: boolean;
+    site_dir?: string;
+    host?: string;
+    port?: number;
+    open_browser?: boolean;
+  };
+  execution?: {
+    max_concurrent?: number;
+    heartbeat_seconds?: number;
+    stale_after_seconds?: number;
+  };
+  planning?: {
+    recall_wiki?: boolean;
+    require_wiki_context?: boolean;
+  };
+  init?: {
+    prompt_for_scope?: boolean;
+    prompt_for_wiki_dir?: boolean;
+  };
+  servers?: Array<{
+    name: string;
+    host: string;
+    ip?: string;
+    port: number;
+    user: string;
+    type: "cpu" | "gpu";
+    purpose: string;
+    defaults?: {
+      workdir?: string;
+      setup_commands?: string[];
+      paths?: { data_dir?: string; artifacts_dir?: string };
+    };
+    secrets_file?: string;
+  }>;
+}
+
+export async function loadProjectConfig(cwd: string): Promise<AutoGooConfig | null> {
+  const p = projectConfigPath(cwd);
+  try {
+    await access(p);
+    const raw = await readFile(p, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export async function loadUserConfig(): Promise<AutoGooConfig | null> {
+  const p = userConfigPath();
+  try {
+    await access(p);
+    const raw = await readFile(p, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve wiki directory by priority:
+ * 1. env AUTO_GOO_WIKI_DIR
+ * 2. project config wiki_dir
+ * 3. user config wiki_dir
+ * 4. default ~/workspace/Goo-wiki
+ */
+export async function resolveWikiDir(cwd: string): Promise<string> {
+  const envDir = process.env.AUTO_GOO_WIKI_DIR;
+  if (envDir) return envDir;
+
+  const projectConfig = await loadProjectConfig(cwd);
+  if (projectConfig?.wiki_dir) return projectConfig.wiki_dir;
+
+  const userConfig = await loadUserConfig();
+  if (userConfig?.wiki_dir) return userConfig.wiki_dir;
+
+  return join(process.env.HOME || "~", "workspace/Goo-wiki");
+}

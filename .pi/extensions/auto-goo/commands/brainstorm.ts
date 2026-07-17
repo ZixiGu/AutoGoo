@@ -1,0 +1,142 @@
+/**
+ * AutoGoo goo-brainstorm — 候选目标生成
+ *
+ * 当用户目标不明确时，基于 Goo-wiki 和项目上下文
+ * 生成 5-9 个候选目标，合并为 3-7 个最终候选，
+ * 写入 .goo/brainstorm.json 等待用户选择。
+ */
+
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { execShell } from "../utils/exec.js";
+import {
+  loadPlan,
+  savePlan,
+  archiveOldPlan,
+  getCurrentThreadId,
+  setCurrentThreadId,
+  generateThreadId,
+  generateTimestamp,
+  type Plan,
+} from "../utils/plan.js";
+import {
+  REPO_ROOT,
+  projectBrainstormPath,
+  projectPlanPath,
+  resolveWikiDir,
+} from "../utils/paths.js";
+import { existsSync, readFileSync } from "node:fs";
+import { writeFile, mkdir, readFile, copyFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+
+export async function handleGooBrainstorm(direction: string, ctx: ExtensionContext): Promise<void> {
+  const cwd = ctx.cwd;
+
+  if (!direction?.trim()) {
+    ctx.ui.notify("请输入头脑风暴的方向、项目或问题。例如：/auto-goo:goo-brainstorm 项目优化方向", "warning");
+    return;
+  }
+
+  // 1. Wiki recall
+  ctx.ui.notify("正在检索 Goo-wiki 项目经验和上下文...", "info");
+  const wikiContext = await recallWikiContext(cwd, direction, ctx);
+
+  // 2. Present to user — the LLM handles the actual brainstorm generation
+  ctx.ui.notify(`头脑风暴方向: ${direction}`, "info");
+
+  // 3. Set up editor with brainstorm prompt
+  const wikiSummary = wikiContext.sources.length > 0
+    ? `\n\n## 相关 Wiki 上下文\n${wikiContext.sources.map((s: string) => `- ${s}`).join("\n")}\n\n${wikiContext.knowledge.map((k: string) => `- ${k}`).join("\n")}`
+    : "";
+
+  ctx.ui.setEditorText(
+    `## AutoGoo Brainstorm: ${direction}\n` +
+    `\n请基于以下方向进行头脑风暴，生成候选目标列表：\n\n` +
+    `**方向**: ${direction}\n` +
+    `${wikiSummary}\n\n` +
+    `### 要求\n` +
+    `1. 先生成 5-9 个初始候选方向，覆盖快速交付、长期架构、风险/债务、评测验证、文档知识、自动化工具化、用户体验流程改进、低成本试探\n` +
+    `2. 合并去重为 3-7 个最终候选\n` +
+    `3. 每个候选包含：id、name、why（为什么值得做）、expected_output（交付物）、acceptance_criteria（验收标准）、risk（风险）、prerequisites（前置条件）、first_step（第一步动作）\n` +
+    `4. 输出为 JSON 格式，写入 .goo/brainstorm.json\n` +
+    `5. 在聊天中向用户展示候选列表，等待用户选择后再进入 goo-plan 阶段`
+  );
+}
+
+// ── Wiki recall helper ──────────────────────────────────────────────────────
+
+async function recallWikiContext(
+  cwd: string,
+  direction: string,
+  ctx: ExtensionContext,
+): Promise<{ sources: string[]; knowledge: string[] }> {
+  const sources: string[] = [];
+  const knowledge: string[] = [];
+
+  // Check Goo-wiki
+  const wikiDir = await resolveWikiDir(cwd);
+  if (existsSync(wikiDir)) {
+    // Search wiki/projects/
+    const projectsDir = join(wikiDir, "wiki/projects");
+    if (existsSync(projectsDir)) {
+      try {
+        const { readdir } = await import("node:fs/promises");
+        const projects = await readdir(projectsDir, { withFileTypes: true });
+        for (const p of projects) {
+          if (p.isDirectory()) {
+            sources.push(`wiki/projects/${p.name}/`);
+            // Check for index/project file
+            const projFile = join(projectsDir, p.name, `${p.name}.md`);
+            if (existsSync(projFile)) {
+              const content = readFileSync(projFile, "utf-8").slice(0, 500);
+              if (content.toLowerCase().includes(direction.toLowerCase())) {
+                knowledge.push(`项目 ${p.name}: 相关内容匹配`);
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Search wiki/concepts/
+    const conceptsDir = join(wikiDir, "wiki/concepts");
+    if (existsSync(conceptsDir)) {
+      try {
+        const { readdir } = await import("node:fs/promises");
+        const concepts = await readdir(conceptsDir);
+        for (const c of concepts) {
+          if (c.endsWith(".md")) {
+            const content = readFileSync(join(conceptsDir, c), "utf-8").slice(0, 500);
+            if (content.toLowerCase().includes(direction.toLowerCase())) {
+              knowledge.push(`概念 ${c.replace(".md", "")}: 相关内容匹配`);
+              sources.push(`wiki/concepts/${c}`);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Check weekly journals
+    const weeklyDir = join(wikiDir, "journal/weekly");
+    if (existsSync(weeklyDir)) {
+      sources.push("journal/weekly/");
+    }
+  }
+
+  // Check existing brainstorm.json
+  const bsPath = projectBrainstormPath(cwd);
+  if (existsSync(bsPath)) {
+    sources.push(".goo/brainstorm.json (已有候选)");
+    try {
+      const bs = JSON.parse(readFileSync(bsPath, "utf-8"));
+      if (bs.candidate_goals?.length) {
+        knowledge.push(`已有 ${bs.candidate_goals.length} 个候选目标`);
+      }
+    } catch {}
+  }
+
+  if (sources.length === 0) {
+    knowledge.push("未找到相关 Goo-wiki 上下文");
+  }
+
+  return { sources, knowledge };
+}
