@@ -1,6 +1,6 @@
 ---
 name: codebase-scout
-description: "AutoGoo 代码库侦察 Task Agent。快速摸清入口、调用链、目录结构和现有实现模式，只读分析，不修改代码。"
+description: "AutoGoo-Plugin 代码库侦察 Task Agent。快速摸清入口、调用链、目录结构和现有实现模式，只读分析，不修改代码。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default

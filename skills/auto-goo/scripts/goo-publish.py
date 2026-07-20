@@ -76,7 +76,7 @@ def load_observe_module():
     path = Path(__file__).with_name("goo-observe.py")
     if not path.exists():
         return None
-    spec = importlib.util.spec_from_file_location("autogoo_observe", path)
+    spec = importlib.util.spec_from_file_location("autogoo_plugin_observe", path)
     if spec is None or spec.loader is None:
         return None
     module = importlib.util.module_from_spec(spec)
@@ -414,7 +414,7 @@ def save_change_request(root: Path, config: dict[str, Any], data: dict[str, Any]
         "title": title,
         "request": request,
         "status": "pending_model_update",
-        "source": "autogoo-publish-web",
+        "source": "autogoo-plugin-publish-web",
         "created_at": created,
     }
     folder = workspace_path(root, config, "change_requests_dir")
@@ -1858,7 +1858,7 @@ def nav_script() -> str:
     const themeToggle = document.getElementById("themeToggle");
     function applyTheme(theme) {
       document.documentElement.dataset.theme = theme;
-      localStorage.setItem("autogoo-workflow-theme", theme);
+      localStorage.setItem("autogoo-plugin-workflow-theme", theme);
       if (themeToggle) {
         const isDark = theme === "dark";
         themeToggle.textContent = isDark ? "☼" : "☾";
@@ -1866,7 +1866,7 @@ def nav_script() -> str:
         themeToggle.setAttribute("title", isDark ? "切换浅色模式" : "切换深色模式");
       }
     }
-    applyTheme(localStorage.getItem("autogoo-workflow-theme") || "light");
+    applyTheme(localStorage.getItem("autogoo-plugin-workflow-theme") || "light");
     function tick() {
       if (!clock) return;
       const now = new Date();
@@ -2169,7 +2169,7 @@ def nav_script() -> str:
           request: data.request || "",
           target_ref: data.target_ref || selectedTarget || "",
           status: "pending_model_update",
-          source: "autogoo-publish-web",
+          source: "autogoo-plugin-publish-web",
           created_at: new Date().toISOString()
         };
       };

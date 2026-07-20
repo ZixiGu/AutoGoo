@@ -1,6 +1,6 @@
 ---
 name: bug-fixer
-description: "AutoGoo 缺陷修复 Task Agent。复现问题、定位根因并做局部修复，重点防止回归。"
+description: "AutoGoo-Plugin 缺陷修复 Task Agent。复现问题、定位根因并做局部修复，重点防止回归。"
 tools: Read, Grep, Glob, Bash, Edit, MultiEdit, Write, AskUserQuestion
 model: haiku
 permissionMode: default

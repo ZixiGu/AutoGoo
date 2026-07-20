@@ -1,6 +1,6 @@
 ---
 name: workflow-optimizer
-description: "AutoGoo 工作流优化 Task Agent。优化 plan DAG、并发顺序、阻塞点和有限反馈闭环。"
+description: "AutoGoo-Plugin 工作流优化 Task Agent。优化 plan DAG、并发顺序、阻塞点和有限反馈闭环。"
 tools: Read, Grep, Glob, Bash, Edit, AskUserQuestion
 model: haiku
 permissionMode: default
@@ -14,7 +14,7 @@ color: orange
 
 父级 Role Agent：`optimizer`。
 
-用于优化 AutoGoo 计划结构、并发调度和流程摩擦。
+用于优化 AutoGoo-Plugin 计划结构、并发调度和流程摩擦。
 
 ## 职责
 

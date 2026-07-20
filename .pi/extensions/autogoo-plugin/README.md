@@ -1,6 +1,6 @@
-# AutoGoo Pi 扩展
+# AutoGoo-Plugin Pi 扩展
 
-AutoGoo 是一个 DAG 驱动的多智能体编排框架，已移植为 [Pi Coding Agent](https://pi.dev) 扩展。
+AutoGoo-Plugin 是一个 DAG 驱动的多智能体编排框架，已移植为 [Pi Coding Agent](https://pi.dev) 扩展。
 
 任务自动解析为 DAG，按依赖关系并行/串行执行 Subagent，结果归档到 Goo-wiki。
 
@@ -9,21 +9,21 @@ AutoGoo 是一个 DAG 驱动的多智能体编排框架，已移植为 [Pi Codin
 ### 方式一：全局软链接
 
 ```bash
-ln -sf /path/to/AutoGoo/.pi/extensions/auto-goo ~/.pi/agent/extensions/auto-goo
+ln -sf /path/to/AutoGoo-Plugin/.pi/extensions/auto-goo ~/.pi/agent/extensions/auto-goo
 ```
 
 ### 方式二：pi install
 
 ```bash
-pi install git:github.com/ZixiGu/AutoGoo
+pi install git:github.com/ZixiGu/AutoGoo-Plugin
 # 或本地路径
-pi install /path/to/AutoGoo
+pi install /path/to/AutoGoo-Plugin
 ```
 
 ### 方式三：项目自动发现
 
 ```bash
-cd /path/to/AutoGoo
+cd /path/to/AutoGoo-Plugin
 pi  # 自动加载 .pi/extensions/auto-goo/
 ```
 
@@ -47,7 +47,7 @@ pi
 
 | 命令 | 用途 |
 | --- | --- |
-| `goo-init` | 交互式初始化 AutoGoo 配置 |
+| `goo-init` | 交互式初始化 AutoGoo-Plugin 配置 |
 | `goo-brainstorm` | 目标不明确时生成候选目标 |
 | `goo-plan` | 生成 DAG 执行计划（含 wiki 召回） |
 | `goo-start` | 执行当前 DAG 计划 |
@@ -59,7 +59,7 @@ pi
 | `goo-usage` | 查看 token/usage 统计 |
 | `goo-usage-analyse` | 分析 token 消耗并生成降本方案 |
 | `goo-daily-report` | 生成日报/周报 |
-| `goo-improve` | AutoGoo 自改进审查 |
+| `goo-improve` | AutoGoo-Plugin 自改进审查 |
 | `goo-benchmark` | 启动性能评测与优化迭代 |
 
 ## 自定义工具（13 个）
@@ -80,7 +80,7 @@ LLM 在执行 DAG 时可调用的工具：
 | `auto_goo_ssh_status` | 检查远程服务器连通性和资源 |
 | `auto_goo_worktree_create` | 创建 Git worktree 执行隔离 |
 | `auto_goo_worktree_merge` | 合并 worktree 改动回主分支 |
-| `auto_goo_worktree_cleanup` | 清理所有 AutoGoo worktree |
+| `auto_goo_worktree_cleanup` | 清理所有 AutoGoo-Plugin worktree |
 
 ## 状态栏说明
 

@@ -1,6 +1,6 @@
 ---
 name: auditor
-description: "AutoGoo 审计 Role Agent。独立检查安全、合规、证据链、可追溯性和交付风险，不直接修改业务实现。"
+description: "AutoGoo-Plugin 审计 Role Agent。独立检查安全、合规、证据链、可追溯性和交付风险，不直接修改业务实现。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default

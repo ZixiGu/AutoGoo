@@ -1,6 +1,6 @@
 # 插件自改进 (Self-Improvement)
 
-AutoGoo 插件应当根据实际使用情况持续优化自身。本文件定义了自改进的触发条件、流程和决策规则。
+AutoGoo-Plugin 插件应当根据实际使用情况持续优化自身。本文件定义了自改进的触发条件、流程和决策规则。
 
 ## 核心理念
 
@@ -35,7 +35,7 @@ AutoGoo 插件应当根据实际使用情况持续优化自身。本文件定义
 
 ```
 /auto-goo:goo-improve
-优化AutoGoo
+优化AutoGoo-Plugin
 自改进
 ```
 

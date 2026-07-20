@@ -1,10 +1,10 @@
-# AutoGoo 环境设置
+# AutoGoo-Plugin 环境设置
 
 ## Goo-wiki Obsidian Vault
 
 Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文件存在性检测 vault 是否可用。
 
-**非 Git 项目支持**：AutoGoo 完全支持非 Git 项目。所有 Git 相关功能（如记录 remote 地址）都是可选的，仅在项目是 Git repo 时启用。非 Git 项目不会收到任何 Git 相关的错误或警告。
+**非 Git 项目支持**：AutoGoo-Plugin 完全支持非 Git 项目。所有 Git 相关功能（如记录 remote 地址）都是可选的，仅在项目是 Git repo 时启用。非 Git 项目不会收到任何 Git 相关的错误或警告。
 
 **推荐初始化命令**：
 
@@ -23,7 +23,7 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 
 业务目录创建后，如果项目根目录已经有内容，主 Agent 必须只读扫描并排除 `.goo/`、`.git/`、`.claude/`、已创建业务目录、secrets、锁文件和隐藏配置。发现可归类到 `src/`、`data/`、`docs/`、`scripts/`、`configs/`、`tests/` 等业务路径的现有内容时，必须先复用 `id=project_workspace_organize_existing` 模板询问是否生成整理方案；默认不整理。用户选择生成方案后，只展示移动建议，不直接移动；清单必须包含源路径、目标路径、归类理由、冲突/覆盖风险和跳过项。随后必须复用 `id=project_workspace_apply_organization` 模板二次确认，只有用户选择执行后才允许按清单移动；遇到目标已存在、敏感文件、不确定归类或批量大文件时停止并重新确认。脚本默认只创建目录，不自动整理已有内容。
 
-底层写入仍由初始化脚本完成，但只有在用户已确认所有参数后才运行脚本。命令文档不得在交互前执行 root 解析；不得内联 heredoc / file redirection 的 Python 片段。最终落盘阶段先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-init.sh --user|--project --wiki-dir <已确认路径> ...`。如果用户配置远程服务器，主 Agent 把非敏感参数追加为可重复的 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`；密码不得作为参数传入。
+底层写入仍由初始化脚本完成，但只有在用户已确认所有参数后才运行脚本。命令文档不得在交互前执行 root 解析；不得内联 heredoc / file redirection 的 Python 片段。最终落盘阶段先通过插件内置 root resolver 取得 AutoGoo-Plugin 根目录，再运行 `skills/auto-goo/scripts/goo-init.sh --user|--project --wiki-dir <已确认路径> ...`。如果用户配置远程服务器，主 Agent 把非敏感参数追加为可重复的 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>'`；密码不得作为参数传入。
 
 主 Agent 应优先自己提问，而不是要求用户进入 Bash 交互。必须先用 `AskUserQuestion` 问用户作用域和 wiki 路径，并在问题中展示默认路径 `~/workspace/Goo-wiki`；用户不输入路径时使用默认路径。随后显式传入 `--user/--project` 与 `--wiki-dir <路径>`；不得默认写入项目配置，也不得在未展示默认路径的情况下静默使用默认 wiki 路径。
 
@@ -63,7 +63,7 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 
 **路径解析优先级**：
 
-1. 环境变量 `AUTO_GOO_WIKI_DIR`
+1. 环境变量 `AUTOGOO_PLUGIN_WIKI_DIR`
 2. 当前项目 `.goo/config.json` 中的 `wiki_dir`
 3. 用户级 `~/.auto-goo/config.json` 中的 `wiki_dir`
 4. 默认路径 `~/workspace/Goo-wiki`
@@ -79,7 +79,7 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 
 ## 项目归档根路径
 
-项目级初始化使用 Goo-wiki 时，AutoGoo 会创建或复用项目归档根目录：
+项目级初始化使用 Goo-wiki 时，AutoGoo-Plugin 会创建或复用项目归档根目录：
 
 ```text
 <wiki_dir>/wiki/projects/<project-slug>/
@@ -92,20 +92,20 @@ Goo-wiki 是归档笔记的目标 Obsidian vault。插件在运行时通过文�
 - `archive.fallback_project_dir`，例如 `.goo/obsidian/<project-slug>`
 - `archive.git_remote_url`（仅当项目是 Git repo 且能读取 remote 时）
 
-如果当前项目是 Git repo，初始化时还会读取 `origin` remote（没有 origin 时读取第一个 remote），并将地址写入 `<wiki_dir>/wiki/projects/<project-slug>/<project-slug>.md` 的 `AUTO-GOO-PROJECT-META` marker 块。该信息用于后续任务归档、迁移、复现和项目溯源；Recorder 写项目页或任务总览时也应保留该 git 地址。
+如果当前项目是 Git repo，初始化时还会读取 `origin` remote（没有 origin 时读取第一个 remote），并将地址写入 `<wiki_dir>/wiki/projects/<project-slug>/<project-slug>.md` 的 `AUTOGOO-PLUGIN-PROJECT-META` marker 块。该信息用于后续任务归档、迁移、复现和项目溯源；Recorder 写项目页或任务总览时也应保留该 git 地址。
 
 Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可用时再写入 `archive.fallback_project_dir`。
 
 ## 项目 CLAUDE.md 归档原则
 
-项目级初始化如果创建了业务项目目录结构，AutoGoo 必须继续用 `AskUserQuestion` 复用 `id=project_workspace_claude_md` 模板，询问是否在项目根目录 `CLAUDE.md` 中写入目录约定。用户同意时，`AUTO-GOO-WIKI-ARCHIVE` marker 段会包含 `## 项目目录约定`，记录：
+项目级初始化如果创建了业务项目目录结构，AutoGoo-Plugin 必须继续用 `AskUserQuestion` 复用 `id=project_workspace_claude_md` 模板，询问是否在项目根目录 `CLAUDE.md` 中写入目录约定。用户同意时，`AUTOGOO-PLUGIN-WIKI-ARCHIVE` marker 段会包含 `## 项目目录约定`，记录：
 
 - `project_workspace.layout` 和目录清单
 - `src/`、`data/raw/`、`data/processed/`、`references/`、`references/papers/`、`docs/`、`configs/`、`outputs/` 等目录语义
-- 原始数据只读、处理数据和输出目录分离、`.goo/` 只存 AutoGoo 状态的边界
+- 原始数据只读、处理数据和输出目录分离、`.goo/` 只存 AutoGoo-Plugin 状态的边界
 - 后续 plan 的 `allowed_read_paths` / `allowed_write_paths` 应优先落在业务目录或明确的 `.goo/` 状态目录中
 
-项目级初始化使用 Goo-wiki 时，AutoGoo 还会询问用户是否在项目根目录 `CLAUDE.md` 中追加或更新由 `AUTO-GOO-WIKI-ARCHIVE` marker 包裹的归档原则段落。该段落要求：
+项目级初始化使用 Goo-wiki 时，AutoGoo-Plugin 还会询问用户是否在项目根目录 `CLAUDE.md` 中追加或更新由 `AUTOGOO-PLUGIN-WIKI-ARCHIVE` marker 包裹的归档原则段落。该段落要求：
 
 - 规划前先从 Goo-wiki 召回相关项目经验、概念页、周报和 `log.md`
 - `goo-plan` 的 `.goo/plan.json` 最后保留 `归档到 Goo-wiki` 步骤
@@ -117,13 +117,13 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 - 归档完成前必须验收 Markdown 连接图谱：任务页链接项目入口、复用知识、上下文材料和关键概念/问题/指标/历史任务页；项目 `<project-slug>.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口
 - 归档内容必须服务下一次任务复用，而不是只做事后报告
 
-该更新是幂等的，只替换 AutoGoo marker 内的内容，不覆盖项目已有指引。配置远程服务器时，项目级 init 默认更新 `CLAUDE.md` 中的服务器概要和安全约束；远程 `workdir`、`setup_commands`、数据目录和产物目录细节仍只写 `.goo/config.json`。非交互场景没有远程服务器时默认不写，需传 `--update-claude-md` 明确写入目录约定和归档原则；需要跳过所有 `CLAUDE.md` 更新时传 `--skip-claude-md`。
+该更新是幂等的，只替换 AutoGoo-Plugin marker 内的内容，不覆盖项目已有指引。配置远程服务器时，项目级 init 默认更新 `CLAUDE.md` 中的服务器概要和安全约束；远程 `workdir`、`setup_commands`、数据目录和产物目录细节仍只写 `.goo/config.json`。非交互场景没有远程服务器时默认不写，需传 `--update-claude-md` 明确写入目录约定和归档原则；需要跳过所有 `CLAUDE.md` 更新时传 `--skip-claude-md`。
 
-如果项目配置了远程服务器，AutoGoo marker 块还会写入：
+如果项目配置了远程服务器，AutoGoo-Plugin marker 块还会写入：
 
 - 远程服务器表格：名称、host、端口、用户名、类型、用途、secrets 来源
 - `### 何时使用`：按 `purpose` 或服务器类型说明 CPU/GPU 服务器适用场景
-- 远程执行约束：AutoGoo 工具读取 `.goo/config.json` 与 `.goo/secrets.json`，执行任务时必须显式选择目标服务器，不依赖默认第一个
+- 远程执行约束：AutoGoo-Plugin 工具读取 `.goo/config.json` 与 `.goo/secrets.json`，执行任务时必须显式选择目标服务器，不依赖默认第一个
 - secrets 约束：不得把密码展开到命令行、日志、计划正文或 subagent prompt
 
 ## 配置文件
@@ -233,7 +233,7 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 }
 ```
 
-`goo-init` 支持指定业务项目目录结构。项目级初始化必须先用 `AskUserQuestion` 复用 `id=project_workspace_create` 询问是否创建；默认不创建。用户选择创建后，再复用 `id=project_workspace_layout` 询问模板或自定义目录，才传 `--project-layout` 或 `--project-dirs`。AutoGoo 自身状态目录固定在项目 `.goo/`，不要把它改成项目代码/数据目录。业务目录可以包含 `references/` 与 `references/papers/`，用于参考资料、论文、规范、paper PDF、arXiv/DOI 元数据和阅读材料；这些资料属于项目业务上下文，不属于 AutoGoo 运行态 `.goo/`。
+`goo-init` 支持指定业务项目目录结构。项目级初始化必须先用 `AskUserQuestion` 复用 `id=project_workspace_create` 询问是否创建；默认不创建。用户选择创建后，再复用 `id=project_workspace_layout` 询问模板或自定义目录，才传 `--project-layout` 或 `--project-dirs`。AutoGoo-Plugin 自身状态目录固定在项目 `.goo/`，不要把它改成项目代码/数据目录。业务目录可以包含 `references/` 与 `references/papers/`，用于参考资料、论文、规范、paper PDF、arXiv/DOI 元数据和阅读材料；这些资料属于项目业务上下文，不属于 AutoGoo-Plugin 运行态 `.goo/`。
 
 ```bash
 bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project \
@@ -286,7 +286,7 @@ bash "$auto_goo_root/skills/auto-goo/scripts/goo-init.sh" --project --wiki-dir ~
 sudo apt install sshpass
 ```
 
-不会自动安装，也不会中断初始化。`sshpass` 只在 secrets 中存在 password 且需要自动填密码时使用；如果 secrets 里没有密码，`goo-ssh.sh` 会退回普通 `ssh`，支持 SSH key 或手动认证；非交互环境会使用 `BatchMode=yes` 避免卡在密码提示。自动连接脚本支持按服务器名称、index 或 host 选择。使用时先通过插件内置 root resolver 取得 AutoGoo 根目录，再运行 `skills/auto-goo/scripts/goo-ssh.sh`，例如传入 `--server gpu-a100`、`--server <host-or-ip>`、`--server <host-or-ip>:<port>`、`--server <user>@<host-or-ip>:<port>`，或传入 `--host <host-or-ip> --user <user> --port <port>`。
+不会自动安装，也不会中断初始化。`sshpass` 只在 secrets 中存在 password 且需要自动填密码时使用；如果 secrets 里没有密码，`goo-ssh.sh` 会退回普通 `ssh`，支持 SSH key 或手动认证；非交互环境会使用 `BatchMode=yes` 避免卡在密码提示。自动连接脚本支持按服务器名称、index 或 host 选择。使用时先通过插件内置 root resolver 取得 AutoGoo-Plugin 根目录，再运行 `skills/auto-goo/scripts/goo-ssh.sh`，例如传入 `--server gpu-a100`、`--server <host-or-ip>`、`--server <host-or-ip>:<port>`、`--server <user>@<host-or-ip>:<port>`，或传入 `--host <host-or-ip> --user <user> --port <port>`。
 
 注意：setup 文档不内联 root 解析 heredoc，避免 slash command 在交互前误执行 Bash。
 
@@ -295,7 +295,7 @@ sudo apt install sshpass
 可以用环境变量覆盖 wiki 路径：
 
 ```bash
-export AUTO_GOO_WIKI_DIR="$HOME/workspace/Goo-wiki"
+export AUTOGOO_PLUGIN_WIKI_DIR="$HOME/workspace/Goo-wiki"
 ```
 
 也可以在项目 `.claude/settings.json` 的 SessionStart hook 中修改检测命令：

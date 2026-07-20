@@ -1,6 +1,6 @@
-# AutoGoo Subagent 组织架构
+# AutoGoo-Plugin Subagent 组织架构
 
-AutoGoo 采用两级 agent 组织：
+AutoGoo-Plugin 采用两级 agent 组织：
 
 - **Role Agent**：稳定的主角色，出现在 `plan.json` 的 `subagent` 字段中，负责调度边界、权限边界和交付口径。
 - **Task Agent**：Role Agent 下的细分任务画像，出现在 `task_agent` 或步骤说明中，用于更精确地选择提示词、工具范围、验收重点和输出格式。

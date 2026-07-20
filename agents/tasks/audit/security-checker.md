@@ -1,6 +1,6 @@
 ---
 name: security-checker
-description: "AutoGoo 安全检测 Subagent。扫描代码变更中的注入、XSS、敏感信息泄露、依赖漏洞和常见安全反模式，不直接修改代码。"
+description: "AutoGoo-Plugin 安全检测 Subagent。扫描代码变更中的注入、XSS、敏感信息泄露、依赖漏洞和常见安全反模式，不直接修改代码。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default

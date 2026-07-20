@@ -1,5 +1,5 @@
 /**
- * AutoGoo Pi Extension v0.4 — 主入口
+ * AutoGoo-Plugin Pi Extension v0.4 — 主入口
  *
  * DAG 驱动的多智能体编排框架，从 Claude Code 插件迁移。
  *
@@ -46,7 +46,7 @@ import { registerWorktreeTools } from "./tools/worktree.js";
 
 // Utils
 import { REPO_ROOT, isRepoValid } from "./utils/paths.js";
-import { AUTOGOO_SYSTEM_PROMPT } from "./constants.js";
+import { AUTOGOO_PLUGIN_SYSTEM_PROMPT } from "./constants.js";
 
 // ── Command routing table ───────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ interface CommandEntry {
 
 const COMMANDS: Record<string, CommandEntry> = {
   "goo-init": {
-    description: "初始化 AutoGoo 配置（用户级或项目级）",
+    description: "初始化 AutoGoo-Plugin 配置（用户级或项目级）",
     handler: handleGooInit,
   },
   "goo-brainstorm": {
@@ -105,7 +105,7 @@ const COMMANDS: Record<string, CommandEntry> = {
     handler: handleGooDailyReport,
   },
   "goo-improve": {
-    description: "AutoGoo 自改进审查",
+    description: "AutoGoo-Plugin 自改进审查",
     handler: handleGooImprove,
   },
   "goo-benchmark": {
@@ -121,10 +121,10 @@ export default function (pi: ExtensionAPI) {
   setStartPi(pi);
   setOtherPi(pi);
 
-  // ── Validate AutoGoo repo ─────────────────────────────────────────────────
+  // ── Validate AutoGoo-Plugin repo ─────────────────────────────────────────────────
   if (!isRepoValid()) {
     console.warn(
-      "[AutoGoo] ⚠️ AutoGoo repo structure not found at",
+      "[AutoGoo-Plugin] ⚠️ AutoGoo-Plugin repo structure not found at",
       REPO_ROOT,
       "- some features may not work"
     );
@@ -145,14 +145,14 @@ export default function (pi: ExtensionAPI) {
     const cmd = COMMANDS[cmdName];
 
     if (!cmd) {
-      ctx.ui.notify(`[AutoGoo] 未知命令: ${cmdName}`, "warning");
+      ctx.ui.notify(`[AutoGoo-Plugin] 未知命令: ${cmdName}`, "warning");
       return { action: "handled" };
     }
 
     try {
       await cmd.handler(args, ctx);
     } catch (err: any) {
-      ctx.ui.notify(`[AutoGoo] ${cmdName} 执行失败: ${err.message}`, "error");
+      ctx.ui.notify(`[AutoGoo-Plugin] ${cmdName} 执行失败: ${err.message}`, "error");
     }
     return { action: "handled" };
   });
@@ -277,7 +277,7 @@ export default function (pi: ExtensionAPI) {
   // ── Session hooks ─────────────────────────────────────────────────────────
 
   pi.on("session_start", async (_event, ctx) => {
-    // Detect uncompleted AutoGoo plan
+    // Detect uncompleted AutoGoo-Plugin plan
     try {
       const { loadPlan } = await import("./utils/plan.js");
       const plan = await loadPlan(ctx.cwd);
@@ -288,7 +288,7 @@ export default function (pi: ExtensionAPI) {
         const blocked = plan.steps?.filter((s: any) => s.status === "blocked").length || 0;
         if (pending > 0 || blocked > 0) {
           ctx.ui.notify(
-            `[AutoGoo] 📋 检测到未完成计划 (${pending} 待执行, ${blocked} 阻塞)。` +
+            `[AutoGoo-Plugin] 📋 检测到未完成计划 (${pending} 待执行, ${blocked} 阻塞)。` +
             `使用 /goo-status 查看详情，/goo-continue 恢复执行。`,
             "info",
           );
@@ -317,17 +317,17 @@ export default function (pi: ExtensionAPI) {
     try {
       const { execShell } = await import("./utils/exec.js");
       execShell(
-        "git worktree list 2>/dev/null | grep 'auto-goo/step-' | awk '{print $1}' | xargs -r git worktree remove -f 2>/dev/null; true",
+        "git worktree list 2>/dev/null | grep 'autogoo-plugin/step-' | awk '{print $1}' | xargs -r git worktree remove -f 2>/dev/null; true",
         ctx.cwd,
         { timeout: 10000 },
       );
     } catch {}
   });
 
-  // ── Inject AutoGoo system prompt ─────────────────────────────────────────
+  // ── Inject AutoGoo-Plugin system prompt ─────────────────────────────────────────
   pi.on("before_agent_start", async (event, ctx) => {
     return {
-      systemPrompt: event.systemPrompt + AUTOGOO_SYSTEM_PROMPT,
+      systemPrompt: event.systemPrompt + AUTOGOO_PLUGIN_SYSTEM_PROMPT,
     };
   });
 
@@ -344,5 +344,5 @@ export default function (pi: ExtensionAPI) {
   ].join(", ");
 
   // Use stderr to avoid interfering with Pi's TUI rendering
-  process.stderr.write(`[AutoGoo] ✅ 扩展已加载 (v0.4.0)\n`);
+  process.stderr.write(`[AutoGoo-Plugin] ✅ 扩展已加载 (v0.4.0)\n`);
 }

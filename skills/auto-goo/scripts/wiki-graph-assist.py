@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Iterable
 
 DEFAULT_SEARCH_PATHS = ("wiki/projects", "wiki/concepts", "wiki/questions", "journal/weekly", "log.md")
-AUTO_RECENT_BEGIN = "<!-- AUTO-GOO-RECENT-BEGIN -->"
-AUTO_RECENT_END = "<!-- AUTO-GOO-RECENT-END -->"
+AUTO_RECENT_BEGIN = "<!-- AUTOGOO-PLUGIN-RECENT-BEGIN -->"
+AUTO_RECENT_END = "<!-- AUTOGOO-PLUGIN-RECENT-END -->"
 
 
 @dataclass
@@ -36,7 +36,7 @@ class PageHit:
 def expand_path(value: str | None) -> Path:
     if value:
         return Path(os.path.expandvars(os.path.expanduser(value))).resolve()
-    env = os.environ.get("AUTO_GOO_WIKI_DIR")
+    env = os.environ.get("AUTOGOO_PLUGIN_WIKI_DIR")
     if env:
         return Path(os.path.expandvars(os.path.expanduser(env))).resolve()
     return Path.home() / "workspace" / "Goo-wiki"
@@ -235,7 +235,7 @@ def render_markdown(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Prepare compact Goo-wiki graph context for AutoGoo archive steps")
-    parser.add_argument("--wiki-dir", help="Goo-wiki vault path; defaults to AUTO_GOO_WIKI_DIR or ~/workspace/Goo-wiki")
+    parser.add_argument("--wiki-dir", help="Goo-wiki vault path; defaults to AUTOGOO_PLUGIN_WIKI_DIR or ~/workspace/Goo-wiki")
     parser.add_argument("--project-slug", help="Project slug under wiki/projects/")
     parser.add_argument("--project-dir", help="Project archive dir relative to wiki_dir, e.g. wiki/projects/foo")
     parser.add_argument("--query", required=True, help="Task/query text used to find related pages")

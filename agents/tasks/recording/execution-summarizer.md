@@ -1,6 +1,6 @@
 ---
 name: execution-summarizer
-description: "AutoGoo 执行摘要 Task Agent。汇总 .goo/logs、命令、产物和关键决策，生成可归档执行记录。"
+description: "AutoGoo-Plugin 执行摘要 Task Agent。汇总 .goo/logs、命令、产物和关键决策，生成可归档执行记录。"
 tools: Read, Grep, Glob, Bash, Write, AskUserQuestion
 model: haiku
 permissionMode: default

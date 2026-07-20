@@ -1,6 +1,6 @@
 ---
 name: evaluator
-description: "AutoGoo 评测 Subagent。运行测试、benchmark、数据质量检查，不修代码除非主 Agent 明确授权。"
+description: "AutoGoo-Plugin 评测 Subagent。运行测试、benchmark、数据质量检查，不修代码除非主 Agent 明确授权。"
 tools: Read, Grep, Glob, Bash, WebSearch, AskUserQuestion
 model: haiku
 permissionMode: default

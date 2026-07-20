@@ -1,11 +1,11 @@
 ---
 name: auto-goo:goo-plan
-description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 .goo/plan.json，不派发执行
+description: 只生成 AutoGoo-Plugin 执行计划 — 召回 Goo-wiki 经验并输出 .goo/plan.json，不派发执行
 ---
 
 # /auto-goo:goo-plan — 只规划，不执行
 
-输入 `/auto-goo:goo-plan <任务描述>` 生成可审阅的 AutoGoo 计划。
+输入 `/auto-goo:goo-plan <任务描述>` 生成可审阅的 AutoGoo-Plugin 计划。
 
 ## 行为
 
@@ -146,7 +146,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 
 - 任务风险较高，需要先审计划
 - 任务跨多个会话，想先确认 DAG 边界
-- 需要确认 AutoGoo 是否正确复用了 Goo-wiki 项目经验
+- 需要确认 AutoGoo-Plugin 是否正确复用了 Goo-wiki 项目经验
 - 输入是 README、设计文档、TODO 清单或 issue 模板，需要先抽取真实执行任务
 - 只想获得执行路线，不希望立即改代码或跑命令
 
@@ -191,7 +191,7 @@ description: 只生成 AutoGoo 执行计划 — 召回 Goo-wiki 经验并输出 
 /auto-goo:goo-start <同一任务>
 ```
 
-或让 AutoGoo 从当前 `.goo/plan.json` 继续执行。
+或让 AutoGoo-Plugin 从当前 `.goo/plan.json` 继续执行。
 
 ## 计划审阅提问格式
 

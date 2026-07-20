@@ -1,5 +1,5 @@
 /**
- * AutoGoo Subagent Worktree Isolation — Git worktree 隔离
+ * AutoGoo-Plugin Subagent Worktree Isolation — Git worktree 隔离
  *
  * 为每个 Subagent 创建独立的 Git worktree 分支，
  * 实现文件系统级别的执行隔离，互不干扰。
@@ -42,7 +42,7 @@ export function registerWorktreeTools(pi: ExtensionAPI): void {
     async execute(_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) {
       const cwd = ctx.cwd;
       const stepId = params.stepId;
-      const branchName = `auto-goo/step-${stepId}-${Date.now()}`;
+      const branchName = `autogoo-plugin/step-${stepId}-${Date.now()}`;
       const worktreeDir = join(cwd, `.goo/worktrees/step-${stepId}`);
 
       const lines: string[] = [];
@@ -124,7 +124,7 @@ export function registerWorktreeTools(pi: ExtensionAPI): void {
     async execute(_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) {
       const cwd = ctx.cwd;
       const stepId = params.stepId;
-      const branchName = `auto-goo/step-${stepId}`; // prefix, actual name may have timestamp
+      const branchName = `autogoo-plugin/step-${stepId}`; // prefix, actual name may have timestamp
       const worktreeDir = join(cwd, `.goo/worktrees/step-${stepId}`);
 
       const lines: string[] = [];
@@ -138,7 +138,7 @@ export function registerWorktreeTools(pi: ExtensionAPI): void {
 
         // Try to merge branch anyway if it exists
         const branchResult = execShell(
-          `git branch --list 'auto-goo/step-${stepId}-*' 2>&1`,
+          `git branch --list 'autogoo-plugin/step-${stepId}-*' 2>&1`,
           cwd,
           { timeout: 5000 },
         );
@@ -246,8 +246,8 @@ export function registerWorktreeTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "auto_goo_worktree_cleanup",
     label: "Cleanup Worktrees",
-    description: `清理所有 AutoGoo 创建的 worktree 分支和目录。在计划完成或中断后执行清理。`,
-    promptSnippet: "清理所有 AutoGoo worktree 分支和目录",
+    description: `清理所有 AutoGoo-Plugin 创建的 worktree 分支和目录。在计划完成或中断后执行清理。`,
+    promptSnippet: "清理所有 AutoGoo-Plugin worktree 分支和目录",
     parameters: Type.Object({}),
     async execute(_toolCallId: string, _params: any, _signal: any, _onUpdate: any, ctx: any) {
       const cwd = ctx.cwd;
@@ -256,14 +256,14 @@ export function registerWorktreeTools(pi: ExtensionAPI): void {
 
       // Remove all auto-goo worktrees
       const listResult = execShell(
-        `git worktree list 2>&1 | grep "auto-goo/step-" || true`,
+        `git worktree list 2>&1 | grep "autogoo-plugin/step-" || true`,
         cwd,
         { timeout: 5000 },
       );
 
       const worktrees = listResult.stdout?.split("\n").filter(Boolean) || [];
       if (worktrees.length === 0) {
-        lines.push(`  没有找到 AutoGoo worktree`);
+        lines.push(`  没有找到 AutoGoo-Plugin worktree`);
       } else {
         for (const wt of worktrees) {
           const dir = wt.split(/\s+/)[0];
@@ -276,7 +276,7 @@ export function registerWorktreeTools(pi: ExtensionAPI): void {
 
       // Remove all auto-goo branches
       const branchResult = execShell(
-        `git branch --list 'auto-goo/step-*' 2>&1`,
+        `git branch --list 'autogoo-plugin/step-*' 2>&1`,
         cwd,
         { timeout: 5000 },
       );

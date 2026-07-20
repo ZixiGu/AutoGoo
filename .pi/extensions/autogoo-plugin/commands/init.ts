@@ -1,5 +1,5 @@
 /**
- * AutoGoo goo-init — 初始化配置（用户级或项目级）
+ * AutoGoo-Plugin goo-init — 初始化配置（用户级或项目级）
  *
  * Replaces commands/goo-init.md + AskUserQuestion interaction.
  * Uses ctx.ui.select/confirm/input instead of AskUserQuestion.
@@ -186,7 +186,7 @@ export async function handleGooInit(args: string, ctx: ExtensionContext): Promis
   const target = scope === "user" ? "~/.auto-goo/config.json" : ".goo/config.json";
   const wikiInfo = wikiDir ? `（wiki: ${wikiDir}）` : "";
   ctx.ui.notify(
-    `✅ AutoGoo 初始化完成！配置已写入 ${target} ${wikiInfo}` +
+    `✅ AutoGoo-Plugin 初始化完成！配置已写入 ${target} ${wikiInfo}` +
     (gooMdExists ? "，goo.md 已生成" : ""),
     "info"
   );

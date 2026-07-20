@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: "AutoGoo 审查 Subagent。审查代码、方案、风险和缺失测试，不直接合并或覆盖实现。"
+description: "AutoGoo-Plugin 审查 Subagent。审查代码、方案、风险和缺失测试，不直接合并或覆盖实现。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default

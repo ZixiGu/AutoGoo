@@ -5,7 +5,7 @@ description: 研究资料归档命令，当前支持 paper 子命令，用于论
 
 # /auto-goo:goo-research — 研究资料归档
 
-`goo-research` 是 AutoGoo 的研究资料入口。当前支持 `paper` 子命令，用于把论文阅读、资料抓取、代码/数据集搜索、下载可行性检查和 Goo-wiki 归档放进同一条 AutoGoo 任务链路。
+`goo-research` 是 AutoGoo-Plugin 的研究资料入口。当前支持 `paper` 子命令，用于把论文阅读、资料抓取、代码/数据集搜索、下载可行性检查和 Goo-wiki 归档放进同一条 AutoGoo-Plugin 任务链路。
 
 推荐用法：
 
@@ -24,7 +24,7 @@ description: 研究资料归档命令，当前支持 paper 子命令，用于论
 ## 行为
 
 1. **模式识别** — 如果第一个参数是 `paper`，进入论文模式；如果用户只输入论文、DOI、arXiv、OpenReview、期刊 URL 或本地 PDF，也可推断为 `paper` 模式。
-2. **AutoGoo 配置读取** — 检查 `.goo/config.json`、`.goo/plan.json` 和 `.goo/brainstorm.json`，优先复用现有 `archive.task_archive_root`。
+2. **AutoGoo-Plugin 配置读取** — 检查 `.goo/config.json`、`.goo/plan.json` 和 `.goo/brainstorm.json`，优先复用现有 `archive.task_archive_root`。
 3. **任务归档根确定** — 同一研究任务沿用同一个 `task_archive_root`；没有现成根时，创建 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-paper-<slug>>/`，Goo-wiki 不可写时降级到 `.goo/obsidian/<project-slug>/tasks/<task-slug>/`。
 4. **资料收集** — 抓取公开可访问的 PDF、HTML、摘要页、元数据、BibTeX、引用、附录、补充材料和项目页；不要绕过付费墙或认证。
 5. **正文抽取** — 从 PDF/HTML 抽取全文、章节结构、图表标题、关键公式、实验表格和参考文献。

@@ -1,6 +1,6 @@
 ---
 name: obsidian-recorder
-description: "AutoGoo Obsidian 归档 Task Agent。作为 recorder 旗下任务画像，将执行记录格式化为 Goo-wiki/Obsidian 规范笔记。"
+description: "AutoGoo-Plugin Obsidian 归档 Task Agent。作为 recorder 旗下任务画像，将执行记录格式化为 Goo-wiki/Obsidian 规范笔记。"
 tools: Read, Grep, Glob, Bash, Write, AskUserQuestion
 model: haiku
 permissionMode: default
@@ -41,7 +41,7 @@ color: cyan
 
 缺少上述连接时，先补链，再汇报完成；不得把会破坏 Obsidian 连接图谱的孤立页面标记为归档完成。
 
-为减少 token 消耗，先从 Claude Code 安装记录解析 AutoGoo 根目录；若安装路径不可用，再 fallback 到已启用的本地 directory marketplace。随后调用 `skills/auto-goo/scripts/wiki-graph-assist.py` 生成紧凑 graph packet；只有 graph packet 不足以判断时才读取完整 Markdown。任务页写好后，可让该脚本用 `--update-index --append-log` 更新项目入口和活动日志。
+为减少 token 消耗，先从 Claude Code 安装记录解析 AutoGoo-Plugin 根目录；若安装路径不可用，再 fallback 到已启用的本地 directory marketplace。随后调用 `skills/auto-goo/scripts/wiki-graph-assist.py` 生成紧凑 graph packet；只有 graph packet 不足以判断时才读取完整 Markdown。任务页写好后，可让该脚本用 `--update-index --append-log` 更新项目入口和活动日志。
 
 YAML frontmatter 格式：
 ```yaml

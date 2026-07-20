@@ -1,5 +1,5 @@
 /**
- * AutoGoo Status Bar — 持久化状态栏，关联当前 session 的 thread。
+ * AutoGoo-Plugin Status Bar — 持久化状态栏，关联当前 session 的 thread。
  *
  * 使用 ctx.ui.setStatus() 在 Pi 底部状态栏显示：
  * - thread 创建时间 + 任务名

@@ -1,7 +1,7 @@
 /**
- * AutoGoo Pi Extension — Path resolution utilities.
+ * AutoGoo-Plugin Pi Extension — Path resolution utilities.
  *
- * Locates the AutoGoo repo root, Python scripts, templates, and runtime
+ * Locates the AutoGoo-Plugin repo root, Python scripts, templates, and runtime
  * directories from within the extension's own location.
  */
 
@@ -15,13 +15,13 @@ import { fileURLToPath } from "node:url";
 const _dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * AutoGoo repo root, derived from the extension's location:
+ * AutoGoo-Plugin repo root, derived from the extension's location:
  *   <repo>/.pi/extensions/auto-goo/  →  <repo>/
  */
 export const REPO_ROOT = resolve(_dirname, "../../../..");
 
 /**
- * Whether the resolved REPO_ROOT looks like the actual AutoGoo repo.
+ * Whether the resolved REPO_ROOT looks like the actual AutoGoo-Plugin repo.
  */
 export function isRepoValid(): boolean {
   return (
@@ -39,7 +39,7 @@ export function scriptsDir(): string {
 export function scriptPath(name: string): string {
   const p = join(scriptsDir(), name);
   if (!existsSync(p)) {
-    throw new Error(`AutoGoo script not found: ${p}`);
+    throw new Error(`AutoGoo-Plugin script not found: ${p}`);
   }
   return p;
 }
@@ -136,7 +136,7 @@ export function userConfigDir(): string {
 
 // ── Config loading ──────────────────────────────────────────────────────────
 
-export interface AutoGooConfig {
+export interface AutogooPluginConfig {
   version?: number;
   wiki_dir?: string;
   wiki?: { search_paths?: string[] };
@@ -195,7 +195,7 @@ export interface AutoGooConfig {
   }>;
 }
 
-export async function loadProjectConfig(cwd: string): Promise<AutoGooConfig | null> {
+export async function loadProjectConfig(cwd: string): Promise<AutogooPluginConfig | null> {
   const p = projectConfigPath(cwd);
   try {
     await access(p);
@@ -206,7 +206,7 @@ export async function loadProjectConfig(cwd: string): Promise<AutoGooConfig | nu
   }
 }
 
-export async function loadUserConfig(): Promise<AutoGooConfig | null> {
+export async function loadUserConfig(): Promise<AutogooPluginConfig | null> {
   const p = userConfigPath();
   try {
     await access(p);
@@ -219,13 +219,13 @@ export async function loadUserConfig(): Promise<AutoGooConfig | null> {
 
 /**
  * Resolve wiki directory by priority:
- * 1. env AUTO_GOO_WIKI_DIR
+ * 1. env AUTOGOO_PLUGIN_WIKI_DIR
  * 2. project config wiki_dir
  * 3. user config wiki_dir
  * 4. default ~/workspace/Goo-wiki
  */
 export async function resolveWikiDir(cwd: string): Promise<string> {
-  const envDir = process.env.AUTO_GOO_WIKI_DIR;
+  const envDir = process.env.AUTOGOO_PLUGIN_WIKI_DIR;
   if (envDir) return envDir;
 
   const projectConfig = await loadProjectConfig(cwd);

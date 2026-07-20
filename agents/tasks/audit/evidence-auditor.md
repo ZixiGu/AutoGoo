@@ -1,6 +1,6 @@
 ---
 name: evidence-auditor
-description: "AutoGoo 证据审计 Task Agent。检查结论、命令、产物、测试结果和归档之间是否有足够证据支撑。"
+description: "AutoGoo-Plugin 证据审计 Task Agent。检查结论、命令、产物、测试结果和归档之间是否有足够证据支撑。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default

@@ -1,5 +1,5 @@
 /**
- * AutoGoo — 目录观察、发布、研究、用法统计等命令
+ * AutoGoo-Plugin — 目录观察、发布、研究、用法统计等命令
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -180,9 +180,9 @@ export async function handleGooDailyReport(args: string, ctx: ExtensionContext):
 // ── goo-improve ─────────────────────────────────────────────────────────────
 
 export async function handleGooImprove(args: string, ctx: ExtensionContext): Promise<void> {
-  ctx.ui.notify("AutoGoo 自改进功能", "info");
+  ctx.ui.notify("AutoGoo-Plugin 自改进功能", "info");
   ctx.ui.setEditorText(
-    `请审查 AutoGoo 框架（位于 ${REPO_ROOT}）的执行表现，识别以下方面的问题和改进机会：\n\n` +
+    `请审查 AutoGoo-Plugin 框架（位于 ${REPO_ROOT}）的执行表现，识别以下方面的问题和改进机会：\n\n` +
     `1. 工作流效率 — DAG 调度、心跳、并发执行\n` +
     `2. 可靠性 — session 恢复、失败处理、日志完整性\n` +
     `3. 用户体验 — 交互流程、提示清晰度、归档质量\n` +
@@ -240,7 +240,7 @@ export async function handleGooContinue(args: string, ctx: ExtensionContext): Pr
 
   if (_pi) {
     _pi.sendUserMessage(
-      `## AutoGoo 恢复执行\n\n` +
+      `## AutoGoo-Plugin 恢复执行\n\n` +
       `检测到未完成的 DAG 计划：\n` +
       `- 运行中: ${runningSteps.length} 个（需检查心跳和产物状态）\n` +
       `- 待执行: ${pendingSteps.length} 个（按依赖顺序派发）\n` +

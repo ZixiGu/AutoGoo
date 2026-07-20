@@ -1,5 +1,5 @@
 /**
- * AutoGoo goo-brainstorm — 候选目标生成
+ * AutoGoo-Plugin goo-brainstorm — 候选目标生成
  *
  * 当用户目标不明确时，基于 Goo-wiki 和项目上下文
  * 生成 5-9 个候选目标，合并为 3-7 个最终候选，
@@ -49,7 +49,7 @@ export async function handleGooBrainstorm(direction: string, ctx: ExtensionConte
     : "";
 
   ctx.ui.setEditorText(
-    `## AutoGoo Brainstorm: ${direction}\n` +
+    `## AutoGoo-Plugin Brainstorm: ${direction}\n` +
     `\n请基于以下方向进行头脑风暴，生成候选目标列表：\n\n` +
     `**方向**: ${direction}\n` +
     `${wikiSummary}\n\n` +

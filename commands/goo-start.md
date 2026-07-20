@@ -1,9 +1,9 @@
 ---
 name: auto-goo:goo-start
-description: 启动 AutoGoo 完整工作流 — 召回 wiki 经验、生成 DAG、执行、验证并归档
+description: 启动 AutoGoo-Plugin 完整工作流 — 召回 wiki 经验、生成 DAG、执行、验证并归档
 ---
 
-# /auto-goo:goo-start — 启动 AutoGoo 工作流
+# /auto-goo:goo-start — 启动 AutoGoo-Plugin 工作流
 
 输入 `/auto-goo:goo-start <任务描述>` 启动完整工作流。若只想生成计划、不执行，请使用 `/auto-goo:goo-plan`。
 
@@ -17,7 +17,7 @@ description: 启动 AutoGoo 完整工作流 — 召回 wiki 经验、生成 DAG�
 6. **执行前自检** — 确认每个待执行 step 不依赖主会话隐含上下文，只依赖 plan、Markdown/context artifact、wiki 摘要和上游产物；检查每个 step 的 `subagent` 和 `task_agent` 是否合法，并检查 `available_skills` 是否只包含本步骤需要且实际可用的 skill；不合法时先补 plan 或创建角色，不直接降级主 Agent 执行
 7. **远程资源预检与确认** — 如果 `.goo/config.json` 或 `~/.auto-goo/config.json` 有 `servers[]`，且当前待执行 step 尚未全部明确为本地/远程，或用户没有在本次 thread 的 `runtime.remote_resource_decision` 中确认过选择，先运行 `skills/auto-goo/scripts/remote-resources.py --probe` 展示 CPU/内存/磁盘/GPU 摘要。随后优先用 `AskUserQuestion` 复用 `id=remote_resource_usage` 模板询问本次是否使用服务器。用户选择本地时写入 `runtime.remote_resource_decision={"use_remote":false,...}` 并保持本地执行；用户选择服务器时，把适合远程的待执行 step 更新为 `execution_target="remote"`、`remote_server`、`remote_reason`、`requires_user_confirm=true`，并记录选择依据。不得因为检测到服务器或 GPU 就自动切到远程。
 8. **远程执行自检** — 对 `execution_target="remote"` 的 step，先从 `.goo/config.json` 或 `~/.auto-goo/config.json` 读取 `servers[]`，确认 `remote_server` 能唯一匹配配置项、secrets 文件存在且不展开密码；派发前用结构化确认向用户说明远程命令类别、目标服务器、远程路径、产物位置和风险。未获确认时标记 `blocked` / `needs_user_approval`，不得自动改成本地执行。
-9. **Subagent worktree 配置初始化** — 启动业务 step 调度前先读当前 thread plan 顶层 `runtime.subagent_isolation`；如果已有 `mode` 且 `project_root` 与当前 AutoGoo 项目根一致，直接复用该缓存，不再询问。缓存缺失、`project_root` 不匹配或用户明确切换执行目录时，用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否启用 worktree 隔离。用户选择“不启用”时写入 `{"mode":"none","project_root":"<path>","checked_at":"<iso>","decision":"worktree_disabled"}` 并继续，后续 Agent tool 省略 `isolation` 参数；如果省略 `isolation` 的实际派发仍报 `Failed to resolve base branch "HEAD"` / `git rev-parse failed`，说明当前 Claude Code Agent 包装层仍要求 Git HEAD，必须写入 `runtime.subagent_isolation.compatibility.agent_requires_git_head=true`，把当前 step 标记 `blocked` / `needs_user_approval`，并重新询问是否启用 worktree，不得重置 heartbeat 后反复重派，也不得创建 probe agent。用户选择“启用 worktree”时写入 `mode="worktree"` 并只检查当前项目根本身；不要设置 `GIT_DISCOVERY_ACROSS_FILESYSTEM`，不要向父目录、跨文件系统或备用路径寻找 Git root。若当前项目不是 Git repo，运行 `git init -b main`，不支持 `-b` 时初始化后立即 `git branch -M main`；若已有 Git 但没有 `HEAD`，复用当前仓库。随后执行初始提交：先检查 `git status --short` 和明显敏感文件风险，发现密钥、令牌、密码、secrets 文件或异常大批生成物时先标记 blocked 并前台确认；否则 `git add -A` 后提交 `chore: initialize repository for AutoGoo worktree isolation`。只有 `HEAD` 可解析后才允许给 Agent tool 传 `isolation: "worktree"`；启用后仍无法得到 `HEAD` 时标记 workflow blocked，不降级普通派发，也不循环 probe。
+9. **Subagent worktree 配置初始化** — 启动业务 step 调度前先读当前 thread plan 顶层 `runtime.subagent_isolation`；如果已有 `mode` 且 `project_root` 与当前 AutoGoo-Plugin 项目根一致，直接复用该缓存，不再询问。缓存缺失、`project_root` 不匹配或用户明确切换执行目录时，用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否启用 worktree 隔离。用户选择“不启用”时写入 `{"mode":"none","project_root":"<path>","checked_at":"<iso>","decision":"worktree_disabled"}` 并继续，后续 Agent tool 省略 `isolation` 参数；如果省略 `isolation` 的实际派发仍报 `Failed to resolve base branch "HEAD"` / `git rev-parse failed`，说明当前 Claude Code Agent 包装层仍要求 Git HEAD，必须写入 `runtime.subagent_isolation.compatibility.agent_requires_git_head=true`，把当前 step 标记 `blocked` / `needs_user_approval`，并重新询问是否启用 worktree，不得重置 heartbeat 后反复重派，也不得创建 probe agent。用户选择“启用 worktree”时写入 `mode="worktree"` 并只检查当前项目根本身；不要设置 `GIT_DISCOVERY_ACROSS_FILESYSTEM`，不要向父目录、跨文件系统或备用路径寻找 Git root。若当前项目不是 Git repo，运行 `git init -b main`，不支持 `-b` 时初始化后立即 `git branch -M main`；若已有 Git 但没有 `HEAD`，复用当前仓库。随后执行初始提交：先检查 `git status --short` 和明显敏感文件风险，发现密钥、令牌、密码、secrets 文件或异常大批生成物时先标记 blocked 并前台确认；否则 `git add -A` 后提交 `chore: initialize repository for AutoGoo-Plugin worktree isolation`。只有 `HEAD` 可解析后才允许给 Agent tool 传 `isolation: "worktree"`；启用后仍无法得到 `HEAD` 时标记 workflow blocked，不降级普通派发，也不循环 probe。
 10. **Thread 资源锁检查** — 派发任何会写文件、wiki、server 或 port 的 step 前，调用 `thread-locks.py check-plan --plan <thread-plan>` 检查冲突，确认可执行后调用 `thread-locks.py acquire-plan --plan <thread-plan>` 获取锁；流程完成、失败或停止时调用 `thread-locks.py release-plan --plan <thread-plan>` 释放锁。只读同一资源不冲突；写同一文件/目录、同一 wiki 页面、同一端口或同一远程长任务资源冲突时，把 step 标记为 `blocked` 并让主 Agent 前台询问用户处理方式。
 11. **执行** — 按轮次并行/串行分发 Subagent；除生成 plan 本身外，主 Agent 不得直接代做 `research` / `exec` / `optimize` / `eval` / `review` / `audit` / `archive` 步骤。远程 step 通过 `skills/auto-goo/scripts/goo-ssh.sh --config <config> --server <remote_server> -- <remote command>` 执行；命令只能引用 plan 中已声明的远程路径和产物，不把密码写入 prompt、日志或命令行。派发每个 Subagent 前，主 Agent 必须先调用 `update-step.py --start --progress 5 --agent-id <agent>` 写入首个 `heartbeat_at`，再启动 Agent；这样即使 Agent 启动慢，前台 status 也能立即看到心跳。**每个 Subagent prompt 必须包含 `references/execution-engine.md` 中对应的 Heartbeat 强制分段**，否则 Subagent 不更新 `heartbeat_at`，会被误判为僵尸进程。Agent 返回 `Done` 时，`0 tool uses` 只能作为可疑信号；文本型 step 可以无工具完成，但必须有结构化最终答复、step log、heartbeat 里程碑或声明产物之一。若 step 声明了 `output`/`outputs`，必须验证产物存在且满足 `validation` 后才能 completed；缺失时记录实际 isolation 参数、plan 隔离模式和缺失路径，标记 blocked/failed，不得解锁下游。**每次 step 状态变更后，必须立即调用 `goo-status.py --update-status` 更新 plan 顶层 `status`、`started_at`、`completed_at`**，确保 plan 顶层状态与实际 step 状态一致。每次派发批次后、每轮 30s 心跳巡检后，以及任一 Agent 完成后，主 Agent 必须运行 `goo-status.py` 并把 RUNNING/告警摘要展示给用户；不得只在后台静默更新 plan。
 12. **优化**（如需要）— 指标搜索 → Baseline → 优化 → 评测对比
@@ -26,7 +26,7 @@ description: 启动 AutoGoo 完整工作流 — 召回 wiki 经验、生成 DAG�
 
 ## 参数
 
-任务描述支持自然语言，不限格式。AutoGoo 会自动解析目标、拆解步骤、标注依赖。
+任务描述支持自然语言，不限格式。AutoGoo-Plugin 会自动解析目标、拆解步骤、标注依赖。
 
 如果当前目录已经存在 `.goo/plan.json`，且用户没有提供新的任务描述，优先从当前 plan 执行。执行前默认做一次 context sync：若当前对话在 plan 生成后新增了方案、取舍、约束、验收标准、用户偏好或 open question，先把旧 plan 复制到 `.goo/plans/history/`，再把短内容写入 `context_digest.post_plan_updates`，长内容写入 Goo-wiki/Markdown 并追加到 `context_artifacts` 后执行。只有新增内容与原 plan 冲突、扩大范围、改变验收标准或涉及危险操作时才询问用户确认；该询问必须优先使用结构化选项：`同步并继续执行`、`先修改 plan`、`停止并保留当前 plan`。
 
@@ -57,7 +57,7 @@ description: 启动 AutoGoo 完整工作流 — 召回 wiki 经验、生成 DAG�
 
 ## 备注
 
-- 如果用户明确使用 `/auto-goo:goo-start`，即使任务只有单步，也生成一个带 `subagent` 的 step 并派发执行；只有未进入 AutoGoo 工作流的普通单步问答/小改动才可直接处理
+- 如果用户明确使用 `/auto-goo:goo-start`，即使任务只有单步，也生成一个带 `subagent` 的 step 并派发执行；只有未进入 AutoGoo-Plugin 工作流的普通单步问答/小改动才可直接处理
 - 执行阶段不能依赖聊天记录里的隐含方案；默认先同步 plan 后对话增量，发现信息缺失时先补 plan 或写 Goo-wiki 项目路径 `context/*.md`
 - 如果 `.goo/brainstorm.json` 或 `.goo/plan.json` 的 `review.status` 仍是 `pending_user_review`，执行开始前必须先停下来让用户审阅和确认；不得把未确认草案自动归档或直接执行
 - 如果 `.goo/brainstorm.json` 存在且已经被用户确认，执行开始前必须确认 brainstorm 已归档；未归档时先归档最终确认版 brainstorm，再启动业务 step

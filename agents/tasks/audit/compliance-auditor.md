@@ -1,6 +1,6 @@
 ---
 name: compliance-auditor
-description: "AutoGoo 合规审计 Task Agent。检查任务是否遵守项目规范、用户约束、命令安全和归档要求。"
+description: "AutoGoo-Plugin 合规审计 Task Agent。检查任务是否遵守项目规范、用户约束、命令安全和归档要求。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default
@@ -14,7 +14,7 @@ color: red
 
 父级 Role Agent：`auditor`。
 
-用于检查执行过程是否符合项目规则、用户约束和 AutoGoo 工作流契约。
+用于检查执行过程是否符合项目规则、用户约束和 AutoGoo-Plugin 工作流契约。
 
 ## 职责
 

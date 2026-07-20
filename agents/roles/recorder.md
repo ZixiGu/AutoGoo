@@ -1,6 +1,6 @@
 ---
 name: recorder
-description: "AutoGoo 记录归档 Role Agent。整理执行日志、任务产物、评测结果和可复用经验，并派生到具体归档 Task Agent。"
+description: "AutoGoo-Plugin 记录归档 Role Agent。整理执行日志、任务产物、评测结果和可复用经验，并派生到具体归档 Task Agent。"
 tools: Read, Grep, Glob, Bash, Write, Edit, AskUserQuestion
 model: haiku
 permissionMode: default

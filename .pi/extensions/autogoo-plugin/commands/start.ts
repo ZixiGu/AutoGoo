@@ -1,5 +1,5 @@
 /**
- * AutoGoo goo-start — 执行 DAG 计划
+ * AutoGoo-Plugin goo-start — 执行 DAG 计划
  *
  * 负责：加载 plan → context sync → 调度检查 → 进入执行循环
  * 注册自定义工具让 LLM 在运行时调用。
@@ -71,7 +71,7 @@ export async function handleGooStart(args: string, ctx: ExtensionContext): Promi
       .join("\n");
 
     _pi.sendUserMessage(
-      `## AutoGoo 执行指令\n\n` +
+      `## AutoGoo-Plugin 执行指令\n\n` +
       `计划已确认，开始执行 DAG。共有 ${pendingSteps.length} 个待执行步骤。\n\n` +
       `### 执行方式\n` +
       `1. 使用 \`auto_goo_execute\` 全自动调度，或手动使用 \`auto_goo_dispatch\` 逐个派发\n` +
@@ -243,7 +243,7 @@ export function registerExecutionTools(pi: any): void {
       const rolePrompt = getRolePrompt(params.role);
       const taskPrompt = params.taskAgent ? getTaskAgentPrompt(params.taskAgent) : "";
       const prompt = [
-        `## AutoGoo Subagent: ${params.role}`,
+        `## AutoGoo-Plugin Subagent: ${params.role}`,
         ``,
         rolePrompt,
         taskPrompt ? `\n${taskPrompt}\n` : "",
@@ -366,43 +366,43 @@ export function registerExecutionTools(pi: any): void {
 
 function getRolePrompt(role: string): string {
   const prompts: Record<string, string> = {
-    researcher: `你是 AutoGoo Researcher。你的任务是深入调研和资料收集。
+    researcher: `你是 AutoGoo-Plugin Researcher。你的任务是深入调研和资料收集。
 - 搜索相关文档、论文、代码库和最佳实践
 - 整理调研结果，形成结构化报告
 - 标注信息来源和可信度
 - 提出可行的技术方案和建议`,
-    implementer: `你是 AutoGoo Implementer。你的任务是编码实现。
+    implementer: `你是 AutoGoo-Plugin Implementer。你的任务是编码实现。
 - 严格按照 step 描述和验收标准实现
 - 编写可读、可测试、可维护的代码
 - 遵循项目已有的代码风格和架构约定
 - 实现完成后运行验证命令确认正确性`,
-    optimizer: `你是 AutoGoo Optimizer。你的任务是性能优化。
+    optimizer: `你是 AutoGoo-Plugin Optimizer。你的任务是性能优化。
 - 先建立指标和基线，再做改动
 - 使用 profiler 定位瓶颈
 - 每次优化后对比基线，记录提升幅度
 - 达到目标或边际收益过低时停止`,
-    evaluator: `你是 AutoGoo Evaluator。你的任务是评测和验证。
+    evaluator: `你是 AutoGoo-Plugin Evaluator。你的任务是评测和验证。
 - 定义评测指标和数据集
 - 运行评测并记录结果
 - 与基线对比，生成评测报告
 - 分析失败案例，提出改进建议`,
-    reviewer: `你是 AutoGoo Reviewer。你的任务是代码审查。
+    reviewer: `你是 AutoGoo-Plugin Reviewer。你的任务是代码审查。
 - 检查代码正确性、安全性和性能
 - 验证是否满足验收标准
 - 指出潜在问题并给出改进建议
 - 输出审查报告`,
-    auditor: `你是 AutoGoo Auditor。你的任务是证据审计。
+    auditor: `你是 AutoGoo-Plugin Auditor。你的任务是证据审计。
 - 检查步骤产物是否完整
 - 验证日志、产物路径和验收结果的一致性
 - 检查是否遵循了项目约束和规范
 - 输出审计报告`,
-    recorder: `你是 AutoGoo Recorder。你的任务是归档和知识沉淀。
+    recorder: `你是 AutoGoo-Plugin Recorder。你的任务是归档和知识沉淀。
 - 将任务目标、计划、关键证据和产物归档到 Goo-wiki
 - 补充 Wikilink/backlink 关系
 - 记录可复用的经验、命令、路径和决策
 - 更新 log.md 和项目入口页`,
   };
-  return prompts[role] || `你是 AutoGoo ${role}。请按照步骤描述完成任务。`;
+  return prompts[role] || `你是 AutoGoo-Plugin ${role}。请按照步骤描述完成任务。`;
 }
 
 function getTaskAgentPrompt(taskAgent: string): string {

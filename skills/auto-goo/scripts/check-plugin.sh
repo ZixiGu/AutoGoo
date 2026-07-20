@@ -313,7 +313,7 @@ done
 if command -v python3 &>/dev/null; then
   for py in "$ROOT"/skills/auto-goo/scripts/*.py; do
     [[ -f "$py" ]] || continue
-    if PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/autogoo-check-pycache" python3 -m py_compile "$py" 2>/dev/null; then
+    if PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/autogoo-plugin-check-pycache" python3 -m py_compile "$py" 2>/dev/null; then
       pass "  $(basename "$py") 语法正确"
     else
       fail "  $(basename "$py") 语法错误"
@@ -331,7 +331,7 @@ for sh in "$ROOT"/skills/auto-goo/scripts/*.sh; do
 done
 
 if command -v python3 &>/dev/null; then
-  THREAD_SYNC_DIR="${TMPDIR:-/tmp}/autogoo-check-thread-sync-$$"
+  THREAD_SYNC_DIR="${TMPDIR:-/tmp}/autogoo-plugin-check-thread-sync-$$"
   mkdir -p "$THREAD_SYNC_DIR/project/.goo/threads/demo-thread"
   python3 - "$THREAD_SYNC_DIR/project" <<'PY'
 import json
@@ -433,7 +433,7 @@ PY
     fail "  thread-state.py sync current thread 保护失败"
   fi
 
-  LOCK_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-check-locks-$$"
+  LOCK_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-plugin-check-locks-$$"
   mkdir -p "$LOCK_SMOKE_DIR/project/.goo/threads/t1" "$LOCK_SMOKE_DIR/project/.goo/threads/t2"
   python3 - "$LOCK_SMOKE_DIR/project" <<'PY'
 import json
@@ -470,7 +470,7 @@ PY
     fail "  thread-locks.py 资源锁 smoke test 失败"
   fi
 
-  REQUEST_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-check-requests-$$"
+  REQUEST_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-plugin-check-requests-$$"
   mkdir -p "$REQUEST_SMOKE_DIR/project/.goo/change-requests"
   python3 - "$REQUEST_SMOKE_DIR/project/.goo/change-requests/r1.json" <<'PY'
 import json
@@ -507,7 +507,7 @@ PY
     fail "  change-requests.py smoke test 失败"
   fi
 
-  BRAINSTORM_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-check-brainstorm-$$"
+  BRAINSTORM_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-plugin-check-brainstorm-$$"
   mkdir -p "$BRAINSTORM_SMOKE_DIR/project/.goo"
   python3 - "$BRAINSTORM_SMOKE_DIR/project/.goo/brainstorm.json" <<'PY'
 import json
@@ -587,7 +587,7 @@ PY
 fi
 
 if command -v python3 &>/dev/null; then
-  INIT_WORKSPACE_DIR="${TMPDIR:-/tmp}/autogoo-check-init-workspace-$$"
+  INIT_WORKSPACE_DIR="${TMPDIR:-/tmp}/autogoo-plugin-check-init-workspace-$$"
   mkdir -p "$INIT_WORKSPACE_DIR/project" "$INIT_WORKSPACE_DIR/wiki"
   if (cd "$INIT_WORKSPACE_DIR/project" && bash "$ROOT/skills/auto-goo/scripts/goo-init.sh" \
       --project \
@@ -635,7 +635,7 @@ PY
     fail "  goo-init.sh 业务项目目录结构 smoke test 失败"
   fi
 
-  INIT_CLAUDE_DIR="${TMPDIR:-/tmp}/autogoo-check-init-claude-$$"
+  INIT_CLAUDE_DIR="${TMPDIR:-/tmp}/autogoo-plugin-check-init-claude-$$"
   mkdir -p "$INIT_CLAUDE_DIR/project" "$INIT_CLAUDE_DIR/wiki"
   if (cd "$INIT_CLAUDE_DIR/project" && bash "$ROOT/skills/auto-goo/scripts/goo-init.sh" \
       --project \
@@ -651,12 +651,12 @@ from pathlib import Path
 
 root = Path(sys.argv[1])
 text = (root / "CLAUDE.md").read_text(encoding="utf-8")
-assert "<!-- AUTO-GOO-WIKI-ARCHIVE-BEGIN -->" in text
+assert "<!-- AUTOGOO-PLUGIN-WIKI-ARCHIVE-BEGIN -->" in text
 assert "## 项目目录约定" in text
 assert "data/raw/" in text
 assert "data/processed/" in text
 assert "references/papers/" in text
-assert "AutoGoo 自身状态仍固定写入 `.goo/`" in text
+assert "AutoGoo-Plugin 自身状态仍固定写入 `.goo/`" in text
 assert "allowed_read_paths" in text and "allowed_write_paths" in text
 PY
   then
@@ -784,7 +784,7 @@ echo ""
 echo "── 6c. HTML 发布 smoke test ──"
 
 if command -v python3 &>/dev/null; then
-  PUBLISH_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-check-publish-$$"
+  PUBLISH_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-plugin-check-publish-$$"
   mkdir -p "$PUBLISH_SMOKE_DIR/project/.goo/artifacts" "$PUBLISH_SMOKE_DIR/project/.goo/logs"
   python3 - "$PUBLISH_SMOKE_DIR/project" <<'PY'
 import json
@@ -843,7 +843,7 @@ echo ""
 echo "── 6d. 远程服务器 helper ──"
 
 if command -v python3 &>/dev/null; then
-  REMOTE_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-check-remote-$$"
+  REMOTE_SMOKE_DIR="${TMPDIR:-/tmp}/autogoo-plugin-check-remote-$$"
   mkdir -p "$REMOTE_SMOKE_DIR/project/.goo"
   python3 - "$REMOTE_SMOKE_DIR/project/.goo/config.json" "$REMOTE_SMOKE_DIR/project/.goo/secrets.json" <<'PY'
 import json

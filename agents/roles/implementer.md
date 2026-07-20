@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: "AutoGoo 执行 Subagent。在指定文件/模块内实现功能或修复，不自行改变任务范围或验收标准。"
+description: "AutoGoo-Plugin 执行 Subagent。在指定文件/模块内实现功能或修复，不自行改变任务范围或验收标准。"
 tools: Read, Grep, Glob, Bash, Edit, MultiEdit, Write, AskUserQuestion
 model: haiku
 permissionMode: default

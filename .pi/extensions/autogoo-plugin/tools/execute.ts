@@ -1,5 +1,5 @@
 /**
- * AutoGoo DAG Execution Engine — 自动调度执行工具
+ * AutoGoo-Plugin DAG Execution Engine — 自动调度执行工具
  *
  * 实现 6 槽位调度模型：
  * 1. 扫描就绪步骤（dependencies 全部 completed）

@@ -1,6 +1,6 @@
 ---
 name: auto-goo:goo-status
-description: 显示当前 AutoGoo 任务执行进度 — 优先读取当前 thread plan 渲染简洁仪表盘
+description: 显示当前 AutoGoo-Plugin 任务执行进度 — 优先读取当前 thread plan 渲染简洁仪表盘
 ---
 
 # /auto-goo:goo-status — 执行仪表盘
@@ -24,7 +24,7 @@ registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
+        if key.split("@", 1)[0] != "autogoo-plugin":
             continue
         for entry in entries:
             path = Path(entry.get("installPath", "")).expanduser()
@@ -41,7 +41,7 @@ if not matches:
             if not is_enabled or "@" not in key:
                 continue
             plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
+            if plugin != "autogoo-plugin":
                 continue
             source = marketplaces.get(marketplace, {}).get("source", {})
             if source.get("source") != "directory":
@@ -68,7 +68,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --threads
 
 ```bash
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
+  echo "AutoGoo-Plugin root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 	python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py"
@@ -89,7 +89,7 @@ fi
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════════════╗
-║ AutoGoo Status  {task}                                           {done}/{total}  86% ║
+║ AutoGoo-Plugin Status  {task}                                           {done}/{total}  86% ║
 ╚══════════════════════════════════════════════════════════════════════════════════════╝
   ██████████████████████████░░░░  completed 12 · running 2 · ready 1 · waiting 1 · blocked 0 · failed 0 · slots 2/6
 ────────────────────────────────────────────────────────────────────────────────────────

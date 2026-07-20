@@ -305,7 +305,7 @@ if [[ -z "$PASSWORD" ]]; then
   exec ssh -p "$PORT" "$SSH_TARGET" "$@"
 fi
 
-PASS_FILE="$(mktemp "${TMPDIR:-/tmp}/autogoo-ssh-pass.XXXXXX")"
+PASS_FILE="$(mktemp "${TMPDIR:-/tmp}/autogoo-plugin-ssh-pass.XXXXXX")"
 cleanup() {
   if [[ -f "$PASS_FILE" ]]; then
     if command -v shred >/dev/null 2>&1; then

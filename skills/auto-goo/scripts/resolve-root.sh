@@ -20,7 +20,7 @@ registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
+        if key.split("@", 1)[0] != "autogoo-plugin":
             continue
         for entry in entries:
             path = Path(entry.get("installPath", "")).expanduser()
@@ -37,7 +37,7 @@ if not matches:
             if not is_enabled or "@" not in key:
                 continue
             plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
+            if plugin != "autogoo-plugin":
                 continue
             source = marketplaces.get(marketplace, {}).get("source", {})
             if source.get("source") != "directory":
@@ -55,7 +55,7 @@ PY
   )"
 
   if [ -z "$root" ] || [ ! -f "$root/skills/auto-goo/scripts/update-step.py" ]; then
-    echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
+    echo "AutoGoo root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
     return 1
   fi
   echo "$root"

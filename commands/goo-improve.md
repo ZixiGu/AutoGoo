@@ -1,6 +1,6 @@
 ---
 name: auto-goo:goo-improve
-description: 启动 AutoGoo 插件自改进流程 — 汇总近期执行问题，生成插件优化方案
+description: 启动 AutoGoo-Plugin 插件自改进流程 — 汇总近期执行问题，生成插件优化方案
 ---
 
 # /auto-goo:goo-improve — 插件自改进
@@ -28,7 +28,7 @@ description: 启动 AutoGoo 插件自改进流程 — 汇总近期执行问题�
 
 ```text
 这是 fallback：结构化选择 UI 不可用。
-请选择如何处理本次 AutoGoo 改进方案：
+请选择如何处理本次 AutoGoo-Plugin 改进方案：
 1. 应用修改 - 按上面的方案编辑插件文件
 2. 只保存建议 - 记录到 .goo/improvements.log，不改插件文件
 3. 放弃本次改进 - 不写入、不修改
@@ -42,7 +42,7 @@ description: 启动 AutoGoo 插件自改进流程 — 汇总近期执行问题�
 
 ```
 /auto-goo:goo-improve
-优化AutoGoo
+优化AutoGoo-Plugin
 自改进
 ```
 

@@ -1,5 +1,5 @@
 /**
- * AutoGoo Remote Server SSH — 远程执行集成
+ * AutoGoo-Plugin Remote Server SSH — 远程执行集成
  *
  * 封装 SSH 远程执行流程：
  * - 读取配置文件中的服务器信息
@@ -15,7 +15,7 @@ import {
   REPO_ROOT,
   loadProjectConfig,
   projectSecretsPath,
-  type AutoGooConfig,
+  type AutogooPluginConfig,
 } from "../utils/paths.js";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

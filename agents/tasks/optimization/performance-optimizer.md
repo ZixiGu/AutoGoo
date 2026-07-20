@@ -1,6 +1,6 @@
 ---
 name: performance-optimizer
-description: "AutoGoo 性能优化 Task Agent。基于 profiler 基线做局部优化，并用相同指标验证前后变化。"
+description: "AutoGoo-Plugin 性能优化 Task Agent。基于 profiler 基线做局部优化，并用相同指标验证前后变化。"
 tools: Read, Grep, Glob, Bash, Edit, MultiEdit, AskUserQuestion
 model: haiku
 permissionMode: default

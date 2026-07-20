@@ -1,5 +1,5 @@
 <svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">AutoGoo workflow</title>
+  <title id="title">AutoGoo-Plugin workflow</title>
   <desc id="desc">A futuristic wiki-grounded workflow from task request to Goo-wiki recall, plan, execution, archive, and self-improvement.</desc>
 
   <defs>
@@ -56,7 +56,7 @@
   <path d="M74 116H235M964 116H1126M82 420H224M972 420H1118" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" opacity="0.38"/>
 
   <g font-family="Inter, Arial, sans-serif">
-    <text x="72" y="92" fill="#F8FAFC" font-size="42" font-weight="800" letter-spacing="0">AutoGoo</text>
+    <text x="72" y="92" fill="#F8FAFC" font-size="42" font-weight="800" letter-spacing="0">AutoGoo-Plugin</text>
     <text x="72" y="126" fill="#A5F3FC" font-size="18">Wiki-grounded DAG automation for Claude Code workflows</text>
     <text x="920" y="88" fill="#67E8F9" font-size="14" font-weight="700">PLAN / EXECUTE / ARCHIVE</text>
     <text x="920" y="112" fill="#94A3B8" font-size="13">context survives outside chat</text>

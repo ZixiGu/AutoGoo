@@ -1,6 +1,6 @@
 ---
 name: script-writer
-description: "AutoGoo 脚本编写 Task Agent。编写 Bash/Python/CLI 自动化脚本，重视参数、错误处理和可复用说明。"
+description: "AutoGoo-Plugin 脚本编写 Task Agent。编写 Bash/Python/CLI 自动化脚本，重视参数、错误处理和可复用说明。"
 tools: Read, Grep, Glob, Bash, Edit, MultiEdit, Write, AskUserQuestion
 model: haiku
 permissionMode: default

@@ -1,6 +1,6 @@
 # AskUserQuestion interaction templates
 
-本文件是 AutoGoo 的固定交互模板库。任何需要用户选择、确认、重试、跳过、合并、改写或授权的步骤，都必须优先实际调用 `AskUserQuestion`，让 Claude Code 渲染方向键移动、Enter 确认的选择控件；不得只把 JSON 写给用户看。
+本文件是 AutoGoo-Plugin 的固定交互模板库。任何需要用户选择、确认、重试、跳过、合并、改写或授权的步骤，都必须优先实际调用 `AskUserQuestion`，让 Claude Code 渲染方向键移动、Enter 确认的选择控件；不得只把 JSON 写给用户看。
 
 通用规则：
 
@@ -18,7 +18,7 @@
 {
   "header": "配置作用域",
   "id": "config_scope",
-  "question": "请选择 AutoGoo 配置写入位置。",
+  "question": "请选择 AutoGoo-Plugin 配置写入位置。",
   "options": [
     {
       "label": "项目级 --project (Recommended)",
@@ -82,7 +82,7 @@
   "options": [
     {
       "label": "不创建 (Recommended)",
-      "description": "只初始化 .goo/ AutoGoo 状态目录，不新增 src/data/docs 等业务目录。"
+      "description": "只初始化 .goo/ AutoGoo-Plugin 状态目录，不新增 src/data/docs 等业务目录。"
     },
     {
       "label": "创建业务目录",
@@ -122,7 +122,7 @@
   "options": [
     {
       "label": "写入 CLAUDE.md (Recommended)",
-      "description": "只更新 AutoGoo marker 段，记录目录语义、读写边界和 .goo/ 状态目录边界。"
+      "description": "只更新 AutoGoo-Plugin marker 段，记录目录语义、读写边界和 .goo/ 状态目录边界。"
     },
     {
       "label": "跳过",
@@ -172,11 +172,11 @@
 {
   "header": "项目说明",
   "id": "update_claude_md",
-  "question": "是否更新当前项目 CLAUDE.md 的 AutoGoo 归档说明？",
+  "question": "是否更新当前项目 CLAUDE.md 的 AutoGoo-Plugin 归档说明？",
   "options": [
     {
       "label": "更新 CLAUDE.md (Recommended)",
-      "description": "只更新 AutoGoo marker 包裹段落，不覆盖已有项目指引。"
+      "description": "只更新 AutoGoo-Plugin marker 包裹段落，不覆盖已有项目指引。"
     },
     {
       "label": "跳过",
@@ -194,7 +194,7 @@
   "options": [
     {
       "label": "不配置 (Recommended)",
-      "description": "只写本地 AutoGoo 配置。"
+      "description": "只写本地 AutoGoo-Plugin 配置。"
     },
     {
       "label": "配置服务器",
@@ -436,7 +436,7 @@
 {
   "header": "Thread 选择",
   "id": "thread_select",
-  "question": "请选择要查看或继续的 AutoGoo thread。",
+  "question": "请选择要查看或继续的 AutoGoo-Plugin thread。",
   "options": [
     {
       "label": "当前 thread <thread_id> (Recommended)",
@@ -658,7 +658,7 @@
 {
   "header": "改进确认",
   "id": "improve_confirm",
-  "question": "请选择如何处理本次 AutoGoo 改进方案。",
+  "question": "请选择如何处理本次 AutoGoo-Plugin 改进方案。",
   "options": [
     {
       "label": "应用修改 (Recommended)",

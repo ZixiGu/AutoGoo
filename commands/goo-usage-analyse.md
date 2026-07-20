@@ -39,7 +39,7 @@ description: 分析 Claude Code usage 与 Goo-wiki 项目知识，找出可落�
 
 1. 通过交互提问确认分析范围（见上方）。
 2. **Usage 快照** — 调用 `skills/auto-goo/scripts/goo-usage.py` 获取项目、模型、时间段和 token 类型分布。默认先用 `--once --no-color`，需要趋势时再读取 `daily` 或 `monthly` 聚合。
-2. **Wiki 召回** — 按 AutoGoo 配置优先级解析 Goo-wiki，优先用 `scripts/wiki-graph-assist.py` 检索高耗项目相关的项目页、`log.md`、日报/周报、问题页、流程规范和历史任务页。
+2. **Wiki 召回** — 按 AutoGoo-Plugin 配置优先级解析 Goo-wiki，优先用 `scripts/wiki-graph-assist.py` 检索高耗项目相关的项目页、`log.md`、日报/周报、问题页、流程规范和历史任务页。
 3. **成本归因** — 把 usage 热点和 wiki 信号对齐，识别导致 token 消耗的模式，例如反复读大文档、缺少项目入口页、plan 上下文未沉淀、subagent 输入过宽、重复排查同类问题、日报/归档缺失、模型选择不匹配、cache 命中低。
 4. **节省方案生成** — 输出按优先级排序的节省机会，每项包含依据、预计节省机制、改动位置、验证方式和风险。
 5. **本地落盘** — 写入 `.goo/goo-usage-analyse.json`，并生成 `.goo/reports/goo-usage-analyse-<timestamp>.md`。
@@ -64,7 +64,7 @@ registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
+        if key.split("@", 1)[0] != "autogoo-plugin":
             continue
         for entry in entries:
             path = Path(entry.get("installPath", "")).expanduser()
@@ -81,7 +81,7 @@ if not matches:
             if not is_enabled or "@" not in key:
                 continue
             plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
+            if plugin != "autogoo-plugin":
                 continue
             source = marketplaces.get(marketplace, {}).get("source", {})
             if source.get("source") != "directory":
@@ -98,7 +98,7 @@ if matches:
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-usage.py" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
+  echo "AutoGoo-Plugin root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/goo-usage.py" --once --no-color
@@ -116,7 +116,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" --query "<
 - `wiki_context.sources`：用于归因的 Goo-wiki 页面、`log.md`、日报/周报或 fallback 笔记。
 - `cost_drivers[]`：高耗原因，每项包含 `driver`、`evidence`、`related_projects`、`token_signal`、`wiki_signal`。
 - `saving_opportunities[]`：节省机会，每项包含 `id`、`priority`、`action`、`why`、`expected_saving_mechanism`、`where_to_change`、`validation`、`risk`。
-- `candidate_workflow_rules[]`：可沉淀进 AutoGoo/项目 wiki 的默认规则，例如“长文档先 graph packet 再全文阅读”、“重复问题先查问题页”、“执行前同步 context_artifacts”。
+- `candidate_workflow_rules[]`：可沉淀进 AutoGoo-Plugin/项目 wiki 的默认规则，例如“长文档先 graph packet 再全文阅读”、“重复问题先查问题页”、“执行前同步 context_artifacts”。
 - `archive`：归档目标、任务页路径或 fallback 路径、是否更新 `log.md`。
 - `next_actions[]`：建议用户选择的后续动作，可指向 `/auto-goo:goo-plan <节省方案>`。
 

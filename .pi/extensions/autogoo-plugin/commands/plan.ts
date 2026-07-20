@@ -1,5 +1,5 @@
 /**
- * AutoGoo goo-plan — 生成 DAG 执行计划
+ * AutoGoo-Plugin goo-plan — 生成 DAG 执行计划
  *
  * 负责：thread 检查 → wiki 召回 → 输入识别 → goal 抽取 → DAG 拆解
  * → 并行审计 → context 固化 → plan 落盘 → 用户确认

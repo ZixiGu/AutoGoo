@@ -1,6 +1,6 @@
 ---
 name: doc-reviewer
-description: "AutoGoo 文档审查 Task Agent。审查 README、CLAUDE.md、规范和提示词的事实准确性、可执行性和一致性。"
+description: "AutoGoo-Plugin 文档审查 Task Agent。审查 README、CLAUDE.md、规范和提示词的事实准确性、可执行性和一致性。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default

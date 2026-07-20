@@ -2,7 +2,7 @@
 
 ## 核心原则
 
-AutoGoo 的"并行"在单个 thread 内是 **task-level 并行**（多个独立 Subagent 同时执行）。多个 thread 可以并存，但同时执行前必须通过 resource locks 排除共享写资源冲突。每个步骤由独立的 Subagent 执行，通过当前 thread 的 `logs/` 交换结果。
+AutoGoo-Plugin 的"并行"在单个 thread 内是 **task-level 并行**（多个独立 Subagent 同时执行）。多个 thread 可以并存，但同时执行前必须通过 resource locks 排除共享写资源冲突。每个步骤由独立的 Subagent 执行，通过当前 thread 的 `logs/` 交换结果。
 
 - 并行步骤必须无共享资源（文件、变量、状态）
 - 结果通过日志文件传递，不通过内存
@@ -12,7 +12,7 @@ AutoGoo 的"并行"在单个 thread 内是 **task-level 并行**（多个独立 
 
 ## 主 Agent 职责
 
-主 Agent 是 AutoGoo 的总控，不把整体判断外包给任一 Subagent。
+主 Agent 是 AutoGoo-Plugin 的总控，不把整体判断外包给任一 Subagent。
 
 主 Agent 必须负责：
 
@@ -35,7 +35,7 @@ Subagent 只对被分配的步骤负责，不能改写整体计划、扩大任�
 
 ## 权限分层
 
-AutoGoo 的权限交互由主 Agent 统一处理，后台 Subagent 不做平凡 approval 弹窗。
+AutoGoo-Plugin 的权限交互由主 Agent 统一处理，后台 Subagent 不做平凡 approval 弹窗。
 
 | 层级 | 判定 | 行为 |
 |------|------|------|
@@ -97,7 +97,7 @@ Subagent 默认隔离上下文。主 Agent 派发时只传：
 - 当前 step 的 `id`、`name`、`description`、`type`、`subagent`、`task_agent`、`output`
 - 当前 step 的 `available_skills`；若为空数组，不额外加载 skill
 - 必要的项目约束和安全规则摘要
-- **执行目录与 worktree 配置**：执行启动或恢复时先读取 plan 顶层 `runtime.subagent_isolation`；若已有 `mode` 且 `project_root` 与当前 AutoGoo 项目根一致，直接复用，不做 Git 检查、不再次询问。缓存缺失、根目录不匹配或用户明确切换执行目录时，用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否启用 worktree 隔离。用户选择不启用时写 `{"mode":"none","project_root":"<path>","checked_at":"<iso>","decision":"worktree_disabled"}`，后续派发省略 `isolation`。若省略 `isolation` 的实际派发仍报 `Failed to resolve base branch "HEAD"` / `git rev-parse failed`，说明当前 Claude Code Agent 包装层仍要求 Git HEAD：立即写入 `runtime.subagent_isolation.compatibility.agent_requires_git_head=true`，把当前 step 标记 `blocked`/`needs_user_approval`，重新询问是否启用 worktree；不得重置 heartbeat 后反复重派，也不得创建 probe agent。用户选择启用时写 `mode="worktree"`，并只检查当前项目根本身是否是 Git repo 且 `HEAD` 可解析；不要设置 `GIT_DISCOVERY_ACROSS_FILESYSTEM`，不要向父目录、跨文件系统或备用路径寻找 Git root。若不是 Git repo，运行 `git init -b main`，不支持 `-b` 的 Git 版本在初始化后立即 `git branch -M main`；若已有 Git 但没有 `HEAD`，复用当前仓库。随后执行初始提交：先检查 `git status --short` 和明显敏感文件风险，发现密钥、令牌、密码、secrets 文件或异常大批生成物时先标记 blocked 并前台确认；否则 `git add -A` 后提交 `chore: initialize repository for AutoGoo worktree isolation`。建议结构：`{"mode":"worktree","project_root":"<path>","checked_at":"<iso>","decision":"worktree_enabled","reason":"git_head_available"}` 或 `{"mode":"none","project_root":"<path>","checked_at":"<iso>","decision":"worktree_disabled","compatibility":{"agent_requires_git_head":true}}`。后续派发 Subagent 只读取该缓存，不得每次派发前重复运行 git 检查。只有 `mode="worktree"` 且 `HEAD` 可解析时才允许给 Agent tool 传 `isolation: "worktree"`；`mode="none"` 时必须省略 `isolation` 参数。如果启用后仍无法得到 `HEAD`，最多记录一次失败并把 workflow 标记为 blocked；不得降级普通派发、不得循环 probe，也不得改从父级 Git root 派发。
+- **执行目录与 worktree 配置**：执行启动或恢复时先读取 plan 顶层 `runtime.subagent_isolation`；若已有 `mode` 且 `project_root` 与当前 AutoGoo-Plugin 项目根一致，直接复用，不做 Git 检查、不再次询问。缓存缺失、根目录不匹配或用户明确切换执行目录时，用 `AskUserQuestion` 复用 `id=git_init_project` 模板询问是否启用 worktree 隔离。用户选择不启用时写 `{"mode":"none","project_root":"<path>","checked_at":"<iso>","decision":"worktree_disabled"}`，后续派发省略 `isolation`。若省略 `isolation` 的实际派发仍报 `Failed to resolve base branch "HEAD"` / `git rev-parse failed`，说明当前 Claude Code Agent 包装层仍要求 Git HEAD：立即写入 `runtime.subagent_isolation.compatibility.agent_requires_git_head=true`，把当前 step 标记 `blocked`/`needs_user_approval`，重新询问是否启用 worktree；不得重置 heartbeat 后反复重派，也不得创建 probe agent。用户选择启用时写 `mode="worktree"`，并只检查当前项目根本身是否是 Git repo 且 `HEAD` 可解析；不要设置 `GIT_DISCOVERY_ACROSS_FILESYSTEM`，不要向父目录、跨文件系统或备用路径寻找 Git root。若不是 Git repo，运行 `git init -b main`，不支持 `-b` 的 Git 版本在初始化后立即 `git branch -M main`；若已有 Git 但没有 `HEAD`，复用当前仓库。随后执行初始提交：先检查 `git status --short` 和明显敏感文件风险，发现密钥、令牌、密码、secrets 文件或异常大批生成物时先标记 blocked 并前台确认；否则 `git add -A` 后提交 `chore: initialize repository for AutoGoo-Plugin worktree isolation`。建议结构：`{"mode":"worktree","project_root":"<path>","checked_at":"<iso>","decision":"worktree_enabled","reason":"git_head_available"}` 或 `{"mode":"none","project_root":"<path>","checked_at":"<iso>","decision":"worktree_disabled","compatibility":{"agent_requires_git_head":true}}`。后续派发 Subagent 只读取该缓存，不得每次派发前重复运行 git 检查。只有 `mode="worktree"` 且 `HEAD` 可解析时才允许给 Agent tool 传 `isolation: "worktree"`；`mode="none"` 时必须省略 `isolation` 参数。如果启用后仍无法得到 `HEAD`，最多记录一次失败并把 workflow 标记为 blocked；不得降级普通派发、不得循环 probe，也不得改从父级 Git root 派发。
 - `wiki_context` 中与该 step 直接相关的 3-7 条要点
 - `context_digest` 中与该 step 直接相关的决策、约束和验收点
 - `context_artifacts` 中必要 Markdown 的路径、标题和行号范围
@@ -179,16 +179,16 @@ MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限
 初始化:
   running = []       # 当前在跑的 agent 槽位
   ready_queue = []   # 就绪但等待槽位的步骤
-  若 plan.runtime.subagent_isolation.mode 存在且 project_root 等于当前 AutoGoo 项目根:
+  若 plan.runtime.subagent_isolation.mode 存在且 project_root 等于当前 AutoGoo-Plugin 项目根:
     直接复用缓存，不运行 git 检查，不询问 worktree 配置
   否则若缓存缺失、project_root 不匹配或执行目录变更:
     用 AskUserQuestion(id=git_init_project) 询问是否启用 worktree
     用户选择不启用: 写入 {mode:"none", project_root, checked_at, decision:"worktree_disabled"}
     用户选择启用:
-      只检查当前 AutoGoo 项目根本身是否有可用 git HEAD
+      只检查当前 AutoGoo-Plugin 项目根本身是否有可用 git HEAD
       不设置 GIT_DISCOVERY_ACROSS_FILESYSTEM，不向父目录或备用路径寻找 git root
       若不是 git repo: git init -b main；不支持 -b 时 git branch -M main
-      若无 HEAD: 检查 git status --short 和敏感文件风险；安全后 git add -A && git commit -m "chore: initialize repository for AutoGoo worktree isolation"
+      若无 HEAD: 检查 git status --short 和敏感文件风险；安全后 git add -A && git commit -m "chore: initialize repository for AutoGoo-Plugin worktree isolation"
       HEAD 可解析后写入 {mode:"worktree", project_root, checked_at, decision:"worktree_enabled", reason:"git_head_available"}；否则 blocked
 
 主循环:
@@ -285,7 +285,7 @@ registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
+        if key.split("@", 1)[0] != "autogoo-plugin":
             continue
         for entry in entries:
             path = Path(entry.get("installPath", "")).expanduser()
@@ -302,7 +302,7 @@ if not matches:
             if not is_enabled or "@" not in key:
                 continue
             plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
+            if plugin != "autogoo-plugin":
                 continue
             source = marketplaces.get(marketplace, {}).get("source", {})
             if source.get("source") != "directory":
@@ -319,7 +319,7 @@ if matches:
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
+  echo "AutoGoo-Plugin root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 	python3 "$auto_goo_root/skills/auto-goo/scripts/goo-status.py" --update-status
@@ -345,7 +345,7 @@ registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
+        if key.split("@", 1)[0] != "autogoo-plugin":
             continue
         for entry in entries:
             path = Path(entry.get("installPath", "")).expanduser()
@@ -362,7 +362,7 @@ if not matches:
             if not is_enabled or "@" not in key:
                 continue
             plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
+            if plugin != "autogoo-plugin":
                 continue
             source = marketplaces.get(marketplace, {}).get("source", {})
             if source.get("source") != "directory":
@@ -379,7 +379,7 @@ if matches:
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/update-step.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
+  echo "AutoGoo-Plugin root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 	python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/threads/<thread_id>/plan.json --step-id <id> --start --progress 5 --agent-id <agent>
@@ -407,7 +407,7 @@ fi
 ### 执行型 (type: "exec")
 
 ```
-你是一个 AutoGoo 执行 Subagent。
+你是一个 AutoGoo-Plugin 执行 Subagent。
 
 你只负责当前 step。不要假设自己拥有完整项目上下文；只使用主 Agent 给出的约束、上游产物路径和允许读写范围。不要读取或修改未授权文件。
 
@@ -434,7 +434,7 @@ fi
 
 **主 Agent 依赖此字段判断你是否存活。不更新 heartbeat 会被误判为僵尸进程并重派。**
 
-先从 Claude Code 安装记录解析 AutoGoo 根目录；不要读取环境变量，也不要搜索插件目录。优先来源是 `$HOME/.claude/plugins/installed_plugins.json` 中 `auto-goo@*` 的 `installPath`。如果 `installPath` 不存在或已 orphaned，再读取 `$HOME/.claude/settings.json`，只有 `enabledPlugins` 中启用了 `auto-goo@<marketplace>`，且 `extraKnownMarketplaces.<marketplace>.source` 是本地 `directory` 时，才使用该本地 marketplace 路径。若安装记录和本地 marketplace 都不可用或目标脚本无效，必须 fail-fast 提示用户重新安装/启用 AutoGoo 插件。
+先从 Claude Code 安装记录解析 AutoGoo-Plugin 根目录；不要读取环境变量，也不要搜索插件目录。优先来源是 `$HOME/.claude/plugins/installed_plugins.json` 中 `autogoo-plugin@*` 的 `installPath`。如果 `installPath` 不存在或已 orphaned，再读取 `$HOME/.claude/settings.json`，只有 `enabledPlugins` 中启用了 `autogoo-plugin@<marketplace>`，且 `extraKnownMarketplaces.<marketplace>.source` 是本地 `directory` 时，才使用该本地 marketplace 路径。若安装记录和本地 marketplace 都不可用或目标脚本无效，必须 fail-fast 提示用户重新安装/启用 AutoGoo-Plugin 插件。
 
 命令模板（替换 `<id>` 和 `<0-100>`）：
 ```bash
@@ -517,7 +517,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
 ### 评测型 (type: "eval")
 
 ```
-你是一个 AutoGoo 评测 Subagent。
+你是一个 AutoGoo-Plugin 评测 Subagent。
 
 你只负责评测当前 step 的指定产物。不要修改被评测实现，除非主 Agent 明确授权。
 
@@ -535,7 +535,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
 5. **完成后回写 plan.json**：status="completed"
 
 ## Heartbeat（强制）
-与 exec 模板相同的心跳机制。先解析 AutoGoo 根目录，在以下里程碑调用 `update-step.py`：
+与 exec 模板相同的心跳机制。先解析 AutoGoo-Plugin 根目录，在以下里程碑调用 `update-step.py`：
 
 | 里程碑 | `--progress` | 时机 |
 |--------|-------------|------|

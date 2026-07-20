@@ -1,19 +1,19 @@
 {
-  "name": "AutoGoo",
+  "name": "AutoGoo-Plugin",
   "owner": {
     "name": "zixigu"
   },
-  "description": "AutoGoo marketplace for Claude Code workflow orchestration, DAG planning, status tracking, and Goo-wiki archival.",
-  "version": "0.3.11",
+  "description": "AutoGoo-Plugin marketplace for Claude Code workflow orchestration, DAG planning, status tracking, and Goo-wiki archival.",
+  "version": "0.5.0",
   "plugins": [
     {
-      "name": "auto-goo",
-      "description": "AutoGoo 自动化智能体编排框架。接收任务后自动解析为 DAG，按依赖关系并行/串行执行，性能场景自动优化迭代，结果归档到 Goo-wiki Obsidian vault。",
+      "name": "autogoo-plugin",
+      "description": "AutoGoo-Plugin 自动化智能体编排框架。接收任务后自动解析为 DAG，按依赖关系并行/串行执行，性能场景自动优化迭代，结果归档到 Goo-wiki Obsidian vault。",
       "author": {
         "name": "zixigu"
       },
-      "homepage": "https://github.com/ZixiGu/AutoGoo",
-      "repository": "https://github.com/ZixiGu/AutoGoo",
+      "homepage": "https://github.com/ZixiGu/AutoGoo-Plugin",
+      "repository": "https://github.com/ZixiGu/AutoGoo-Plugin",
       "license": "MIT",
       "keywords": [
         "workflow",

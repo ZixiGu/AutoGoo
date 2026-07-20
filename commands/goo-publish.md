@@ -1,6 +1,6 @@
 ---
 name: auto-goo:goo-publish
-description: 将 AutoGoo 工作流状态发布为静态 HTML 站点 — 包含活动热力图、token 消耗、头脑风暴、计划、DAG、运行状态和产物索引
+description: 将 AutoGoo-Plugin 工作流状态发布为静态 HTML 站点 — 包含活动热力图、token 消耗、头脑风暴、计划、DAG、运行状态和产物索引
 ---
 
 # /auto-goo:goo-publish — HTML 工作流发布
@@ -30,7 +30,7 @@ skills/auto-goo/templates/publish/workflow-shell.html
 
 默认生成 `index.html`、`threads.html`、`plan.html`、`activity.html`、`brainstorm.html`、`status.html`、`observe.html`、`agents.html`、`artifacts.html` 和 `requests.html`。左侧工作区导航展示总览、Threads、头脑风暴、计划、运行状态、观察、代理执行、产物归档和修改请求；总览包含 Token 活动热力图和文本型工作流活动，悬浮格子显示该日或周期的消耗明细，点击或聚焦格子会在下方说明所选时间段实际完成的工作。活动页会把当前项目 Claude Code usage 日志中的 token 消耗按 turn/session 聚合进时间线，列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情；不发布 assistant 回复或完整对话正文。
 
-`goo-publish --serve` 支持在 Web 上提交修改请求，但只写入 `.goo/change-requests/*.json`，不会直接改业务文件、plan、brainstorm 或 Goo-wiki。后续由 AutoGoo 主 Agent 通过 `skills/auto-goo/scripts/change-requests.py` 列出、claim、更新请求状态，把请求同步到 thread plan 或 context artifact，再派发模型修改并审计。
+`goo-publish --serve` 支持在 Web 上提交修改请求，但只写入 `.goo/change-requests/*.json`，不会直接改业务文件、plan、brainstorm 或 Goo-wiki。后续由 AutoGoo-Plugin 主 Agent 通过 `skills/auto-goo/scripts/change-requests.py` 列出、claim、更新请求状态，把请求同步到 thread plan 或 context artifact，再派发模型修改并审计。
 
 `goo-publish.py` 必须以 `workflow-shell.html` 为唯一运行时页面外壳，并使用 `workflow-theme.css` 作为唯一正式视觉主题：shell 维护 sidebar、工作区导航容器、页头、主题按钮和主题引用；主题文件维护紧凑工作台布局、浅色/暗色变量、页面语义色、指标卡配色和响应式覆盖。脚本只填充标题、活动导航链接、正文、输出路径和交互脚本，并复制主题文件。其余 `workflow-*.html` 是内容与视觉参考页，不得作为第二套运行时 shell。
 
@@ -54,7 +54,7 @@ registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
+        if key.split("@", 1)[0] != "autogoo-plugin":
             continue
         for entry in entries:
             path = Path(entry.get("installPath", "")).expanduser()
@@ -71,7 +71,7 @@ if not matches:
             if not is_enabled or "@" not in key:
                 continue
             plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
+            if plugin != "autogoo-plugin":
                 continue
             source = marketplaces.get(marketplace, {}).get("source", {})
             if source.get("source") != "directory":
@@ -88,7 +88,7 @@ if matches:
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-publish.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
+  echo "AutoGoo-Plugin root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/goo-publish.py" --root . --output .goo/site/index.html --serve --host 0.0.0.0 --port 9877
@@ -104,7 +104,7 @@ http://<server-ip>:9877/
 
 如果 `9877` 被占用，脚本会自动尝试后续端口，并在输出中打印实际地址。server 默认直接读取已生成的 `.goo/site/index.html`，打开页面很快；需要每次刷新都重新扫描 `.goo/` 时再加 `--live`。
 
-手动预览项目级工作流状态站点时，建议使用 `--host 0.0.0.0 --port 9877`，并把脚本实际打印的 `AutoGoo HTML server` 与 `Remote URL` 原样转述给用户。远程开发、SSH 或 VS Code Remote 场景下，本地 PC 通常应访问 `Remote URL`；如果网络不可直连，提示用户对实际端口配置端口转发。任务归档后的总结报告不要走本命令，报告 URL 应指向当前 thread 的 `reports/final-report.html`。
+手动预览项目级工作流状态站点时，建议使用 `--host 0.0.0.0 --port 9877`，并把脚本实际打印的 `AutoGoo-Plugin HTML server` 与 `Remote URL` 原样转述给用户。远程开发、SSH 或 VS Code Remote 场景下，本地 PC 通常应访问 `Remote URL`；如果网络不可直连，提示用户对实际端口配置端口转发。任务归档后的总结报告不要走本命令，报告 URL 应指向当前 thread 的 `reports/final-report.html`。
 
 ## 发布内容
 

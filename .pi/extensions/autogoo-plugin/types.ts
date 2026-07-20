@@ -1,5 +1,5 @@
 /**
- * AutoGoo — shared types
+ * AutoGoo-Plugin — shared types
  */
 
 export interface SelectOption {

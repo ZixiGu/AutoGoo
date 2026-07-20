@@ -1,19 +1,19 @@
 # Obsidian 归档 (Goo-wiki Archiving)
 
-AutoGoo 以 Goo-wiki 作为项目记忆层：任务开始前读取已有知识，任务结束后将新经验归档回 wiki。Recorder Subagent 负责把执行记录转化为符合 Goo-wiki 规范的 Obsidian 笔记。
+AutoGoo-Plugin 以 Goo-wiki 作为项目记忆层：任务开始前读取已有知识，任务结束后将新经验归档回 wiki。Recorder Subagent 负责把执行记录转化为符合 Goo-wiki 规范的 Obsidian 笔记。
 
 ## 知识闭环
 
-AutoGoo 的 wiki 流程分成两段：
+AutoGoo-Plugin 的 wiki 流程分成两段：
 
 1. **执行前召回**：读取相关项目页、概念页、周报和 `log.md`，提取历史决策、已验证命令、数据路径、指标口径、失败经验和后续计划。
 2. **执行后归档**：把本次任务的目标、计划、对话中固化的方案决策、步骤证据、产物、验证结果、指标、问题处理和可复用经验写回 Goo-wiki，并补齐与既有 Markdown 页面之间的 `[[Wikilink]]`，让 Obsidian 关联图谱随任务增长。
 
-归档不是附加项，也不是孤立报告，而是为了让下一次 AutoGoo 任务能沿着项目页、概念页、问题页、周报和日志之间的链接继续推进。归档完成的判断不能只看 Markdown 文件是否存在，必须同时验收链接关系是否存在；缺少关键链接时 archive step 不得标记为 `completed`。
+归档不是附加项，也不是孤立报告，而是为了让下一次 AutoGoo-Plugin 任务能沿着项目页、概念页、问题页、周报和日志之间的链接继续推进。归档完成的判断不能只看 Markdown 文件是否存在，必须同时验收链接关系是否存在；缺少关键链接时 archive step 不得标记为 `completed`。
 
 ## 内容输出命令归档
 
-除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的 AutoGoo 命令最终都必须写入 Goo-wiki，不能只保存在 `.goo/` 或聊天消息中。
+除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的 AutoGoo-Plugin 命令最终都必须写入 Goo-wiki，不能只保存在 `.goo/` 或聊天消息中。
 
 `goo-brainstorm` 和 `goo-plan` 是 review-first 命令：先写本地 `.goo/brainstorm.json` / `.goo/plan.json`，向用户展示候选目标或计划摘要，允许用户选择、合并、改写、拆分或调整验收标准。用户确认前不要把草案写成 Goo-wiki/fallback 知识归档；确认后或进入执行前，再归档最终版。
 
@@ -39,7 +39,7 @@ AutoGoo 的 wiki 流程分成两段：
 1. `<wiki_dir>/<archive.project_dir>/`（Goo-wiki vault 存在时，通常是 `Goo-wiki/wiki/projects/<project-slug>/`）
 2. `<archive.fallback_project_dir>/`（fallback，仅本地归档，通常是 `.goo/obsidian/<project-slug>/`）
 
-**路径检测**：按 `AUTO_GOO_WIKI_DIR` → `.goo/config.json.wiki_dir` → `~/.auto-goo/config.json.wiki_dir` → `~/workspace/Goo-wiki` 解析 wiki 目录，并检查 `<wiki_dir>/CLAUDE.md` 是否存在（详见 `setup.md`）。项目归档根目录由 `.goo/config.json.archive.project_dir` 指定；不存在则降级为 fallback。
+**路径检测**：按 `AUTOGOO_PLUGIN_WIKI_DIR` → `.goo/config.json.wiki_dir` → `~/.auto-goo/config.json.wiki_dir` → `~/workspace/Goo-wiki` 解析 wiki 目录，并检查 `<wiki_dir>/CLAUDE.md` 是否存在（详见 `setup.md`）。项目归档根目录由 `.goo/config.json.archive.project_dir` 指定；不存在则降级为 fallback。
 
 ## Goo-wiki 约定
 
@@ -53,7 +53,7 @@ AutoGoo 的 wiki 流程分成两段：
 
 | 子目录 | 内容 | 更新触发 | 说明 |
 |--------|------|----------|------|
-| `tasks/` | 任务总览、步骤笔记、迭代记录 | 每次 AutoGoo 任务 | 主体内容，按任务名聚合 |
+| `tasks/` | 任务总览、步骤笔记、迭代记录 | 每次 AutoGoo-Plugin 任务 | 主体内容，按任务名聚合 |
 | `lessons/` | 跨任务的可复用经验 | 有复用价值时 | 从任务中独立沉淀的高价值经验 |
 | `brainstorm/` | 候选目标、选择依据 | brainstorm 完成后 | review-first 产物 |
 | `plans/` | DAG、上下文摘要、计划取舍 | plan 确认后 | plan 阶段产物 |
@@ -94,7 +94,7 @@ registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
+        if key.split("@", 1)[0] != "autogoo-plugin":
             continue
         for entry in entries:
             path = Path(entry.get("installPath", "")).expanduser()
@@ -111,7 +111,7 @@ if not matches:
             if not is_enabled or "@" not in key:
                 continue
             plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
+            if plugin != "autogoo-plugin":
                 continue
             source = marketplaces.get(marketplace, {}).get("source", {})
             if source.get("source") != "directory":
@@ -128,7 +128,7 @@ if matches:
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
+  echo "AutoGoo-Plugin root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" \
@@ -188,7 +188,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" \
 当步骤完成或任务结束时，按以下模式派发 Recorder：
 
 ```
-你是一个 AutoGoo Obsidian Recorder Subagent。
+你是一个 AutoGoo-Plugin Obsidian Recorder Subagent。
 
 ## 任务
 将以下执行记录格式化为符合 Goo-wiki 规范的 Obsidian 笔记。

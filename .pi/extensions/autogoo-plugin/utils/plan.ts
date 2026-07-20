@@ -1,5 +1,5 @@
 /**
- * AutoGoo Plan operations — load, save, validate, and manipulate plan.json.
+ * AutoGoo-Plugin Plan operations — load, save, validate, and manipulate plan.json.
  */
 
 import { readFile, writeFile, access, mkdir, copyFile } from "node:fs/promises";

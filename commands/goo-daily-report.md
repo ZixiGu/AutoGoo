@@ -59,7 +59,7 @@ description: 生成 Goo-wiki 日报/周报 — 扫描 Claude Code 和 Codex 会�
 ## 行为
 
 1. 确定日期范围：已通过交互提问获得；无参数默认今天；"昨天"、"今天"、"本周"必须转成具体日期。
-2. 按配置优先级解析 Goo-wiki 路径：`AUTO_GOO_WIKI_DIR` → `.goo/config.json` → `~/.auto-goo/config.json` → `~/workspace/Goo-wiki`。
+2. 按配置优先级解析 Goo-wiki 路径：`AUTOGOO_PLUGIN_WIKI_DIR` → `.goo/config.json` → `~/.auto-goo/config.json` → `~/workspace/Goo-wiki`。
 3. 运行插件脚本提取会话摘要：
 
 ```bash
@@ -78,7 +78,7 @@ registry = home / ".claude/plugins/installed_plugins.json"
 if registry.exists():
     data = json.loads(registry.read_text(encoding="utf-8"))
     for key, entries in data.get("plugins", {}).items():
-        if key.split("@", 1)[0] != "auto-goo":
+        if key.split("@", 1)[0] != "autogoo-plugin":
             continue
         for entry in entries:
             path = Path(entry.get("installPath", "")).expanduser()
@@ -95,7 +95,7 @@ if not matches:
             if not is_enabled or "@" not in key:
                 continue
             plugin, marketplace = key.split("@", 1)
-            if plugin != "auto-goo":
+            if plugin != "autogoo-plugin":
                 continue
             source = marketplaces.get(marketplace, {}).get("source", {})
             if source.get("source") != "directory":
@@ -112,7 +112,7 @@ if matches:
 PY
 )"
 if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/daily-report-sessions.py" ]; then
-  echo "AutoGoo root not configured; install auto-goo or enable a local directory marketplace in ~/.claude/settings.json" >&2
+  echo "AutoGoo-Plugin root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
 python3 "$auto_goo_root/skills/auto-goo/scripts/daily-report-sessions.py" --date YYYY-MM-DD

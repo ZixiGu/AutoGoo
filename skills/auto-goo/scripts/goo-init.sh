@@ -33,7 +33,7 @@ EOF
 }
 
 SCOPE=""
-WIKI_DIR="${AUTO_GOO_WIKI_DIR:-}"
+WIKI_DIR="${AUTOGOO_PLUGIN_WIKI_DIR:-}"
 WIKI_DIR_PROVIDED=0
 WORK_DIR=".goo"
 WORKSPACE_LAYOUT="standard"
@@ -541,7 +541,7 @@ if [[ -z "$WIKI_DIR" ]]; then
   DEFAULT_WIKI_DIR="$HOME/workspace/Goo-wiki"
   WIKI_DIR="$(prompt "Goo-wiki directory (press Enter to use default)" "$DEFAULT_WIKI_DIR")"
   WIKI_DIR_PROVIDED=1
-elif [[ "$WIKI_DIR_PROVIDED" -eq 0 && -n "${AUTO_GOO_WIKI_DIR:-}" ]]; then
+elif [[ "$WIKI_DIR_PROVIDED" -eq 0 && -n "${AUTOGOO_PLUGIN_WIKI_DIR:-}" ]]; then
   WIKI_DIR_PROVIDED=1
 fi
 
@@ -813,8 +813,8 @@ project_slug = sys.argv[2]
 project_root = sys.argv[3]
 git_remote_url = sys.argv[4]
 
-begin = "<!-- AUTO-GOO-PROJECT-META-BEGIN -->"
-end = "<!-- AUTO-GOO-PROJECT-META-END -->"
+begin = "<!-- AUTOGOO-PLUGIN-PROJECT-META-BEGIN -->"
+end = "<!-- AUTOGOO-PLUGIN-PROJECT-META-END -->"
 block = f"""{begin}
 ## Project Metadata
 
@@ -1080,8 +1080,8 @@ project_layout_dirs = json.loads(sys.argv[8])
 write_project_workspace = sys.argv[9] == "1"
 agent_target = sys.argv[10] if len(sys.argv) > 10 else "both"
 
-begin = "<!-- AUTO-GOO-WIKI-ARCHIVE-BEGIN -->"
-end = "<!-- AUTO-GOO-WIKI-ARCHIVE-END -->"
+begin = "<!-- AUTOGOO-PLUGIN-WIKI-ARCHIVE-BEGIN -->"
+end = "<!-- AUTOGOO-PLUGIN-WIKI-ARCHIVE-END -->"
 
 server_section = ""
 try:
@@ -1137,7 +1137,7 @@ except (json.JSONDecodeError, ValueError):
 project_workspace_section = ""
 if write_project_workspace and project_layout_dirs:
     lines = ["## 项目目录约定\n"]
-    lines.append(f"- 本项目采用 `{project_layout}` 业务目录结构；AutoGoo 自身状态仍固定写入 `.goo/`。")
+    lines.append(f"- 本项目采用 `{project_layout}` 业务目录结构；AutoGoo-Plugin 自身状态仍固定写入 `.goo/`。")
     lines.append("- 规划、执行和归档时优先复用以下目录语义，不要把业务代码、数据或文档混入 `.goo/`：")
     for item in project_layout_dirs:
         if item.startswith("data/raw"):
@@ -1221,19 +1221,19 @@ else:
 goo_md.write_text(goo_new, encoding="utf-8")
 
 # Write short pointer to CLAUDE.md (Claude Code)
-pointer = f"""<!-- AUTO-GOO-POINTER-BEGIN -->
+pointer = f"""<!-- AUTOGOO-PLUGIN-POINTER-BEGIN -->
 ## AutoGoo
 
 本项目使用 AutoGoo 进行任务编排。完整约定见 [goo.md](goo.md)。
-<!-- AUTO-GOO-POINTER-END -->
+<!-- AUTOGOO-PLUGIN-POINTER-END -->
 """
 targets = []
 if agent_target in ("claude", "both"):
     targets.append(claude_md)
 if agent_target in ("codex", "both"):
     targets.append(agents_md)
-pb_begin = "<!-- AUTO-GOO-POINTER-BEGIN -->"
-pb_end = "<!-- AUTO-GOO-POINTER-END -->"
+pb_begin = "<!-- AUTOGOO-PLUGIN-POINTER-BEGIN -->"
+pb_end = "<!-- AUTOGOO-PLUGIN-POINTER-END -->"
 for pt in targets:
     if pt.exists():
         pt_text = pt.read_text(encoding="utf-8")
@@ -1268,7 +1268,7 @@ cat <<'EOF'
       "hooks": [
         {
           "type": "command",
-          "command": "test -f \"${AUTO_GOO_WIKI_DIR:-$HOME/workspace/Goo-wiki}/CLAUDE.md\" && echo 'Goo-wiki vault ready' || echo 'Goo-wiki not found; using .goo/obsidian fallback'"
+          "command": "test -f \"${AUTOGOO_PLUGIN_WIKI_DIR:-$HOME/workspace/Goo-wiki}/CLAUDE.md\" && echo 'Goo-wiki vault ready' || echo 'Goo-wiki not found; using .goo/obsidian fallback'"
         },
         {
           "type": "command",

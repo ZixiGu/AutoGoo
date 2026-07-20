@@ -1066,7 +1066,7 @@ code {
     const themeToggle = document.getElementById("themeToggle");
     function applyTheme(theme) {
       document.documentElement.dataset.theme = theme;
-      localStorage.setItem("autogoo-workflow-theme", theme);
+      localStorage.setItem("autogoo-plugin-workflow-theme", theme);
       if (themeToggle) {
         const isDark = theme === "dark";
         themeToggle.textContent = isDark ? "☼" : "☾";
@@ -1074,7 +1074,7 @@ code {
         themeToggle.setAttribute("title", isDark ? "切换浅色模式" : "切换深色模式");
       }
     }
-    applyTheme(localStorage.getItem("autogoo-workflow-theme") || "light");
+    applyTheme(localStorage.getItem("autogoo-plugin-workflow-theme") || "light");
     function tick() {
       const now = new Date();
       clock.textContent = `实时 · ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;

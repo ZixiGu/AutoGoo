@@ -1,6 +1,6 @@
 ---
 name: test-runner
-description: "AutoGoo 测试执行 Task Agent。运行指定测试、lint 或集成检查，报告失败摘要，不直接修代码。"
+description: "AutoGoo-Plugin 测试执行 Task Agent。运行指定测试、lint 或集成检查，报告失败摘要，不直接修代码。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default

@@ -1,6 +1,6 @@
 ---
 name: researcher
-description: "AutoGoo 调研 Subagent。查资料、读文档、搜索代码库、整理约束和方案选项，不直接修改业务代码。"
+description: "AutoGoo-Plugin 调研 Subagent。查资料、读文档、搜索代码库、整理约束和方案选项，不直接修改业务代码。"
 tools: Read, Grep, Glob, Bash, WebSearch, AskUserQuestion
 model: haiku
 permissionMode: default

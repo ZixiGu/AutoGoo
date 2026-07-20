@@ -12,7 +12,7 @@ export interface ExecResult {
 
 /**
  * Execute a command synchronously with proper error handling.
- * All AutoGoo command handlers use this instead of duplicating execAsync.
+ * All AutoGoo-Plugin command handlers use this instead of duplicating execAsync.
  */
 export function exec(
   command: string,

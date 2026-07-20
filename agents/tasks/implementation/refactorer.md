@@ -1,6 +1,6 @@
 ---
 name: refactorer
-description: "AutoGoo 局部重构 Task Agent。只做行为等价的小范围结构整理，保持公共接口和验收行为不变。"
+description: "AutoGoo-Plugin 局部重构 Task Agent。只做行为等价的小范围结构整理，保持公共接口和验收行为不变。"
 tools: Read, Grep, Glob, Bash, Edit, MultiEdit, AskUserQuestion
 model: haiku
 permissionMode: default

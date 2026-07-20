@@ -1,6 +1,6 @@
 ---
 name: api-contract-reviewer
-description: "AutoGoo API/Schema 契约审查 Task Agent。检查 CLI、配置、JSON schema、文件格式和兼容性风险。"
+description: "AutoGoo-Plugin API/Schema 契约审查 Task Agent。检查 CLI、配置、JSON schema、文件格式和兼容性风险。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default

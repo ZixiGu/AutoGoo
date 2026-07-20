@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: "AutoGoo 代码审查 Task Agent。审查 diff 和关键文件的正确性、边界条件、错误处理和测试缺口。"
+description: "AutoGoo-Plugin 代码审查 Task Agent。审查 diff 和关键文件的正确性、边界条件、错误处理和测试缺口。"
 tools: Read, Grep, Glob, Bash, AskUserQuestion
 model: haiku
 permissionMode: default

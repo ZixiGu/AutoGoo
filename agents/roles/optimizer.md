@@ -1,6 +1,6 @@
 ---
 name: optimizer
-description: "AutoGoo 优化 Subagent。性能测量、瓶颈分析和局部优化，没有基线不盲目优化。"
+description: "AutoGoo-Plugin 优化 Subagent。性能测量、瓶颈分析和局部优化，没有基线不盲目优化。"
 tools: Read, Grep, Glob, Bash, Edit, Write, AskUserQuestion
 model: haiku
 permissionMode: default
