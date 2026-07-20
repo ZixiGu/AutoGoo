@@ -1,5 +1,5 @@
 #!/bin/bash
-# AutoGoo: 初始化 plan.json 模板
+# AutoGoo-Plugin: 初始化 plan.json 模板
 # Usage: ./scripts/init-plan.sh "<task_description>" [step_count] [--force-new-plan] [--new-thread|--thread-id <id>]
 #   step_count: 非归档步骤数量，默认 1；脚本会自动追加最后的 Wiki 归档步骤
 #   --force-new-plan: 当前 plan 未完成时仍归档旧 plan 并新建
@@ -224,7 +224,7 @@ def make_step(step_id: int) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Create an AutoGoo .goo/plan.json template")
+    parser = argparse.ArgumentParser(description="Create an AutoGoo-Plugin .goo/plan.json template")
     parser.add_argument("task", help="task description")
     parser.add_argument("step_count", nargs="?", default="1", help="number of non-archive steps")
     parser.add_argument(
@@ -232,7 +232,7 @@ def main() -> int:
         action="store_true",
         help="archive an unfinished current plan and create a new one",
     )
-    parser.add_argument("--new-thread", action="store_true", help="create a new AutoGoo thread for this plan")
+    parser.add_argument("--new-thread", action="store_true", help="create a new AutoGoo-Plugin thread for this plan")
     parser.add_argument("--thread-id", help="write the plan into an existing or explicit thread id")
     args = parser.parse_args(sys.argv[1:])
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Update one AutoGoo plan step status, progress, and heartbeat."""
+"""Update one AutoGoo-Plugin plan step status, progress, and heartbeat."""
 
 from __future__ import annotations
 

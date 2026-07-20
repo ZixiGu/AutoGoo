@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a clear AutoGoo status dashboard from .goo/plan.json."""
+"""Render a clear AutoGoo-Plugin status dashboard from .goo/plan.json."""
 
 from __future__ import annotations
 
@@ -157,10 +157,10 @@ def print_step_line(prefix: str, step: dict[str, Any], detail: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Render AutoGoo status")
+    parser = argparse.ArgumentParser(description="Render AutoGoo-Plugin status")
     parser.add_argument("--plan", default=".goo/plan.json", help="plan.json path")
     parser.add_argument("--update-status", action="store_true", help="auto-update plan status")
-    parser.add_argument("--threads", action="store_true", help="list AutoGoo threads")
+    parser.add_argument("--threads", action="store_true", help="list AutoGoo-Plugin threads")
     args = parser.parse_args()
 
     if args.threads:
@@ -205,14 +205,14 @@ def main() -> int:
     known_statuses = {"pending", "running", "completed", "failed", "blocked"}
     other = [s for s in steps if status_of(s) not in known_statuses]
     avg = round(sum(int(s.get("progress", 100 if s.get("status") == "completed" else 0) or 0) for s in steps) / total) if total else 0
-    task = data.get("task", "AutoGoo")
+    task = data.get("task", "AutoGoo-Plugin")
     stored_plan_status = data.get("status")
     plan_status = compute_plan_status(data)
     max_concurrent = data.get("max_concurrent", data.get("execution", {}).get("max_concurrent", 6))
 
     status_icon = {"pending": "⏳", "running": "▶", "completed": "✅", "failed": "❌", "blocked": "⛔", "paused": "⏸"}.get(plan_status, "?")
     print("╔" + "═" * (WIDTH - 2) + "╗")
-    print(f"║ {status_icon} AutoGoo [{plan_status}]  {shorten(task, WIDTH - 38):<{WIDTH - 38}} {completed}/{total:>2} {avg:>3}% ║")
+    print(f"║ {status_icon} AutoGoo-Plugin [{plan_status}]  {shorten(task, WIDTH - 38):<{WIDTH - 38}} {completed}/{total:>2} {avg:>3}% ║")
     print("╚" + "═" * (WIDTH - 2) + "╝")
     other_text = f" · other {len(other)}" if other else ""
     print(f"  {bar(avg, 30)}  completed {completed} · running {len(running)} · ready {len(ready)} · waiting {len(waiting)} · blocked {len(approval_blocked)} · failed {failed}{other_text} · slots {len(running)}/{max_concurrent}")

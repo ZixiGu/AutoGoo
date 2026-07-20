@@ -13,7 +13,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadPlan, getCurrentThreadId, loadThreadMeta, type Plan, type Step } from "./plan.js";
 
-const STATUS_KEY = "auto-goo";
+const STATUS_KEY = "autogoo-plugin";
 
 export interface PlanSnapshot {
   total: number;

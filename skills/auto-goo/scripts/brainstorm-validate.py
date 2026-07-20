@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate AutoGoo brainstorm JSON artifacts."""
+"""Validate AutoGoo-Plugin brainstorm JSON artifacts."""
 
 from __future__ import annotations
 
@@ -236,7 +236,7 @@ def validate_brainstorm(data: dict[str, Any], mode: str) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate AutoGoo brainstorm JSON.")
+    parser = argparse.ArgumentParser(description="Validate AutoGoo-Plugin brainstorm JSON.")
     parser.add_argument("path", nargs="?", default=".goo/brainstorm.json", help="brainstorm JSON path")
     parser.add_argument("--mode", choices=("draft", "confirmed", "any"), default="any")
     parser.add_argument("--json", action="store_true", help="print machine-readable validation result")

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 解析 AutoGoo 安装根目录并调用 update-step.py
+# 解析 AutoGoo-Plugin 安装根目录并调用 update-step.py
 # 用法: source resolve-root.sh && goo_update_step <args...>
 # 或直接: bash resolve-root.sh --plan .goo/plan.json --step-id 1 --start --progress 5
 set -euo pipefail
@@ -55,7 +55,7 @@ PY
   )"
 
   if [ -z "$root" ] || [ ! -f "$root/skills/auto-goo/scripts/update-step.py" ]; then
-    echo "AutoGoo root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
+    echo "AutoGoo-Plugin root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
     return 1
   fi
   echo "$root"

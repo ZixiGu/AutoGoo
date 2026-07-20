@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create and update AutoGoo thread metadata."""
+"""Create and update AutoGoo-Plugin thread metadata."""
 
 from __future__ import annotations
 
@@ -238,9 +238,9 @@ def list_threads(goo_dir: Path) -> int:
     current = current_thread_id(goo_dir)
     threads = [item for item in index.get("threads", []) if isinstance(item, dict)]
     if not threads:
-        print("No AutoGoo threads found.")
+        print("No AutoGoo-Plugin threads found.")
         return 0
-    print("AutoGoo threads")
+    print("AutoGoo-Plugin threads")
     for item in threads:
         mark = "*" if item.get("id") == current else " "
         print(
@@ -251,8 +251,8 @@ def list_threads(goo_dir: Path) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Manage AutoGoo thread metadata")
-    parser.add_argument("--goo-dir", default=".goo", help="AutoGoo state directory")
+    parser = argparse.ArgumentParser(description="Manage AutoGoo-Plugin thread metadata")
+    parser.add_argument("--goo-dir", default=".goo", help="AutoGoo-Plugin state directory")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     create = sub.add_parser("create", help="create a thread")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check and manage AutoGoo thread resource lock conflicts."""
+"""Check and manage AutoGoo-Plugin thread resource lock conflicts."""
 
 from __future__ import annotations
 
@@ -271,7 +271,7 @@ def list_locks(goo_dir: Path) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Manage AutoGoo thread resource locks")
+    parser = argparse.ArgumentParser(description="Manage AutoGoo-Plugin thread resource locks")
     parser.add_argument("--goo-dir", default=".goo")
     sub = parser.add_subparsers(dest="cmd", required=True)
     acquire_cmd = sub.add_parser("acquire")

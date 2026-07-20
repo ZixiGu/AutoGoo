@@ -252,7 +252,7 @@ def main() -> int:
     parser.add_argument("--server", help="Only show/probe one server selector.")
     parser.add_argument("--probe", action="store_true", help="Probe live CPU/memory/disk/GPU resources over SSH.")
     parser.add_argument("--timeout", type=int, default=8, help="SSH connect timeout in seconds.")
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[3], help="AutoGoo root.")
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[3], help="AutoGoo-Plugin root.")
     parser.add_argument("--json", action="store_true", help="Emit JSON.")
     args = parser.parse_args()
 

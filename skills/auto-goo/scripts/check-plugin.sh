@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AutoGoo 插件自检脚本
+# AutoGoo-Plugin 插件自检脚本
 # 验证插件结构完整性，安装后快速确认所有组件就绪
 set -euo pipefail
 
@@ -14,7 +14,7 @@ fail()  { echo -e "  \033[1;31m✗\033[0m $1"; ERRORS=$((ERRORS + 1)); }
 
 echo ""
 echo "============================================"
-echo "  AutoGoo 插件自检"
+echo "  AutoGoo-Plugin 插件自检"
 echo "============================================"
 echo ""
 

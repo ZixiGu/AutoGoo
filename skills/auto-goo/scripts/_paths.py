@@ -1,4 +1,4 @@
-"""Shared path-routing helpers for AutoGoo scripts.
+"""Shared path-routing helpers for AutoGoo-Plugin scripts.
 
 All scripts in this directory import from here instead of re-implementing
 find_config_dir / workspace_paths / compute_plan_status / etc.  Keeping the

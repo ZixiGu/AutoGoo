@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AutoGoo: interactive configuration initializer
+# AutoGoo-Plugin: interactive configuration initializer
 set -euo pipefail
 
 usage() {
@@ -280,7 +280,7 @@ ensure_wiki_vault() {
     cat > "$wiki_dir/CLAUDE.md" <<'EOF'
 # Goo-wiki Instructions
 
-This vault stores reusable project memory for AutoGoo workflows.
+This vault stores reusable project memory for AutoGoo-Plugin workflows.
 
 - Put project notes under `wiki/projects/`.
 - Put reusable concepts under `wiki/concepts/`.
@@ -513,7 +513,7 @@ if [[ -z "$SCOPE" ]]; then
     echo "hint: pass --user or --project explicitly" >&2
     exit 2
   fi
-  SCOPE="$(prompt "Configure AutoGoo for user or project? (user/project)" "user")"
+  SCOPE="$(prompt "Configure AutoGoo-Plugin for user or project? (user/project)" "user")"
 fi
 
 case "$SCOPE" in
@@ -712,7 +712,7 @@ if [[ "$SCOPE" == "project" ]]; then
 fi
 
 echo ""
-echo "AutoGoo init"
+echo "AutoGoo-Plugin init"
 echo "  scope:      $SCOPE"
 echo "  config:     $CONFIG_FILE"
 echo "  wiki_dir:   $WIKI_DIR"
@@ -756,7 +756,7 @@ if [[ "$SCOPE" == "project" ]]; then
     "$ROOT/$WORKSPACE_CHANGE_REQUESTS_DIR" \
     "$ROOT/$WORKSPACE_OBSIDIAN_DIR" \
     "$ROOT/$WORKSPACE_SITE_DIR"
-  echo "  workspace:  AutoGoo state directories ready under .goo"
+  echo "  workspace:  AutoGoo-Plugin state directories ready under .goo"
   python3 - "$ROOT" "$PROJECT_LAYOUT" "$PROJECT_LAYOUT_DIRS_JSON" <<'PY'
 import json
 import sys
@@ -1123,7 +1123,7 @@ try:
             lines.append(f"- **{name}**（{s['type']}，host: `{host}`）：{usage_hint(s, purpose)}连接信息见 `{s['secrets_file']}`。")
         lines.append("")
         lines.append(f"config 位于 `.goo/config.json`，secrets 位于 `.goo/secrets.json`（chmod 600，已加入 .gitignore）。")
-        lines.append("连接远程服务器由 AutoGoo 工具读取 `.goo/config.json` 与 `.goo/secrets.json` 处理；执行任务时必须显式选择目标服务器，不依赖默认第一个。")
+        lines.append("连接远程服务器由 AutoGoo-Plugin 工具读取 `.goo/config.json` 与 `.goo/secrets.json` 处理；执行任务时必须显式选择目标服务器，不依赖默认第一个。")
         lines.append("不得把 secrets 展开到命令行、日志、计划正文或 subagent prompt。")
         lines.append("")
         lines.append("添加新服务器：")
@@ -1172,16 +1172,16 @@ if write_project_workspace and project_layout_dirs:
         elif item == "reports" or item.startswith("reports/"):
             meaning = "评测报告、分析报告和汇总材料"
         elif item == "artifacts" or item.startswith("artifacts/"):
-            meaning = "业务产物；区别于 `.goo/artifacts/` 的 AutoGoo 执行产物"
+            meaning = "业务产物；区别于 `.goo/artifacts/` 的 AutoGoo-Plugin 执行产物"
         else:
             meaning = "项目约定目录"
         lines.append(f"- `{item}/`: {meaning}。")
-    lines.append("- 新增计划步骤时，`allowed_read_paths` / `allowed_write_paths` 应优先落在上述业务目录或 `.goo/` 的明确 AutoGoo 状态目录内；涉及原始数据覆盖、批量改写或大文件生成时先请求用户确认。")
+    lines.append("- 新增计划步骤时，`allowed_read_paths` / `allowed_write_paths` 应优先落在上述业务目录或 `.goo/` 的明确 AutoGoo-Plugin 状态目录内；涉及原始数据覆盖、批量改写或大文件生成时先请求用户确认。")
     project_workspace_section = "\n".join(lines) + "\n"
 
 archive_section = ""
 if wiki_ready:
-    archive_section = f"""## AutoGoo / Goo-wiki 归档原则
+    archive_section = f"""## AutoGoo-Plugin / Goo-wiki 归档原则
 
 - 本项目启用 Goo-wiki 作为项目记忆层；规划前先检索 `{wiki_dir}` 中相关项目页、概念页、周报和 `log.md`，复用已有约束、命令、路径、指标口径和历史经验。
 - 使用 `/auto-goo:goo-plan` 生成计划时，必须在当前 thread plan 最后保留 `归档到 Goo-wiki` 步骤，并依赖所有非归档叶子步骤；计划必须包含 `thread`、`wiki_context` 和 `context_digest`，让后续执行不依赖主会话聊天记录。
@@ -1211,7 +1211,7 @@ block = f"""{begin}
 if goo_md.exists():
     goo_text = goo_md.read_text(encoding="utf-8")
 else:
-    goo_text = "# AutoGoo 项目约定\n"
+    goo_text = "# AutoGoo-Plugin 项目约定\n"
 if begin in goo_text and end in goo_text:
     prefix, rest = goo_text.split(begin, 1)
     _, suffix = rest.split(end, 1)
@@ -1222,9 +1222,9 @@ goo_md.write_text(goo_new, encoding="utf-8")
 
 # Write short pointer to CLAUDE.md (Claude Code)
 pointer = f"""<!-- AUTOGOO-PLUGIN-POINTER-BEGIN -->
-## AutoGoo
+## AutoGoo-Plugin
 
-本项目使用 AutoGoo 进行任务编排。完整约定见 [goo.md](goo.md)。
+本项目使用 AutoGoo-Plugin 进行任务编排。完整约定见 [goo.md](goo.md)。
 <!-- AUTOGOO-PLUGIN-POINTER-END -->
 """
 targets = []
@@ -1272,7 +1272,7 @@ cat <<'EOF'
         },
         {
           "type": "command",
-          "command": "cat .goo/plan.json 2>/dev/null && echo 'Unfinished AutoGoo plan found; run /auto-goo:goo-continue to resume' || true"
+          "command": "cat .goo/plan.json 2>/dev/null && echo 'Unfinished AutoGoo-Plugin plan found; run /auto-goo:goo-continue to resume' || true"
         }
       ]
     }]

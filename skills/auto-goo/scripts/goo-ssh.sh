@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AutoGoo SSH helper: connect to a configured server using password from .goo/secrets.json.
+# AutoGoo-Plugin SSH helper: connect to a configured server using password from .goo/secrets.json.
 set -euo pipefail
 
 usage() {

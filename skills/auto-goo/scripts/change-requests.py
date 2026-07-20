@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage AutoGoo web change request state transitions."""
+"""Manage AutoGoo-Plugin web change request state transitions."""
 
 from __future__ import annotations
 
@@ -179,7 +179,7 @@ def update_request(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Manage AutoGoo change requests")
+    parser = argparse.ArgumentParser(description="Manage AutoGoo-Plugin change requests")
     parser.add_argument("--goo-dir", default=".goo")
     sub = parser.add_subparsers(dest="cmd", required=True)
 

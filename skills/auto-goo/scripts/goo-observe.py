@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Observe AutoGoo background agents, shell tracking, and step logs."""
+"""Observe AutoGoo-Plugin background agents, shell tracking, and step logs."""
 
 from __future__ import annotations
 
@@ -207,7 +207,7 @@ def snapshot(root: Path) -> dict[str, Any]:
 
 
 def print_text(data: dict[str, Any]) -> None:
-    print("AutoGoo Observe")
+    print("AutoGoo-Plugin Observe")
     print(f"  root:       {data.get('root')}")
     print(f"  thread:     {(data.get('current_thread') or {}).get('id') or 'legacy/current'}")
     print(f"  plan:       {data.get('plan_path') or '未找到'}")
@@ -218,11 +218,11 @@ def print_text(data: dict[str, Any]) -> None:
     print("")
     print("Agent View")
     print(f"  {data['commands']['agent_view']}     # 看后台 Claude session / shell job")
-    print("  Space peek, Enter/Right attach；内部 subagent 细节看下面的 AutoGoo step。")
+    print("  Space peek, Enter/Right attach；内部 subagent 细节看下面的 AutoGoo-Plugin step。")
     print("")
     print("RUNNING")
     if not data["running"]:
-        print("  无运行中的 AutoGoo step。")
+        print("  无运行中的 AutoGoo-Plugin step。")
     for item in data["running"]:
         print(f"  #{item['id']} {shorten(item['name'], 42)} · {item['progress']}% · hb {item['heartbeat_age']} · {item.get('subagent')}/{item.get('task_agent')}")
         if item.get("log_path"):

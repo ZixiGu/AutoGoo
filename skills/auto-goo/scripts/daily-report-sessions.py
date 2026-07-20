@@ -1,6 +1,6 @@
 """
 Extract meaningful summaries from Claude Code and Codex session files for
-AutoGoo daily reports. Supports both JSONL formats.
+AutoGoo-Plugin daily reports. Supports both JSONL formats.
 
 Usage:
   python daily-report-sessions.py --date 2026-05-07

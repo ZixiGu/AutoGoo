@@ -201,7 +201,7 @@ def render_markdown(
     title: str,
 ) -> str:
     out = [
-        "# AutoGoo Wiki Graph Packet",
+        "# AutoGoo-Plugin Wiki Graph Packet",
         "",
         f"- wiki_dir: `{wiki_dir}`",
         f"- project_slug: `{project_slug or ''}`",
@@ -234,7 +234,7 @@ def render_markdown(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Prepare compact Goo-wiki graph context for AutoGoo archive steps")
+    parser = argparse.ArgumentParser(description="Prepare compact Goo-wiki graph context for AutoGoo-Plugin archive steps")
     parser.add_argument("--wiki-dir", help="Goo-wiki vault path; defaults to AUTOGOO_PLUGIN_WIKI_DIR or ~/workspace/Goo-wiki")
     parser.add_argument("--project-slug", help="Project slug under wiki/projects/")
     parser.add_argument("--project-dir", help="Project archive dir relative to wiki_dir, e.g. wiki/projects/foo")

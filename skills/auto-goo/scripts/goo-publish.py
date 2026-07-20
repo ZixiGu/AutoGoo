@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish AutoGoo local workflow state as a static HTML site."""
+"""Publish AutoGoo-Plugin local workflow state as a static HTML site."""
 
 from __future__ import annotations
 
@@ -1079,7 +1079,7 @@ def render_flow_graph(plan: dict[str, Any] | None) -> str:
     <section class="panel flow-panel">
       <div class="section-head"><h2>任务流程</h2><span>{esc(thread_label)} · {len(steps)} 个步骤</span></div>
       <div class="flow-scroll">
-        <svg class="flow-svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="AutoGoo 任务流程图">
+        <svg class="flow-svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="AutoGoo-Plugin 任务流程图">
           <defs>
             <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto" markerUnits="strokeWidth">
               <path class="flow-arrow" d="M0,0 L0,8 L11,4 z" />
@@ -1186,7 +1186,7 @@ def render_plan(plan: dict[str, Any] | None, *, include_dag: bool = True) -> str
     return f"""
     <section class="panel">
       <div class="section-head"><h2>当前计划</h2><span class="status {esc(STATUS_CLASS.get(status, "pending"))}">{esc(status_label(status))}</span></div>
-      <h3>{esc(plan.get("task") or plan.get("task_name") or "未命名 AutoGoo 任务")}</h3>
+      <h3>{esc(plan.get("task") or plan.get("task_name") or "未命名 AutoGoo-Plugin 任务")}</h3>
       <div class="progress"><span style="width:{stats['progress']}%"></span></div>
       <p class="muted">已完成 {stats['done']}/{stats['total']} 个步骤 · {stats['progress']}%</p>
       <div class="chips">{chips}</div>
@@ -1299,7 +1299,7 @@ def render_observe(observe: dict[str, Any]) -> str:
 
     return f"""
     <section class="panel observe-hero">
-      <div class="section-head"><h2>后台观察</h2><span>Agent View + AutoGoo step heartbeat</span></div>
+      <div class="section-head"><h2>后台观察</h2><span>Agent View + AutoGoo-Plugin step heartbeat</span></div>
       <div class="observe-grid">
         <div class="observe-card">
           <span class="muted">Claude Code</span>
@@ -1327,14 +1327,14 @@ def render_observe(observe: dict[str, Any]) -> str:
       <div class="section-head"><h2>Agent View 与 Shell</h2><span>快速入口</span></div>
       <div class="observe-command-grid">
         <div><strong>后台会话</strong><code>{esc(commands.get('agent_view') or 'claude agents')}</code><p>Space peek，Enter/Right attach。</p></div>
-        <div><strong>AutoGoo 状态</strong><code>{esc(commands.get('status') or '/auto-goo:goo-status')}</code><p>查看 per-step progress、heartbeat 和告警。</p></div>
+        <div><strong>AutoGoo-Plugin 状态</strong><code>{esc(commands.get('status') or '/auto-goo:goo-status')}</code><p>查看 per-step progress、heartbeat 和告警。</p></div>
         <div><strong>Live 发布</strong><code>{esc(commands.get('publish_live') or '/auto-goo:goo-publish --live')}</code><p>刷新页面时重新扫描 .goo 状态。</p></div>
         <div><strong>Shell 留痕</strong><code>{esc(commands.get('shell_template') or '')}</code><p>长任务输出写入 shell log，避免 Agent View 临时输出被清理。</p></div>
       </div>
     </section>
     <section class="panel">
       <div class="section-head"><h2>Running Steps</h2><span>{len(running)} 个</span></div>
-      <div class="observe-step-list">{''.join(step_card(item) for item in running) or '<p class="muted">暂无运行中的 AutoGoo step。</p>'}</div>
+      <div class="observe-step-list">{''.join(step_card(item) for item in running) or '<p class="muted">暂无运行中的 AutoGoo-Plugin step。</p>'}</div>
     </section>
     <section class="panel">
       <div class="section-head"><h2>Blocked / Failed</h2><span>{len(attention)} 个</span></div>
@@ -1593,7 +1593,7 @@ def render_change_requests(
     return f"""
     {request_context_cards(plan, brainstorm, artifacts, root, threads)}
     <section class="panel request-panel">
-      <div class="section-head"><h2>修改请求</h2><span>提交后由 AutoGoo 读取并让模型修改</span></div>
+      <div class="section-head"><h2>修改请求</h2><span>提交后由 AutoGoo-Plugin 读取并让模型修改</span></div>
       <form class="request-form" data-change-request-form>
         <input type="hidden" name="thread_id" value="{esc(current_thread_id)}">
         <input type="hidden" name="target" value="plan-step">
@@ -1617,7 +1617,7 @@ def render_change_requests(
     </section>
     <section class="panel">
       <div class="section-head"><h2>待处理请求</h2><span data-request-count>{len(requests)} 条</span></div>
-      <p class="request-scope-note">待处理请求不会自动修改文件。下一步在 Codex/Claude 中运行 <code>/auto-goo:goo-continue</code>，AutoGoo 会扫描这些请求、同步进 plan、执行修改和审计；完成后在这里标记状态。</p>
+      <p class="request-scope-note">待处理请求不会自动修改文件。下一步在 Codex/Claude 中运行 <code>/auto-goo:goo-continue</code>，AutoGoo-Plugin 会扫描这些请求、同步进 plan、执行修改和审计；完成后在这里标记状态。</p>
       <div class="request-list" data-request-list>{''.join(rows) or '<p class="muted" data-empty-requests>暂无修改请求。</p>'}</div>
     </section>
     """
@@ -2177,7 +2177,7 @@ def nav_script() -> str:
         const text = JSON.stringify(payload(), null, 2);
         try {
           await navigator.clipboard.writeText(text);
-          setResult("已复制 JSON。把它交给 AutoGoo 后会写入修改队列。", "success");
+          setResult("已复制 JSON。把它交给 AutoGoo-Plugin 后会写入修改队列。", "success");
         } catch (error) {
           setResult(text, "error");
         }
@@ -2204,7 +2204,7 @@ def nav_script() -> str:
           });
           updateTargetField();
         } catch (error) {
-          setResult(`无法直接保存；请复制 JSON 交给 AutoGoo。${error.message || error}`, "error");
+          setResult(`无法直接保存；请复制 JSON 交给 AutoGoo-Plugin。${error.message || error}`, "error");
         }
       });
     });
@@ -2658,7 +2658,7 @@ def build_site(root: Path, output: Path) -> dict[str, str]:
     subtitle = f"生成时间：{generated_at}"
     pages = {
         "index.html": page_shell(
-            f"AutoGoo 工作流 · {title}",
+            f"AutoGoo-Plugin 工作流 · {title}",
             "index",
             subtitle,
             output,
@@ -2752,7 +2752,7 @@ def build_site(root: Path, output: Path) -> dict[str, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Publish AutoGoo workflow state as static HTML",
+        description="Publish AutoGoo-Plugin workflow state as static HTML",
         epilog="Runtime shell: skills/auto-goo/templates/publish/workflow-shell.html",
     )
     parser.add_argument("--root", default=".", help="project root, defaults to current directory")
@@ -2775,7 +2775,7 @@ def main() -> int:
         output = output / "index.html"
     output.parent.mkdir(parents=True, exist_ok=True)
     build_site(root, output)
-    print(f"AutoGoo HTML published: {output}")
+    print(f"AutoGoo-Plugin HTML published: {output}")
     if args.serve:
         host = args.host or str(publish.get("host") or DEFAULT_PUBLISH_CONFIG["host"])
         port = args.port if args.port is not None else as_int(publish.get("port"), DEFAULT_PUBLISH_CONFIG["port"])
@@ -2969,7 +2969,7 @@ def serve(root: Path, output: Path, host: str, port: int, *, live: bool, open_br
 
     urls = display_urls(host, selected_port)
     write_server_info(root, output, host, selected_port, urls, live=live)
-    print(f"AutoGoo HTML server: {urls[0]}", flush=True)
+    print(f"AutoGoo-Plugin HTML server: {urls[0]}", flush=True)
     for url in urls[1:]:
         print(f"Remote URL: {url}", flush=True)
     if live:
