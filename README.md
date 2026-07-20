@@ -62,7 +62,7 @@ Pi Coding Agent 使用本地扩展方式安装，需要手动配置 `.pi/setting
 
 ```json
 {
-  "extensions": ["/path/to/AutoGoo-Plugin/.pi/extensions/auto-goo/index.ts"]
+  "extensions": ["/path/to/AutoGoo-Plugin/.pi/extensions/autogoo-plugin/index.ts"]
 }
 ```
 
@@ -73,7 +73,7 @@ Pi Coding Agent 使用本地扩展方式安装，需要手动配置 `.pi/setting
 cd /path/to/your/project
 
 # 链接 AutoGoo-Plugin 扩展
-pi extension add /path/to/AutoGoo-Plugin/.pi/extensions/auto-goo
+pi extension add /path/to/AutoGoo-Plugin/.pi/extensions/autogoo-plugin
 ```
 
 **方法三：全局配置**
@@ -82,7 +82,7 @@ pi extension add /path/to/AutoGoo-Plugin/.pi/extensions/auto-goo
 
 ```json
 {
-  "extensions": ["/path/to/AutoGoo-Plugin/.pi/extensions/auto-goo/index.ts"]
+  "extensions": ["/path/to/AutoGoo-Plugin/.pi/extensions/autogoo-plugin/index.ts"]
 }
 ```
 
