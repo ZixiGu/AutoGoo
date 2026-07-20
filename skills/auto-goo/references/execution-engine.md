@@ -453,15 +453,41 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
 
 **主 Agent 已在派发前用 `--start --progress 5` 写入启动心跳。Subagent 不要重复调用 `--start`；只有发现当前 step 仍不是 running 或没有 `heartbeat_at` 时，才用 `--start --progress 5` 补救。中间里程碑用 `--heartbeat --progress <N>`，完成用 `--complete`。**
 
-## 交付要求
+## 交付要求（0 号动作：先落痕、后动手）
+
+> **留痕是产物的一部分。** 主 Agent 在派发前已经用 `update-step.py --precreate-log` 写好 dispatch 骨架。如果你不接管它就动手干活，主 Agent post-check 会判 `dispatch_no_log` 并强制重派。
+
+**0. 第一动作（写代码之前）**：检查本 step 的 `log_path` 是否存在且非空。
+   - 不存在 / 仍是骨架 → 第一件事必须是接管骨架：
+
+     ```bash
+     python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" \
+       --plan .goo/threads/<thread_id>/plan.json --step-id <id> \
+       --heartbeat --progress 15 --note "<已开工，读懂了输入与边界>"
+     ```
+   - 同时把读懂的内容（输入路径、边界、上下文 artifact、上游产物）逐条追加进日志。
+   - 若发现 `status != running` 或 `heartbeat_at` 缺失，说明主 Agent 没写首心跳，先用 `--start --progress 5 --note "<补救首心跳：主 Agent 未派发>"` 补救并把主 Agent 的派发漏洞写进日志，避免双重失联。
+
 1. 在 {cwd} 目录下工作
-2. 读取当前 step 状态；若主 Agent 已写入 `status=running` 和 `heartbeat_at`，直接开始输入读取；若缺失，先调用 `update-step.py --start --progress 5` 补救并记录原因
+2. 读取当前 step 状态；若主 Agent 已写入 `status=running` 和 `heartbeat_at`，直接开始输入读取；若缺失，按 0 号动作的补救规则处理
 3. `update-step.py` 会自动创建并追加当前 thread 的 `logs/{timestamp}_step-{id}_{name}.md`，并把 `log_path` 写回当前 step
-4. **每到一个里程碑**调用 `update-step.py --heartbeat --progress <N> --note "<短进展>"`（见上方 Heartbeat 表）
+4. **每到一个里程碑**调用 `update-step.py --heartbeat --progress <N> --note "<短进展>"`（见上方 Heartbeat 表）。**`--note` 必填**：`update-step.py` 在 `--heartbeat` 模式下缺 `--note` 会以 exit=2 报错；空白 note 等于没记录，比漏心跳更糟
 5. 执行实现后用 `--note` 补充：关键决策、输出产物路径、耗时
-6. **完成后**调用 `update-step.py --complete`
-7. 失败时调用 `update-step.py --fail --error "<reason>"`，并在日志中记录失败原因
-8. 日志必须包含：做了什么、关键决策、输出产物路径、耗时
+6. **完成后**调用 `update-step.py --complete`，并在日志末尾贴上：实际产物路径、验证命令与结果、关键决策
+7. 失败时调用 `update-step.py --fail --error "<reason>"`，并在日志中记录失败原因、阻塞点和恢复建议
+8. 日志必须包含：做了什么、关键决策（含被拒绝的备选）、实际写入的产物路径、验证命令与结果
+
+### 按 step type 区分产物形态
+
+| step type | 产物形态 | post-check 该看什么 |
+|----------|---------|---------------------|
+| `exec` | 代码 / 配置文件（落入代码库） | `git diff --stat HEAD` + outputs 路径 + log |
+| `research` | markdown 报告 / wiki 笔记 / 数据 | outputs / report 路径内容 + log 含结论段 + log |
+| `eval` / `audit` / `review` | 审计/评测报告 / 数据报告 | outputs / reports 路径 + log 含结论与风险项 |
+| `archive` | Goo-wiki / fallback 笔记 | wiki 路径存在 + wikilink 校验 + log |
+| `optimize` | 代码 + 评测报告 | 上述两类合并 |
+
+> **分析型 Subagent 没有代码改动是合法的。** 如果产物的所有形态都被主 Agent 标成 "non-code analytical outputs"（研究/评测/审计/审查），不要硬 git diff。这种情况必须靠**日志 + 报告文件** 双证据完成留痕。
 
 ## 产物
 - 代码文件写入 src/ 或对应目录
@@ -640,11 +666,56 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
 - [ ] 该 step 是否声明了合法 `subagent` 角色？不合法时先补 plan 或创建新角色，不由主 Agent 代执行
 - [ ] 该 Agent 的 prompt 包含：任务描述 + 上游产物路径 + 允许读写范围 + 回写 plan.json 指令？
 - [ ] **该 Agent 的 prompt 包含 Heartbeat 强制分段？**（缺少此项 Subagent 不更新 heartbeat_at，会被误判为僵尸）
+- [ ] **主 Agent 派发前已调用 `update-step.py --precreate-log` 创建 dispatch 骨架？** 缺这一步就等于"派出去不留痕"，主 Agent 必须在派发 Subagent 前完成这一步并把 `log_path` 回填进 plan.json
+- [ ] **该 Agent 的 prompt 包含「0 号动作：先落痕、后动手」？**（参见执行型 prompt 模板，要求 Subagent 在写任何代码前先 heartbeat 接管 dispatch 骨架）
 - [ ] 该 Agent 即使看不到主会话聊天记录，也能仅凭 plan/Markdown/wiki 摘要完成当前 step？
 - [ ] 该 Agent 只拿到与当前 step 相关的 wiki_context 和日志摘要？
 - [ ] 该 Agent 知道往哪里写日志（当前 thread `logs/`）？
 - [ ] 日志写入逻辑独立于执行结果（即使失败也能写日志）？
 - [ ] 下游扇出度已计算（用于优先级排序）？
+
+## 主 Agent Post-Check 流程（与「完成验收闸门」配合）
+
+> 凡 Subagent 返回 `Done`，主 Agent 必须按本流程执行端到端留痕校验，缺一不可。**「subagent 执行完成 = step 完成」是不成立的；只有「post-check 全部通过」才允许 `--complete`。**
+
+### 派发前 pre-dispatch（必须）
+
+```bash
+# 1. 在派发 Subagent 之前，先创建 dispatch 骨架，让 logs/ 里有"派发事实"
+python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" \
+  --plan "$plan_path" --step-id "$step_id" \
+  --precreate-log --note "<派发上下文：上游产物路径 / 上一步关键决策 / 关键约束>"
+```
+
+**这一步是 post-check 的左半边**：Subagent 是否失联都至少有一份派发证据。
+
+### 收尾 post-check（必须）
+
+主 Agent 在收到 Subagent `Done` 之后、调用 `--complete` 之前，必须依次运行（按 step type 分流），**全部通过**才能标记 completed；**任一项缺失**就把 step 回写 `blocked: dispatch_no_log` 或 `failed`，走重派或结束：
+
+#### 通用：必有信号
+- **A1. 日志存活**：`ls -lh "{thread.logs_dir}/"` 显示本 step 的 `step-{id}_*.md` 存在且大于骨架大小（>= 1KB 或至少有 Subagent 追加的 1 个新段）
+- **A2. 心跳存活**：`logs/{id}*.md` 里至少有 3 行 milestone heartbeat（15 / 50 / 85 / complete），或运行 `python3 update-step.py --plan <plan> --step-id <id>` 拿 `heartbeat_at` 时间戳
+
+#### 按 step type 流：分项检查
+
+| step type | 必查路径 | 命令 |
+|----------|---------|------|
+| `exec` / `optimize` (实现型) | 落盘产物 | `git -C <project> diff --stat HEAD` <br>`ls -lh <step.outputs>` 至少一个非空 <br>`grep -nE "产物路径\|落盘到\|写入" logs/...md` 至少有一条 Subagent 自报的产物路径 |
+| `research` / `eval` / `audit` / `review` (分析型) | 报告 / 笔记 | `ls -lh <step.outputs>` <br>`grep -nE "## 结论\|## 推荐\|## 风险\|## 指标" logs/...md` 至少 1 个结论段 <br>如果产物是 markdown：报告首段非 placeholder，含 ≤ 200 字结构化结论 |
+| `archive` (归档型) | Goo-wiki / fallback | 主 Agent 跑 `wiki-graph-assist.py --validate --task-page <path>` 验证 wikilink；`ls -lh <wiki_dir>/wiki/projects/<slug>/` <br>或 `ls -lh .goo/obsidian/<slug>/tasks/<tid>/` |
+| `optimize` (优化型) | 评测 + 对比 | 上述 exec + eval 两组合并 |
+
+**关键：分析型 Subagent 没有代码改动是合法的。** 不要因为 `git diff` 为空就标 failed；这种 step 必须靠 **日志结构化结论 + 报告文件** 双证据完成留痕。判断"是否完成"看 step type 列出的必查路径，而不是看 git diff 是否变更。
+
+### 失败判定
+
+| 现场 | 主 Agent 操作 |
+|------|--------------|
+| 日志骨架存在但 Subagent 未接管（无新段落、无心跳升级） | 标 `blocked: dispatch_no_log`；按 SKILL.md 「完成验收闸门」走重派 |
+| 报告/产物路径不存在但日志说"已完成" | 标 `failed: output_missing`；让 Subagent 重跑并用 `Bash ls -lh` 自验 |
+| 心跳停滞但日志在涨 | 标 `running + 延长 heartbeat_timeout`，不重派 |
+| 产物全部存在，日志结构完整 | 标 `completed`；更新 thread/plan 状态 |
 
 ## Subagent 分类速查
 
