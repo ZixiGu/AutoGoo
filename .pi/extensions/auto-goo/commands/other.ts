@@ -11,6 +11,7 @@ export function setPi(pi: ExtensionAPI): void {
   _pi = pi;
 }
 import { REPO_ROOT, GOO_STATUS_PY, GOO_PUBLISH_PY, projectPlanPath, scriptsDir } from "../utils/paths.js";
+import { execPython, execShell } from "../utils/exec.js";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -95,11 +96,43 @@ export async function handleGooUsage(args: string, ctx: ExtensionContext): Promi
     return;
   }
 
-  try {
-    const result = execPython(scriptPath, args ? args.split(" ") : [], cwd);
-    ctx.ui.notify((result.stdout || "用法统计加载中...").slice(0, 500), "info");
-  } catch (err: any) {
-    ctx.ui.notify(`用法统计失败: ${err.message}`, "error");
+  // Quick one-shot summary
+  const scriptArgs = ["--once", "--pi"];
+  if (args.trim()) {
+    const parsed: string[] = [];
+    let current = "";
+    let inQuote: string | null = null;
+    for (const ch of args.trim()) {
+      if (inQuote) {
+        if (ch === inQuote) { inQuote = null; continue; }
+        current += ch;
+      } else if (ch === "'" || ch === '"') {
+        inQuote = ch;
+      } else if (ch === " ") {
+        if (current) { parsed.push(current); current = ""; }
+      } else {
+        current += ch;
+      }
+    }
+    if (current) parsed.push(current);
+    scriptArgs.push(...parsed.filter(a => a !== "--once"));
+  }
+
+  const result = execPython(scriptPath, scriptArgs, cwd, { timeout: 30000 });
+  if (result.exitCode !== 0) {
+    ctx.ui.notify("usage 统计失败", "error");
+    return;
+  }
+
+  // Strip ANSI codes and send full output to conversation
+  const raw = result.stdout || "";
+  const clean = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").replace(/\x1b\][0-9;]*[a-zA-Z]/g, "");
+
+  if (_pi) {
+    _pi.sendUserMessage(
+      `📊 **Pi Usage 统计**\n\n\`\`\`\n${clean.slice(0, 4000)}\n\`\`\``,
+      { deliverAs: "followUp" }
+    );
   }
 }
 

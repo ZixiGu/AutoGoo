@@ -90,6 +90,7 @@ DEFAULT_CODEX_PRICING: dict[str, tuple[float, float, float]] = {
 CODEX_SOURCE_LABELS = {
     "claude": "Claude Code",
     "codex":  "Codex CLI",
+    "pi":     "Pi",
 }
 DEFAULT_PRICING: dict[str, tuple[float, float, float]] = {
     "claude-opus-4-7":      (15.00, 75.00, 1.50),
@@ -305,7 +306,7 @@ def hbar(value: int, maximum: int, width: int = 20, color_fn=None) -> str:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Claude Code usage monitor — rich terminal dashboard",
+        description="Claude Code / Pi usage monitor — rich terminal dashboard",
         epilog="Example: /auto-goo:goo-usage",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -337,6 +338,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--codex-dir", type=Path,
                    default=Path.home() / ".codex" / "sessions",
                    help="Codex CLI sessions directory (default: ~/.codex/sessions)")
+    p.add_argument("--pi", action="store_true",
+                   help="Read Pi usage from ~/.pi/agent/sessions instead of Claude Code")
     return p.parse_args()
 
 
@@ -564,12 +567,65 @@ def iter_codex_records(sessions_dir: Path, since: str | None, until: str | None)
                 }
 
 
+def iter_pi_records(pi_dir: Path, since: str | None, until: str | None):
+    """Read Pi Coding Agent session JSONL files and yield normalized usage rows."""
+    if not pi_dir.exists():
+        return
+    for proj_dir in sorted(pi_dir.iterdir()):
+        if not proj_dir.is_dir():
+            continue
+        for sess_file in sorted(proj_dir.glob("*.jsonl")):
+            with sess_file.open(encoding="utf-8", errors="ignore") as f:
+                header = None
+                for line in f:
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    # Capture session header for cwd
+                    if obj.get("type") == "session":
+                        header = obj
+                        continue
+                    if obj.get("type") != "message":
+                        continue
+                    msg = obj.get("message") or {}
+                    if msg.get("role") != "assistant":
+                        continue
+                    usage = msg.get("usage") or {}
+                    if not usage:
+                        continue
+                    timestamp = str(obj.get("timestamp", ""))
+                    if since and timestamp < since:
+                        continue
+                    if until and timestamp > until:
+                        continue
+                    # Use session header id (file-level session) or filename as fallback
+                    sid = (header or {}).get("id", "") or sess_file.stem
+                    yield {
+                        "timestamp": timestamp,
+                        "sessionId": sid,
+                        "cwd": (header or {}).get("cwd", ""),
+                        "model": str(msg.get("model", "")),
+                        "input_tokens": _safe_int(usage.get("input")),
+                        "output_tokens": _safe_int(usage.get("output")),
+                        "cache_creation_input_tokens": _safe_int(usage.get("cacheWrite")),
+                        "cache_read_input_tokens": _safe_int(usage.get("cacheRead")),
+                        "turnId": timestamp,
+                        "source": "pi",
+                    }
+
+
 def load_records(input_dir: Path, since: str | None, until: str | None,
                  include_synthetic: bool,
-                 codex_dir: Path | None = None) -> list[dict[str, object]]:
-    rows = list(iter_records(input_dir, since, until))
-    if codex_dir:
-        rows.extend(iter_codex_records(codex_dir, since, until))
+                 codex_dir: Path | None = None,
+                 pi_dir: Path | None = None) -> list[dict[str, object]]:
+    if pi_dir:
+        # Pi mode: only read Pi sessions
+        rows = list(iter_pi_records(pi_dir, since, until))
+    else:
+        rows = list(iter_records(input_dir, since, until))
+        if codex_dir:
+            rows.extend(iter_codex_records(codex_dir, since, until))
     if not include_synthetic:
         rows = [r for r in rows if str(r.get("model") or "") != "<synthetic>"]
     return rows
@@ -682,7 +738,8 @@ def collect(args: argparse.Namespace, tz: timezone | ZoneInfo) -> tuple[list[dic
     since = iso_bound(since_dt)
     until = iso_bound(until_dt)
     codex_dir = args.codex_dir if getattr(args, "codex", False) else None
-    rows = load_records(args.input_dir, since, until, args.include_synthetic, codex_dir=codex_dir)
+    pi_dir = Path.home() / ".pi" / "agent" / "sessions" if getattr(args, "pi", False) else None
+    rows = load_records(args.input_dir, since, until, args.include_synthetic, codex_dir=codex_dir, pi_dir=pi_dir)
     return rows, since, until
 
 
@@ -813,7 +870,7 @@ def render_header(tz: timezone | ZoneInfo, time_format: str, args=None) -> None:
     now = datetime.now(tz)
     tz_name = getattr(tz, "key", now.tzname() or "local")
     _srcs = _active_sources(args) if args is not None else ["claude"]
-    _label = " + ".join(s.upper() for s in _srcs) if len(_srcs) > 1 else _srcs[0].split()[0] if " " in _srcs[0] else _srcs[0]
+    _label = " + ".join(s.upper() for s in _srcs) if len(_srcs) > 1 else (_srcs[0].split()[0] if " " in _srcs[0] else _srcs[0]).upper()
     print(cbold(f"  ✦ ✧ ✦ ✧  {_label} USAGE  ✦ ✧ ✦ ✧", CYAN))
     print(c(f"  {now.strftime('%Y-%m-%d')}  │  {tz_name}  │  {format_clock(now, time_format)}", MUTED))
     print()
@@ -1011,7 +1068,8 @@ def render_history(args: argparse.Namespace, pricing: dict[str, dict[str, float]
     since_iso = iso_bound(since_dt)
     until_iso = iso_bound(now)
 
-    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic)
+    pi_dir = Path.home() / ".pi" / "agent" / "sessions" if getattr(args, "pi", False) else None
+    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic, pi_dir=pi_dir)
     if not all_rows:
         print(c("  No records for this period.", MUTED))
         return 0
@@ -1082,7 +1140,8 @@ def render_history(args: argparse.Namespace, pricing: dict[str, dict[str, float]
 
 def render_table_view(args: argparse.Namespace, pricing: dict[str, dict[str, float]],
                       tz: timezone | ZoneInfo) -> int:
-    rows = load_records(args.input_dir, args.since, args.until, args.include_synthetic)
+    pi_dir = Path.home() / ".pi" / "agent" / "sessions" if getattr(args, "pi", False) else None
+    rows = load_records(args.input_dir, args.since, args.until, args.include_synthetic, pi_dir=pi_dir)
     if not rows:
         print("No Claude Code usage records found.")
         return 0
@@ -1151,6 +1210,8 @@ def _json_safe(obj):
 
 
 def _active_sources(args) -> list[str]:
+    if getattr(args, "pi", False):
+        return ["pi"]
     srcs = ["claude"]
     if getattr(args, "codex", False):
         srcs.append("codex")
@@ -1178,7 +1239,8 @@ def api_history(args, pricing, tz, period="7d"):
     since_iso = iso_bound(since_dt)
     until_iso = iso_bound(now)
     codex_dir = args.codex_dir if getattr(args, "codex", False) else None
-    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic, codex_dir=codex_dir)
+    pi_dir = Path.home() / ".pi" / "agent" / "sessions" if getattr(args, "pi", False) else None
+    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic, codex_dir=codex_dir, pi_dir=pi_dir)
     return aggregate_period(all_rows, "daily", pricing, tz)
 
 

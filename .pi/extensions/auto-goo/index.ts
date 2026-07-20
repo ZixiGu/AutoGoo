@@ -307,10 +307,15 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
+    // Clear status bar — it belongs to this session
+    try {
+      const { clearStatusBar } = await import("./utils/status.js");
+      clearStatusBar(ctx);
+    } catch {}
+
     // Cleanup stale worktrees on exit
     try {
       const { execShell } = await import("./utils/exec.js");
-      // Use execShell with single-quoted awk to avoid bash $ expansion
       execShell(
         "git worktree list 2>/dev/null | grep 'auto-goo/step-' | awk '{print $1}' | xargs -r git worktree remove -f 2>/dev/null; true",
         ctx.cwd,

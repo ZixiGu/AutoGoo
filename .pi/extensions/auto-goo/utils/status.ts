@@ -1,11 +1,13 @@
 /**
- * AutoGoo Status Bar — 持久化状态栏，替代频繁的 notify 通知。
+ * AutoGoo Status Bar — 持久化状态栏，关联当前 session 的 thread。
  *
  * 使用 ctx.ui.setStatus() 在 Pi 底部状态栏显示：
- * - 当前 thread 名称 / ID
- * - 计划整体进度
- * - 运行中 / 已完成 / 总步骤数
+ * - thread 创建时间 + 任务名
+ * - 执行用时
+ * - 计划进度（进度条 + 完成百分比 + 步骤计数）
  * - 心跳健康状态
+ *
+ * 生命周期：session 启动时显示，session 结束时清除。
  */
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -23,6 +25,18 @@ export interface PlanSnapshot {
   staleHeartbeats: number;
   threadId?: string;
   threadTask?: string;
+  elapsed?: string;    // human-readable duration, e.g. "5m", "1h23m"
+}
+
+/** Format milliseconds into human-readable duration. */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return "0s";
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m${sec % 60 > 0 ? `${sec % 60}s` : ""}`;
+  const hr = Math.floor(min / 60);
+  return `${hr}h${min % 60 > 0 ? `${min % 60}m` : ""}`;
 }
 
 async function getThreadInfo(cwd: string): Promise<{ id: string; task: string } | null> {
@@ -61,6 +75,14 @@ export async function snapshotPlan(cwd: string): Promise<PlanSnapshot | null> {
     }
   }
 
+  // Calculate elapsed time
+  let elapsed: string | undefined;
+  if (plan.started_at) {
+    const start = new Date(plan.started_at).getTime();
+    const end = plan.completed_at ? new Date(plan.completed_at).getTime() : now;
+    elapsed = formatDuration(end - start);
+  }
+
   const threadInfo = await getThreadInfo(cwd);
 
   return {
@@ -73,6 +95,7 @@ export async function snapshotPlan(cwd: string): Promise<PlanSnapshot | null> {
     staleHeartbeats: staleCount,
     threadId: threadInfo?.id,
     threadTask: threadInfo?.task,
+    elapsed,
   };
 }
 
@@ -85,8 +108,6 @@ export function formatStatusLine(snap: PlanSnapshot): string {
 
   // Thread timestamp (human-readable)
   if (snap.threadId) {
-    // Format: thread-2026-07-17T07-18-52-abcd
-    // Show: 07-17 07:18
     const m = snap.threadId.match(/thread-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})/);
     if (m) {
       parts.push(`${m[2]}-${m[3]} ${m[4]}:${m[5]}`);
@@ -95,13 +116,17 @@ export function formatStatusLine(snap: PlanSnapshot): string {
     } else {
       parts.push(snap.threadId);
     }
-    // Append short task name if available
     if (snap.threadTask) {
       parts[parts.length - 1] += ` ${snap.threadTask}`;
     }
   }
 
-  // Progress bar (compact)
+  // Elapsed time
+  if (snap.elapsed) {
+    parts.push(`⌛${snap.elapsed}`);
+  }
+
+  // Progress bar
   const barLen = 10;
   const filled = Math.round(barLen * snap.completed / Math.max(1, snap.total));
   parts.push(`[${"█".repeat(filled)}${"░".repeat(barLen - filled)}]`);
@@ -131,12 +156,6 @@ export function formatStatusLine(snap: PlanSnapshot): string {
 export async function updateStatusBar(ctx: ExtensionContext): Promise<void> {
   const snap = await snapshotPlan(ctx.cwd);
   if (!snap) {
-    ctx.ui.setStatus(STATUS_KEY, undefined);
-    return;
-  }
-
-  // 所有步骤已完成或没有待执行步骤 → 清除状态栏
-  if (snap.total > 0 && snap.pending === 0 && snap.running === 0) {
     ctx.ui.setStatus(STATUS_KEY, undefined);
     return;
   }
