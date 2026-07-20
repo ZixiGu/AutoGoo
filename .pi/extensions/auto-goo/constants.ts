@@ -133,13 +133,16 @@ export const TEMPLATE_THREAD_ACTION: InteractionTemplate = {
 
 /** plan review start */
 export const TEMPLATE_PLAN_REVIEW_START: InteractionTemplate = {
-  header: "计划审阅",
+  header: "计划审阅 — 请选择下一步",
   id: "plan_review_start",
-  question: "计划已生成，请审阅并确认：",
+  question: "以上是本次计划的完整 DAG。请选择下一步。",
   options: [
-    { label: "确认并开始执行 (Recommended)", description: "计划确认后归档 plan 摘要，后续可执行。", value: "confirm" },
-    { label: "修改计划", description: "调整步骤、依赖、目标或约束。", value: "modify" },
-    { label: "取消", description: "丢弃当前计划，不做任何更改。", value: "cancel" },
+    { label: "确认并开始执行 (Recommended)", description: "标记 review.status=confirmed，归档最终版 brainstorm（如有），然后开始执行 plan steps。", value: "confirm" },
+    { label: "修改步骤详情", description: "调整步骤的输入、输出、描述、验收方式或角色分配。", value: "modify_step" },
+    { label: "拆分/合并步骤", description: "把某个步骤拆成多个子步骤，或合并多个步骤为一个。", value: "split_merge" },
+    { label: "修改 DAG 依赖", description: "调整步骤间的依赖关系，改变并行/串行结构。", value: "modify_dag" },
+    { label: "修改目标或约束", description: "调整 goals、验收标准或上下文约束。", value: "modify_goal" },
+    { label: "停止/稍后再说", description: "保持 pending_user_review 状态，保留计划但不执行。", value: "cancel" },
   ],
 };
 

@@ -149,15 +149,22 @@ export async function handleGooPlan(taskDescription: string, ctx: ExtensionConte
 
   if (reviewChoice === "cancel") {
     ctx.ui.setEditorText("");
-    ctx.ui.notify("计划已保存，等待后续使用。", "info");
+    ctx.ui.notify("计划已保存（pending_user_review），等待后续使用。", "info");
     return;
   }
 
-  if (reviewChoice === "modify") {
+  const modifyOptions = ["modify_step", "split_merge", "modify_dag", "modify_goal"];
+  if (modifyOptions.includes(reviewChoice)) {
+    const hints: Record<string, string> = {
+      modify_step: "（调整步骤详情后重新运行 /goo-plan）",
+      split_merge: "（拆分或合并步骤后重新运行 /goo-plan）",
+      modify_dag: "（调整 DAG 依赖关系后重新运行 /goo-plan）",
+      modify_goal: "（调整目标或约束后重新运行 /goo-plan）",
+    };
     ctx.ui.setEditorText(
-      `请修改以下计划，然后重新运行 /goo-plan：\n\n${planSummary}`
+      `请修改以下计划${hints[reviewChoice] || ""}：\n\n${planSummary}`
     );
-    ctx.ui.notify("请在编辑器中修改计划后重新运行 /goo-plan。", "info");
+    ctx.ui.notify(`请在编辑器中修改计划后重新运行 /goo-plan。`, "info");
     return;
   }
 
@@ -428,30 +435,142 @@ async function checkRemoteResources(cwd: string, plan: Plan, ctx: ExtensionConte
 
 function formatPlanSummary(plan: Plan): string {
   const lines: string[] = [
-    `📋 计划摘要`,
-    `─────────────────`,
-    `任务: ${plan.task}`,
-    `状态: ${plan.status}`,
-    `线程: ${plan.thread?.id || "—"}`,
-    `目标数: ${plan.goals.length}`,
-    `步骤数: ${plan.steps.length}`,
+    `## 📋 Plan 审阅 — ${plan.task.slice(0, 80)}`,
     ``,
-    `步骤概览:`,
+    `### 🎯 目标`,
   ];
 
+  for (const goal of plan.goals) {
+    lines.push(`- **${goal.id}** ${goal.name}：${goal.description.slice(0, 100)}`);
+    if (goal.acceptance_criteria.length > 0) {
+      lines.push(`  - 验收：${goal.acceptance_criteria.join("；")}`);
+    }
+    if (goal.outputs.length > 0) {
+      lines.push(`  - 产物：${goal.outputs.join("、")}`);
+    }
+  }
+
+  // ── DAG 结构：并行组 ──
+  const tiers = new Map<number, typeof plan.steps>();
   for (const step of plan.steps) {
-    const deps = step.depends_on.length > 0 ? ` [依赖: ${step.depends_on.join(", ")}]` : "";
-    const remote = step.execution_target === "remote" ? " 🖥️远程" : "";
-    lines.push(`  ${step.id}. ${step.name}${deps}${remote}`);
-    lines.push(`     ${step.description.slice(0, 60)}${step.description.length > 60 ? "…" : ""}`);
+    const t = step.tier || 1;
+    if (!tiers.has(t)) tiers.set(t, []);
+    tiers.get(t)!.push(step);
+  }
+  const sortedTiers = [...tiers.entries()].sort((a, b) => a[0] - b[0]);
+
+  lines.push(``, `### 📊 DAG 结构`);
+  lines.push(``, `**并行组（可同时执行）：**`);
+  lines.push(`| Tier | 步骤 | 说明 |`);
+  lines.push(`|------|------|------|`);
+  for (const [tier, steps] of sortedTiers) {
+    const names = steps.map(s => `${s.id}.${s.name}`).join("、");
+    const note = steps.every(s => (s.depends_on?.length ?? 0) === 0)
+      ? "无依赖，可并行"
+      : `依赖 Tier < ${tier}`;
+    lines.push(`| ${tier} | ${names} | ${note} |`);
   }
 
-  if (plan.wiki_context?.found) {
-    lines.push(``, `📚 Wiki 召回: ${plan.wiki_context.sources.length} 个来源`);
+  // ── 必要串行链 ──
+  const serialChains: string[] = [];
+  for (const step of plan.steps) {
+    if (step.depends_on && step.depends_on.length > 0) {
+      for (const depId of step.depends_on) {
+        const depStep = plan.steps.find(s => s.id === depId);
+        const depName = depStep ? depStep.name : `#${depId}`;
+        serialChains.push(`| ${depId} ${depName} → ${step.id} ${step.name} | ${depStep ? "上游产物作为输入" : ""}`);
+      }
+    }
+  }
+  if (serialChains.length > 0) {
+    lines.push(``, `**必要串行链（不能并行的依赖）：**`);
+    lines.push(`| 依赖 | 原因 |`);
+    lines.push(`|------|------|`);
+    for (const chain of serialChains) {
+      lines.push(chain);
+    }
   }
 
-  if (plan.context_digest?.decisions?.length) {
-    lines.push(``, `📝 已确认方案: ${plan.context_digest.decisions.length} 项`);
+  // ── 归档链 ──
+  const archiveSteps = plan.steps.filter(s => s.type === "archive");
+  if (archiveSteps.length > 0) {
+    lines.push(``, `**归档链：** 最后一步 \`${archiveSteps.map(s => s.name).join("、")}\` 依赖所有非归档叶子步骤。`);
+  }
+
+  // ── 步骤详情 ──
+  lines.push(``, `### 📝 步骤详情`);
+  if (plan.steps.length <= 6) {
+    // 完整表格
+    lines.push(`| # | 名称 | 类型 | 角色 | 风险 | 需确认 | 输入 | 输出 | 验收方式 |`);
+    lines.push(`|---|------|------|------|------|--------|------|------|----------|`);
+    for (const step of plan.steps) {
+      const confirmIcon = step.requires_user_confirm ? "是⚠️" : "否";
+      const riskIcon = step.risk_level === "high" ? "🔴高危" : step.risk_level === "medium" ? "🟡中" : "🟢低";
+      const ins = (step.inputs?.length ?? 0) > 0 ? step.inputs!.slice(0, 2).join(", ") : "—";
+      const outs = (step.outputs?.length ?? 0) > 0 ? step.outputs!.slice(0, 2).join(", ") : "—";
+      lines.push(`| ${step.id} | ${step.name} | ${step.type} | ${step.subagent} | ${riskIcon} | ${confirmIcon} | ${ins} | ${outs} | ${step.validation.slice(0, 40)} |`);
+    }
+  } else {
+    // 折叠模式：步骤 > 6
+    lines.push(`| # | 名称 | 类型 | 角色 | 说明 |`);
+    lines.push(`|---|------|------|------|------|`);
+    for (const step of plan.steps) {
+      const descParts = [];
+      if (step.inputs?.length) descParts.push(`输:${step.inputs.slice(0, 2).join(",")}`);
+      if (step.outputs?.length) descParts.push(`出:${step.outputs.slice(0, 2).join(",")}`);
+      if (step.risk_level && step.risk_level !== "low") descParts.push(`⚠${step.risk_level}`);
+      const desc = descParts.length > 0 ? `【${descParts.join(" ")}】` : "";
+      lines.push(`| ${step.id} | ${step.name} | ${step.type} | ${step.subagent} | ${desc} |`);
+    }
+    lines.push(``, `> 详细输入/输出/验收方式见 .goo/plan.json 中对应步骤字段`);
+  }
+
+  // ── 关键风险 & 需要用户判断的点 ──
+  const risks: string[] = [];
+  for (const step of plan.steps) {
+    if (step.risk_level === "high") {
+      risks.push(`1. **${step.name}（步骤 #${step.id}）风险等级高**：${step.validation} — 建议提前确认`);
+    }
+    if (step.requires_user_confirm) {
+      risks.push(`2. **${step.name}（步骤 #${step.id}）需要用户确认**：${step.validation}`);
+    }
+    if (step.execution_target === "remote") {
+      risks.push(`3. **${step.name}（步骤 #${step.id}）远程执行**：服务器 ${step.remote_server}，${step.remote_reason}`);
+    }
+  }
+  if (risks.length > 0) {
+    lines.push(``, `### ⚠️ 关键风险 & 需要用户判断的点`);
+    for (const r of risks) lines.push(r);
+  } else {
+    lines.push(``, `### ⚠️ 关键风险`);
+    lines.push(`当前计划无高风险步骤或需要用户确认的点。`);
+  }
+
+  // ── Wiki 上下文 ──
+  if (plan.wiki_context) {
+    lines.push(``, `### 🔍 Wiki 上下文`);
+    if (plan.wiki_context.found && plan.wiki_context.reused_knowledge.length > 0) {
+      lines.push(`来源：${plan.wiki_context.sources.join(", ")}`);
+      lines.push(`可复用经验：`);
+      for (const k of plan.wiki_context.reused_knowledge.slice(0, 5)) {
+        lines.push(`- ${k.slice(0, 100)}`);
+      }
+    } else {
+      lines.push(`未找到相关知识`);
+    }
+  }
+
+  // ── 上下文决策摘要 ──
+  if (plan.context_digest) {
+    lines.push(``, `### 💡 上下文决策摘要`);
+    const d = plan.context_digest;
+    if (d.decisions.length > 0) lines.push(`- 已确认方案：${d.decisions.join("；")}`);
+    if (d.constraints.length > 0) lines.push(`- 用户约束：${d.constraints.join("；")}`);
+    if (d.acceptance_criteria.length > 0) lines.push(`- 验收标准：${d.acceptance_criteria.join("；")}`);
+    if (d.open_questions.length > 0) lines.push(`- 未决问题：${d.open_questions.join("；")}`);
+    if (d.decisions.length === 0 && d.constraints.length === 0) {
+      lines.push(`暂无额外上下文信息`);
+    }
   }
 
   return lines.join("\n");
