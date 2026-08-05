@@ -226,6 +226,12 @@ def sync_from_plan(
     if should_update_current:
         set_current(goo_dir, resolved)
         sync_compat_plan(goo_dir, plan_path, plan)
+        # 当入参是 compat plan 时,把最新 plan 状态同步回 thread plan(真正的源),
+        # 避免 thread plan 的 steps 停留在早期状态
+        if is_compat_plan(goo_dir, plan_path):
+            thread_plan = tdir / meta.get("active_plan", "plan.json")
+            if thread_plan.exists() and thread_plan.resolve() != plan_path.resolve():
+                dump_json(thread_plan, plan)
     return meta
 
 
