@@ -309,11 +309,11 @@ export default function (pi: ExtensionAPI) {
           const { updateStatusBar } = await import("./utils/status.js");
           await updateStatusBar(ctx);
         } catch (e) {
-          // ignore
+          console.error("[AutoGoo-Plugin] session_start updateStatusBar error:", e);
         }
       }
     } catch (e) {
-      // ignore
+      console.error("[AutoGoo-Plugin] session_start outer error:", e);
     }
   });
 

@@ -7,7 +7,8 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadPlan, getCurrentThreadId, loadThreadMeta, projectThreadDir, type Plan, type Step } from "./plan.js";
+import { loadPlan, getCurrentThreadId, loadThreadMeta, type Plan, type Step } from "./plan.js";
+import { projectThreadDir } from "./paths.js";
 import { DEFAULT_MEMORY_LAYER_BY_STEP_TYPE } from "../constants.js";
 
 const STATUS_KEY = "autogoo-plugin";
@@ -170,7 +171,10 @@ export async function snapshotPlan(cwd: string): Promise<PlanSnapshot | null> {
     }
   }
   let elapsed: string | undefined;
-  if (plan.started_at) elapsed = formatDuration((plan.completed_at ? new Date(plan.completed_at).getTime() : now) - new Date(plan.started_at).getTime());
+  // 用最早 step 的 started_at(实际工作时间)代替 plan.started_at(可能很早)
+  const firstStepStart = steps.map((s) => s.started_at).filter(Boolean).sort()[0];
+  const startTime = firstStepStart || plan.started_at;
+  if (startTime) elapsed = formatDuration((plan.completed_at ? new Date(plan.completed_at).getTime() : now) - new Date(startTime).getTime());
   const info = await getThreadInfo(cwd);
   const threadId = info?.id ?? plan.thread?.id;
   const cur = findCurrentStep(steps);
