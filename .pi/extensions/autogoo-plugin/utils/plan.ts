@@ -6,6 +6,7 @@ import { readFile, writeFile, access, mkdir, copyFile } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { projectPlanPath, projectCurrentThreadPath, projectThreadsDir, projectThreadDir } from "./paths.js";
+import { DEFAULT_WIKI_PATHS_BY_STEP_TYPE, DEFAULT_MEMORY_LAYER_BY_STEP_TYPE } from "../constants.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -245,4 +246,47 @@ export function validatePlan(plan: Plan): PlanValidationResult {
   }
 
   return { valid: issues.length === 0, issues };
+}
+
+// ── Dispatch packet (on-demand wiki + memory layer) ──────────────────────────
+
+export interface DispatchPacket {
+  wiki_paths: string[];
+  wiki_graph_packet_path: string;
+  memory_layer: string;
+}
+
+/**
+ * 为 step 计算 dispatch packet — 默认 wiki_paths + memory_layer + packet 路径。
+ * 镜像 Claude Code execution-engine.md 的 wiki_paths 注入逻辑(wiki_graph_assist 段)。
+ *
+ * 返回:
+ *   - wiki_paths: 按 step.type 默认选出的 glob 路径(已替换 {slug}/{thread_id} 占位符)
+ *   - wiki_graph_packet_path: 紧凑 graph packet 落盘路径(主 Agent 派发前会实际生成)
+ *   - memory_layer: 默认记忆层(L0/L1/L2/L3)
+ *
+ * 注意:**本函数不实际执行** wiki-graph-assist.py,只计算路径;主 Agent 派发前用 execPython 调用。
+ */
+export function buildDispatchPacket(
+  step: { id: number; type?: string; wiki_paths?: string[]; memory_layer?: string },
+  projectSlug: string,
+  threadId: string,
+): DispatchPacket {
+  const stepType = step.type || "exec";
+
+  // 1. 优先使用 step 显式声明的 wiki_paths;否则用默认表
+  const wiki_paths =
+    step.wiki_paths && step.wiki_paths.length > 0
+      ? step.wiki_paths
+      : (DEFAULT_WIKI_PATHS_BY_STEP_TYPE[stepType] || DEFAULT_WIKI_PATHS_BY_STEP_TYPE.exec)
+          .map((p) => p.replace("{slug}", projectSlug).replace("{thread_id}", threadId));
+
+  // 2. 计算 wiki_graph_packet_path(主 Agent 派发前会实际生成)
+  const wiki_graph_packet_path = `.goo/threads/${threadId}/artifacts/wiki-packet-step-${step.id}.md`;
+
+  // 3. memory_layer 默认值
+  const memory_layer =
+    step.memory_layer || DEFAULT_MEMORY_LAYER_BY_STEP_TYPE[stepType] || "L2";
+
+  return { wiki_paths, wiki_graph_packet_path, memory_layer };
 }

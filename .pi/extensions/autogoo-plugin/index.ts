@@ -1,5 +1,5 @@
 /**
- * AutoGoo-Plugin Pi Extension v0.4 — 主入口
+ * AutoGoo-Plugin Pi Extension v0.5.1 — 主入口
  *
  * DAG 驱动的多智能体编排框架，从 Claude Code 插件迁移。
  *
@@ -224,7 +224,7 @@ export default function (pi: ExtensionAPI) {
           const options = (params.options || []).map((o: any) =>
             typeof o === "string" ? o : (o.label || String(o))
           );
-          const label = await ctx.ui.select(params.header, options);
+          const label = await ctx.ui.select(`${params.header}\n${params.question}`, options);
           // Map back to value if input was objects with label/value
           if (label && params.options?.[0]?.value !== undefined) {
             const found = params.options.find((o: any) => o.label === label);
@@ -264,8 +264,19 @@ export default function (pi: ExtensionAPI) {
       required: ["command"],
     },
     async execute(_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) {
+      const approved = await ctx.ui.confirm(
+        "AutoGoo Shell",
+        `${params.description || "执行项目命令"}\n\n${params.command}`,
+      );
+      if (!approved) {
+        return {
+          content: [{ type: "text", text: "用户取消了 shell 命令。" }],
+          details: { exitCode: null, cancelled: true },
+        };
+      }
       const { execShell } = await import("./utils/exec.js");
-      const result = execShell(params.command, ctx.cwd, { timeout: params.timeout ?? 30000 });
+      const timeoutMs = Math.max(1, Number(params.timeout ?? 30)) * 1000;
+      const result = execShell(params.command, ctx.cwd, { timeout: timeoutMs });
       const output = (result.stdout || result.stderr || "(no output)").slice(0, 10000);
       return {
         content: [{ type: "text", text: output }],
@@ -313,15 +324,7 @@ export default function (pi: ExtensionAPI) {
       clearStatusBar(ctx);
     } catch {}
 
-    // Cleanup stale worktrees on exit
-    try {
-      const { execShell } = await import("./utils/exec.js");
-      execShell(
-        "git worktree list 2>/dev/null | grep 'autogoo-plugin/step-' | awk '{print $1}' | xargs -r git worktree remove -f 2>/dev/null; true",
-        ctx.cwd,
-        { timeout: 10000 },
-      );
-    } catch {}
+    // Worktrees are never removed automatically: they may contain unmerged work.
   });
 
   // ── Inject AutoGoo-Plugin system prompt ─────────────────────────────────────────
@@ -332,17 +335,6 @@ export default function (pi: ExtensionAPI) {
   });
 
   // ── Startup banner ────────────────────────────────────────────────────────
-  const cmdList = Object.keys(COMMANDS).join(", ");
-  const toolList = [
-    "auto_goo_execute", "auto_goo_update_step",
-    "auto_goo_dispatch", "auto_goo_prepare_dispatch",
-    "auto_goo_dag_status", "auto_goo_pending_steps",
-    "auto_goo_ask_user", "auto_goo_shell",
-    "auto_goo_ssh_exec", "auto_goo_ssh_status",
-    "auto_goo_worktree_create", "auto_goo_worktree_merge",
-    "auto_goo_worktree_cleanup",
-  ].join(", ");
-
   // Use stderr to avoid interfering with Pi's TUI rendering
-  process.stderr.write(`[AutoGoo-Plugin] ✅ 扩展已加载 (v0.4.0)\n`);
+  process.stderr.write(`[AutoGoo-Plugin] ✅ 扩展已加载 (v0.5.1)\n`);
 }

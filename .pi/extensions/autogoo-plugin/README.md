@@ -9,7 +9,7 @@ AutoGoo-Plugin 是一个 DAG 驱动的多智能体编排框架，已移植为 [P
 ### 方式一：全局软链接
 
 ```bash
-ln -sf /path/to/AutoGoo-Plugin/.pi/extensions/auto-goo ~/.pi/agent/extensions/auto-goo
+ln -sf /path/to/AutoGoo-Plugin/.pi/extensions/autogoo-plugin ~/.pi/agent/extensions/autogoo-plugin
 ```
 
 ### 方式二：pi install
@@ -24,7 +24,7 @@ pi install /path/to/AutoGoo-Plugin
 
 ```bash
 cd /path/to/AutoGoo-Plugin
-pi  # 自动加载 .pi/extensions/auto-goo/
+pi  # 自动加载 .pi/extensions/autogoo-plugin/
 ```
 
 ## 快速开始
@@ -119,7 +119,7 @@ Pi 底部状态栏会持续显示 DAG 执行进度：
 ## 目录结构
 
 ```
-.pi/extensions/auto-goo/
+.pi/extensions/autogoo-plugin/
 ├── index.ts              # 主入口
 ├── package.json          # Pi 包元数据
 ├── types.ts              # 共享类型

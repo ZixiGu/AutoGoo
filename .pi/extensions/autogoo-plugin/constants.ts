@@ -313,6 +313,82 @@ export const TASK_AGENTS: Record<string, string> = {
 
 // ── System prompt snippets ──────────────────────────────────────────────────
 
+// ── Memory system rules (sync with Claude Code SKILL.md) ────────────────────
+
+/**
+ * 按需调用原则 — Subagent 不全量读 wiki;按 wiki_paths glob 按需取用;
+ * 受字符预算 (< 20k) + 超时 (< 30s) 双重约束。
+ * 镜像 Claude Code SKILL.md L45-54。
+ */
+export const ON_DEMAND_RECALL_RULE = `
+## 按需调用原则(On-Demand Recall)
+- Subagent 不得全量读取 wiki;按当前 step 的 wiki_paths glob 按需取用
+- 单次 Read/Grep 受字符预算 (< 20k) + 超时 (< 30s) 双重约束
+- 跨 step 引用用 [[Wikilink]] 按需点开,不要 Read 整篇 wiki 笔记
+- 主 Agent 派发前用 wiki-graph-assist.py 生成紧凑 graph packet
+`.trim();
+
+/**
+ * 记忆分层原则 — L0/L1/L2/L3 四层;Subagent 默认 L2;frontmatter 必含 memory_layer。
+ * 镜像 Claude Code SKILL.md L56-71。
+ */
+export const MEMORY_LAYERING_RULE = `
+## 记忆分层原则(Memory Layering)
+- L0 原始记录 (.goo/logs/) — 不进 Subagent 默认上下文
+- L1 原子事实 (step 报告关键决策段)
+- L2 场景知识 (任务页/lessons/references) — Subagent 默认读取
+- L3 项目画像 (项目入口/高频 lessons) — 主 Agent 启动时读取
+- 归档笔记 frontmatter 必含 memory_layer: L0|L1|L2|L3
+`.trim();
+
+/**
+ * 默认 wiki_paths 表 — 按 step.type 计算默认 glob 路径子集。
+ * 与 Claude Code execution-engine.md L429 保持字段一致。
+ */
+export const DEFAULT_WIKI_PATHS_BY_STEP_TYPE: Record<string, string[]> = {
+  research: [
+    "wiki/projects/{slug}/lessons/**",
+    "wiki/projects/{slug}/references/**",
+  ],
+  exec: [
+    "wiki/projects/{slug}/tasks/{thread_id}/**",
+    "wiki/projects/{slug}/lessons/**",
+  ],
+  optimize: [
+    "wiki/projects/{slug}/lessons/optimization-*.md",
+    "wiki/projects/{slug}/reports/optimize-*.md",
+  ],
+  eval: [
+    "wiki/projects/{slug}/lessons/eval-*.md",
+    "wiki/projects/{slug}/reports/eval-*.md",
+  ],
+  review: [
+    "wiki/projects/{slug}/lessons/**",
+    "wiki/projects/{slug}/tasks/**",
+  ],
+  audit: [
+    "wiki/projects/{slug}/lessons/**",
+    "wiki/projects/{slug}/reports/**",
+    "wiki/projects/{slug}/context/**",
+  ],
+  archive: [
+    "wiki/projects/{slug}/**",  // archive 例外需要全栈
+  ],
+};
+
+/**
+ * 默认 memory_layer 表 — 按 step.type 给默认层级。
+ */
+export const DEFAULT_MEMORY_LAYER_BY_STEP_TYPE: Record<string, string> = {
+  research: "L2",
+  exec: "L2",
+  optimize: "L2",
+  eval: "L2",
+  review: "L1",
+  audit: "L0",
+  archive: "L2",  // archive 步骤需要全栈但默认 L2 即可
+};
+
 export const AUTOGOO_PLUGIN_SYSTEM_PROMPT = `
 ## AutoGoo-Plugin DAG 工作流框架
 
@@ -334,4 +410,4 @@ AutoGoo-Plugin 是一个 DAG 驱动的多智能体编排框架。收到复杂多
 使用 /auto-goo:goo-plan 生成执行计划
 使用 /auto-goo:goo-start 执行计划
 使用 /auto-goo:goo-status 查看状态
-`;
+`.trim() + "\n\n" + ON_DEMAND_RECALL_RULE + "\n\n" + MEMORY_LAYERING_RULE;

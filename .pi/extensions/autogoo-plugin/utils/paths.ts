@@ -16,7 +16,7 @@ const _dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * AutoGoo-Plugin repo root, derived from the extension's location:
- *   <repo>/.pi/extensions/auto-goo/  →  <repo>/
+ *   <repo>/.pi/extensions/autogoo-plugin/  →  <repo>/
  */
 export const REPO_ROOT = resolve(_dirname, "../../../..");
 
@@ -26,7 +26,7 @@ export const REPO_ROOT = resolve(_dirname, "../../../..");
 export function isRepoValid(): boolean {
   return (
     existsSync(join(REPO_ROOT, "skills/auto-goo/scripts/_paths.py")) &&
-    existsSync(join(REPO_ROOT, ".pi/extensions/auto-goo"))
+    existsSync(join(REPO_ROOT, ".pi/extensions/autogoo-plugin"))
   );
 }
 

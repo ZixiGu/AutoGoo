@@ -8,8 +8,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { TEMPLATE_CONTEXT_SYNC_CONFIRM, TEMPLATE_WORKTREE } from "../constants.js";
-import { loadPlan, savePlan, getCurrentThreadId, type Plan, type Step } from "../utils/plan.js";
-import { REPO_ROOT, UPDATE_STEP_PY, GOO_STATUS_PY, projectPlanPath, projectThreadDir } from "../utils/paths.js";
+import { loadPlan, savePlan, getCurrentThreadId, buildDispatchPacket, type Plan, type Step } from "../utils/plan.js";
+import { REPO_ROOT, UPDATE_STEP_PY, GOO_STATUS_PY, WIKI_GRAPH_ASSIST_PY, projectPlanPath, projectThreadDir, resolveWikiDir } from "../utils/paths.js";
 import { execPython } from "../utils/exec.js";
 import { uiSelect, uiConfirm, uiInput } from "../utils/ui.js";
 import { updateStatusBar } from "../utils/status.js";
@@ -224,6 +224,10 @@ export function registerExecutionTools(pi: any): void {
         description: "具体任务 agent",
         enum: ["document-analyst", "feature-builder", "test-runner", "code-reviewer", "evidence-auditor", "wiki-curator"],
       })),
+      stepType: Type.Optional(Type.String({
+        description: "步骤类型（影响默认 wiki_paths / memory_layer）",
+        enum: ["research", "exec", "optimize", "eval", "review", "audit", "archive"],
+      })),
     }),
     async execute(_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) {
       const cwd = ctx.cwd;
@@ -242,6 +246,56 @@ export function registerExecutionTools(pi: any): void {
       // 2. Build Subagent prompt
       const rolePrompt = getRolePrompt(params.role);
       const taskPrompt = params.taskAgent ? getTaskAgentPrompt(params.taskAgent) : "";
+
+      // 2.1 Compute dispatch packet (on-demand wiki + memory layer)
+      //    镜像 Claude Code execution-engine.md 的 wiki_paths 注入逻辑。
+      //    主 Agent 调用本工具时,wiki_graph_packet_path 还没生成;
+      //    本函数只计算路径,实际生成由主 Agent 派发前用 wiki-graph-assist.py 完成。
+      const activeThreadId = await getCurrentThreadId(cwd);
+      const projectSlug =
+        (await getCurrentThreadId(cwd))  // touch to ensure no dead-code warning
+          ? require("node:path").basename(cwd) || "autogoo-plugin"
+          : "autogoo-plugin";
+      // 简化:sl 直接走 cwd basename;若 plan 提供 override 可再扩展
+      const packet = buildDispatchPacket(
+        { id: params.stepId, type: params.stepType || "exec" },
+        projectSlug,
+        activeThreadId || "current",
+      );
+
+      // 2.2 Generate wiki graph packet (实际调用 wiki-graph-assist.py)
+      //     失败 fallback:只传 path,不阻塞 dispatch。
+      let packetGenerated = false;
+      try {
+        const wikiDir = await resolveWikiDir(cwd);
+        const searchPathArgs = packet.wiki_paths.flatMap((p: string) => ["--search-path", p]);
+        const r = execPython(
+          WIKI_GRAPH_ASSIST_PY,
+          [
+            "--wiki-dir", wikiDir,
+            "--project-slug", projectSlug,
+            "--query", params.task || `step ${params.stepId} dispatch`,
+            "--title", `step-${params.stepId}-dispatch`,
+            ...searchPathArgs,
+            "--max-pages", "12",
+            "--format", "md",
+          ],
+          cwd,
+          { timeout: 30000 },  // < 30s 双重约束
+        );
+        if (r.exitCode === 0 && r.stdout) {
+          const fs = await import("node:fs/promises");
+          const fullPath = join(cwd, packet.wiki_graph_packet_path);
+          await fs.mkdir(join(fullPath, ".."), { recursive: true });
+          await fs.writeFile(fullPath, r.stdout);
+          packetGenerated = true;
+        } else {
+          console.warn(`[AutoGoo-Plugin] wiki-graph-assist.py 失败 (exit=${r.exitCode}): ${(r.stderr || "").slice(0, 200)}`);
+        }
+      } catch (e: any) {
+        console.warn(`[AutoGoo-Plugin] wiki-graph-assist.py 异常: ${(e?.message ?? String(e)).slice(0, 200)}`);
+      }
+
       const prompt = [
         `## AutoGoo-Plugin Subagent: ${params.role}`,
         ``,
@@ -250,6 +304,16 @@ export function registerExecutionTools(pi: any): void {
         `## 任务`,
         ``,
         params.task,
+        ``,
+        `## 按需读取 wiki(对齐 SKILL.md "按需调用原则")`,
+        `- 本 step 的 wiki_paths glob(只读这些,不要"读全部 wiki"):`,
+        `  ${packet.wiki_paths.join("\n  ")}`,
+        packetGenerated
+          ? `- 紧凑 graph packet 已生成在 ${packet.wiki_graph_packet_path};优先 Read 它代替自行 grep/glob 全量扫描`
+          : `- ⚠️ graph packet 生成失败(超时或 wiki-graph-assist.py 错误),fallback 到按 wiki_paths glob 自行 Read(遵守字符预算 < 20k)`,
+        `- 单次 Read/Grep 受字符预算 (< 20k) + 超时 (< 30s) 双重约束;超出时用 Read + limit/offset 或 Grep -n`,
+        `- memory_layer 默认 ${packet.memory_layer};L0 原始日志、L3 项目画像只按 step 显式需要才读`,
+        `- 跨 step 引用用 [[Wikilink]] 按需点开;不要 Read 整篇 wiki 笔记`,
         ``,
         `## 执行要求`,
         `1. 第一件事：调用 auto_goo_update_step --heartbeat --progress 15 --note "已开工"`,

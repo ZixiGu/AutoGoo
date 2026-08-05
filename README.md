@@ -2,7 +2,7 @@
 
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-Plugin-blue)
 ![Codex](https://img.shields.io/badge/Codex-Compatible-purple)
-![Version](https://img.shields.io/badge/version-0.5.0-green)
+![Version](https://img.shields.io/badge/version-0.5.1-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 AutoGoo-Plugin 是一个同时兼容 Claude Code 和 Codex 的智能体编排插件，用来把开放式任务拆成可执行计划、并行调用 subagent、记录运行状态，并把结果同步到 Goo-wiki / Obsidian。
@@ -46,11 +46,11 @@ AutoGoo-Plugin 是一个同时兼容 Claude Code 和 Codex 的智能体编排插
 # 1. 链接插件到标准路径
 mkdir -p ~/plugins && ln -sf /path/to/AutoGoo-Plugin ~/plugins/autogoo-plugin
 
-# 2. 安装到 Codex
+# 2. marketplace 条目名必须与安装 ID 一致，然后安装到 Codex
 codex plugin add autogoo-plugin@personal
 ```
 
-> 首次使用需确保 `~/.agents/plugins/marketplace.json` 已创建（参见 `.codex-plugin/plugin.json`）。
+> 首次使用需确保 `~/.agents/plugins/marketplace.json` 已创建，且其中 `plugins[].name` 为 `autogoo-plugin`、source path 为 `./plugins/autogoo-plugin`。如果条目名使用 `auto-goo`，安装 ID 也必须对应使用 `auto-goo@personal`，两者不能混用。
 
 ### Pi Coding Agent
 
@@ -86,7 +86,7 @@ pi extension add /path/to/AutoGoo-Plugin/.pi/extensions/autogoo-plugin
 }
 ```
 
-> Pi 扩展版本：**v0.4.0**。使用 Pi 原生 API（`ctx.ui`、自定义工具、事件系统）。
+> Pi 扩展版本：**v0.5.1**。使用 Pi 原生 API（`ctx.ui`、自定义工具、事件系统）。
 
 ## 在 Claude Code 中使用
 
@@ -179,7 +179,7 @@ pi extension add /path/to/AutoGoo-Plugin/.pi/extensions/autogoo-plugin
 
 ### 与 Claude Code 版本的区别
 
-Pi 扩展使用原生 API 注册自定义工具（`auto_goo_execute`、`auto_goo_dispatch`、`auto_goo_worktree_*` 等），所有平台差异封装在工具内部，model 不需要检测平台。支持 `ctx.ui.select/confirm/input` 作为用户交互，支持 `session_start`/`session_shutdown` hooks。
+Pi 扩展使用原生 API 注册 13 个自定义工具（`auto_goo_execute`、`auto_goo_dispatch`、`auto_goo_worktree_*` 等），所有平台差异封装在工具内部，model 不需要检测平台。支持 `ctx.ui.select/confirm/input` 作为用户交互，支持 `session_start`/`session_shutdown` hooks；worktree 不再在 session 退出时强制删除。
 
 ## 平台对比
 
@@ -202,6 +202,7 @@ Pi 扩展使用原生 API 注册自定义工具（`auto_goo_execute`、`auto_goo
 - **并行执行**：同层级且互不依赖的步骤会优先并行；串行依赖需要在计划里写明原因。
 - **日志记录**：subagent 的过程信息写入当前 thread 的 `logs/`，前台只展示摘要、阻塞和下一步。
 - **归档记忆**：默认写入 Goo-wiki；没有配置时回退到 `.goo/obsidian/`。
+- **分析文档**：论文分析和代码分析必须生成独立 Markdown 并归档到 Goo-wiki；fallback 只作临时防丢失，不能视为归档完成。
 - **安全边界**：敏感信息放在 `.goo/secrets.json` 或 `~/.auto-goo/secrets.json`，不要写入计划、日志或 HTML 发布页。
 - **Web 修改请求**：`goo-publish --serve` 可在网页提交修改请求，落盘到 `.goo/change-requests/`，由 AutoGoo-Plugin 后续读取并让模型修改、审计。
 
@@ -287,7 +288,7 @@ bash skills/auto-goo/scripts/check-plugin.sh
 
 ## 版本
 
-当前版本：**v0.4.0**。
+当前版本：**v0.5.1**。
 
 ## 许可证
 
