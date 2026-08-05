@@ -172,6 +172,9 @@ def update_plan_status(data: dict[str, Any], stamp: str) -> None:
         data["started_at"] = stamp
     if new_status in {"completed", "failed"}:
         data["completed_at"] = stamp
+    elif old_status == "completed":
+        # 状态从 completed 回退(重新打开步骤)时清除旧的完成时间
+        data["completed_at"] = None
 
 
 def sync_thread(plan_path: Path) -> None:

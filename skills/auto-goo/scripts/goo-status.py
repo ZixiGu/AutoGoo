@@ -184,13 +184,17 @@ def main() -> int:
 
     # Auto-update plan status if requested
     if args.update_status:
+        old_status = data.get("status")
         new_status = compute_plan_status(data)
-        if data.get("status") != new_status:
+        if old_status != new_status:
             data["status"] = new_status
             if new_status == "running" and not data.get("started_at"):
                 data["started_at"] = now.isoformat().replace("+00:00", "Z")
             if new_status in ("completed", "failed"):
                 data["completed_at"] = now.isoformat().replace("+00:00", "Z")
+            elif old_status == "completed":
+                # 状态从 completed 回退(重新打开步骤)时清除旧的完成时间
+                data["completed_at"] = None
             dump_json(plan_path, data)
         sync_thread_status(plan_path)
 
