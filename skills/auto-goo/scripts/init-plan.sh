@@ -283,8 +283,12 @@ def main() -> int:
             "name": "归档到 Goo-wiki",
             "description": (
                 "将任务目标、计划、关键证据、产物路径、验证结果、决策和可复用经验"
-                "归档到 Goo-wiki；必须补齐任务页、项目入口 <project-slug>.md、log.md、复用知识页"
-                "和新增经验页之间的 Wikilink/backlink 关系，防止 Obsidian 连接图谱断裂；"
+                "归档到 Goo-wiki；除阅读摘要外，必须生成 execution/record.md 详细事实记录和 "
+                "execution/evidence-index.md 来源覆盖表，小型安全文本证据原样保存，避免模型摘要"
+                "成为唯一档案；必须补齐任务页、项目入口 <project-slug>.md、log.md、详细记录、"
+                "证据索引、复用知识页和新增经验页之间的 Wikilink/backlink 关系；"
+                "若上游包含论文分析或代码分析，独立 Markdown 分析正文必须实际写入 Goo-wiki，"
+                "fallback 只能标记 pending_wiki_sync/failed，不能视为完成；"
                 "Goo-wiki 不可用时写入 .goo/obsidian/ fallback"
             ),
             "depends_on": [step["id"] for step in steps],
@@ -300,9 +304,11 @@ def main() -> int:
             "allowed_read_paths": archive_read_paths,
             "allowed_write_paths": [".goo/obsidian/"],
             "validation": (
-                "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts "
-                "和关键概念/问题/指标/历史任务页；项目 <project-slug>.md 与 log.md 反向链接任务页；"
-                "新增 concept/lessons/metrics 页也链接回任务页或项目入口；记录产物路径、验证结果和可复用经验"
+                "归档页或 fallback 笔记存在；execution/record.md 与 execution/evidence-index.md 存在，"
+                "证据索引覆盖 plan、每个 step log、artifacts/reports/context_artifacts，或逐项说明"
+                "仅索引/不可用/已脱敏；任务页链接项目入口、详细记录、证据索引和复用上下文；"
+                "项目 <project-slug>.md 与 log.md 反向链接任务页；新增知识页也链接回任务页或项目入口；"
+                "论文分析或代码分析的独立正文必须位于 Goo-wiki，只有 fallback 时状态为 pending_wiki_sync/failed"
             ),
             "risk_level": "low",
             "requires_user_confirm": False,

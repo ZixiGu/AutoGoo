@@ -17,7 +17,8 @@
 12. **识别优化标记** — 包含"性能/速度/延迟/吞吐/效率/内存/GPU/耗时" → `type: "optimize"`
 13. **范围约束** — 每个步骤目标严格取自任务描述，不添加未要求的功能
 14. **归档历史 plan** — 只有旧 plan 已完成，或用户明确选择新建/继续并确认替换当前 plan 时，才把旧 plan 复制到 `.goo/plans/history/plan-<timestamp>.json`；复制 history 不是覆盖未完成现场的许可
-15. **输出 plan.json**，并在审阅摘要中展示并行组、必要串行链、远程资源选择和主要风险
+15. **识别强制 Wiki 分析产物** — 论文解读/深读以及代码库结构、调用链、数据流、架构、实现模式分析必须有独立 Markdown 输出，并由最终 archive step 写入 Goo-wiki；fallback 不能满足最终验收
+16. **输出 plan.json**，并在审阅摘要中展示并行组、必要串行链、远程资源选择和主要风险
 
 ## 多 Goal 任务
 
@@ -69,6 +70,7 @@
 直接进入 plan 的最低条件：
 
 - 有明确交付物：代码、文档、报告、数据、模型、配置、评测结果或归档内容。
+- 论文分析和代码分析的交付物必须显式包含独立 Markdown 分析文档及 Goo-wiki 页面路径，不能只写“返回分析结论”。
 - 有范围边界：文件、模块、项目、数据路径、wiki 页面、命令或问题域。
 - 有验收方式：用户给出验收标准，或可以自然推导出测试、检查、文件存在性、指标阈值、人工确认点。
 - 能拆出至少一个可执行 step。
@@ -305,7 +307,7 @@ DAG 结构总结：
       "goal_ids": ["g1"],
       "tier": 2,
       "name": "归档到 Goo-wiki",
-      "description": "将任务目标、计划、关键证据、产物路径、验证结果、决策和可复用经验归档到 Goo-wiki；必须补齐任务页、项目入口 <project-slug>.md、log.md、复用知识页和新增经验页之间的 Wikilink/backlink 关系，防止 Obsidian 连接图谱断裂；Goo-wiki 不可用时写入 .goo/obsidian/ fallback",
+      "description": "将任务目标、计划、关键证据、产物路径、验证结果、决策和可复用经验归档到 Goo-wiki；除阅读摘要外，必须生成 execution/record.md 详细事实记录和 execution/evidence-index.md 来源覆盖表，小型安全文本证据原样保存，避免模型摘要成为唯一档案；必须补齐任务页、项目入口 <project-slug>.md、log.md、详细记录、证据索引、复用知识页和新增经验页之间的 Wikilink/backlink 关系；Goo-wiki 不可用时写入 .goo/obsidian/ fallback",
       "depends_on": [1],
       "type": "archive",
       "subagent": "recorder",
@@ -318,7 +320,7 @@ DAG 结构总结：
       "outputs": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
       "allowed_read_paths": [".goo/threads/<thread_id>/plan.json", ".goo/threads/<thread_id>/logs/", ".goo/threads/<thread_id>/artifacts/", ".goo/plan.json", ".goo/artifacts/"],
       "allowed_write_paths": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
-      "validation": "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts 和关键概念/问题/指标/历史任务页；项目 <project-slug>.md 与 log.md 反向链接任务页；新增 concept/lessons/metrics 页也链接回任务页或项目入口；记录产物路径、验证结果和可复用经验",
+      "validation": "归档页或 fallback 笔记存在；execution/record.md 与 execution/evidence-index.md 存在，证据索引覆盖 plan、每个 step log、artifacts/reports/context_artifacts 或逐项说明仅索引/不可用/已脱敏；任务页链接项目入口、详细记录、证据索引、复用的 wiki_context/context_artifacts 和关键概念/问题/指标/历史任务页；项目 <project-slug>.md 与 log.md 反向链接任务页；新增 concept/lessons/metrics 页也链接回任务页或项目入口",
       "risk_level": "low",
       "requires_user_confirm": false,
       "agent_id": null,
@@ -338,9 +340,10 @@ DAG 结构总结：
 - 默认类型：`type: "archive"`
 - 依赖关系：依赖所有非归档叶子步骤，确保实现、验证、报告等最终交付完成后再归档
 - 输出：Goo-wiki 可用时写入 `Goo-wiki/wiki/projects/<project-slug>/`，不可用时写入 `.goo/obsidian/<project-slug>/`
-- 内容：任务目标、plan 摘要、步骤证据、产物路径、验证结果、关键决策、问题处理和可复用经验
+- 内容：任务目标、plan 摘要、步骤证据、产物路径、验证结果、关键决策、问题处理和可复用经验；摘要之外必须生成 `execution/record.md` 详细事实记录和 `execution/evidence-index.md` 来源覆盖表，小型安全文本证据原样复制到 `execution/evidence/`
 - 链接：更新任务页、项目入口 `<project-slug>.md` 和 `log.md` 之间的链接，并把任务页链接到复用的 `wiki_context`、`context_artifacts`、关键概念、问题、指标或历史任务页；新增 concept/lessons/metrics 页面必须链接回任务页或项目入口
-- 验收：archive step 不能只检查“文件存在”。必须检查连接关系存在：任务页 → 项目入口/复用知识/上下文/关键概念，项目入口与 `log.md` → 任务页，新增经验页 → 任务页或项目入口。缺少链接时保持 `status=running` 或 `failed`，补齐后才可 `completed`
+- 验收：archive step 不能只检查“文件存在”，也不能只生成模型摘要。必须检查 `execution/record.md`、`execution/evidence-index.md` 和来源覆盖状态，并检查连接关系存在：任务页 → 详细记录/证据索引/项目入口/复用知识/上下文/关键概念，项目入口与 `log.md` → 任务页，新增经验页 → 任务页或项目入口。缺少时保持 `status=running` 或 `failed`，补齐后才可 `completed`
+- 强制 Wiki 类型：依赖链中包含论文分析或代码分析时，archive step 还必须验证独立分析正文已写入 Goo-wiki、项目入口和 Goo-wiki `log.md` 已链接；fallback 只记 `pending_wiki_sync`/`failed`
 - plan-only 模式只把该步骤写入 `.goo/plan.json`，不实际执行归档；计划摘要和 brainstorm 候选目标要等用户审阅确认后再归档最终版
 
 ## 并行优先规划规则

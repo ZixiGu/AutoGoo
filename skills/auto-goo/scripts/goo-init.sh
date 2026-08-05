@@ -1194,6 +1194,8 @@ if wiki_ready:
 - 任何产生可复用内容的命令最终都必须归档到 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。brainstorm 候选目标和 plan 摘要必须先给用户审阅，确认后或进入执行前再归档最终版；usage/token 降本分析、日报/周报、改进建议、benchmark 指标和执行经验按命令规则归档。
 - 用户要求日报、周报、总结今天或调用 `/auto-goo:goo-daily-report` 时，必须把 Claude Code / Codex 会话沉淀到 Goo-wiki `journal/daily/`，并更新 `log.md`；同日日报已存在时只追加新增内容，不整体覆盖已有人工整理。
 - Goo-wiki 可用时优先写入 `{wiki_dir}/{project_archive_dir}/` 并追加 `Goo-wiki/log.md`；不可用时写入 `{fallback_project_dir}` 作为本地 fallback。
+- 模型摘要只作阅读入口；最终任务归档还必须生成 `execution/record.md` 详细事实记录和 `execution/evidence-index.md` 来源覆盖表。先枚举当前 thread plan、全部 step logs、artifacts、reports 和 context artifacts；小型安全文本证据原样保留，大型/二进制产物记录路径、大小和可取得时的校验值；每项来源必须标记已收录、仅索引、不可用或已脱敏，不得静默遗漏失败、重试和未验证项。
+- 论文解读/深读以及代码库结构、调用链、数据流、架构、实现模式分析必须生成独立 Markdown 分析文档并实际写入 Goo-wiki，同时更新项目入口和 Goo-wiki `log.md`。`.goo/`、step log、聊天回复或 `.goo/obsidian/` fallback 都不能作为最终归档；Goo-wiki 不可写时 fallback 只作临时防丢失，状态保持 `pending_wiki_sync` 或 `failed`。
 - 归档完成前必须补齐并验收 Markdown 连接图谱：任务页链接项目入口、复用的 `wiki_context` / `context_artifacts` 和关键概念/问题/指标/历史任务页；项目 `<project-slug>.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口。缺少这些链接时不得把 archive step 标记为 completed。
 - 不把归档当作事后报告；归档内容要能支撑下一次任务的召回、规划和复用。
 """

@@ -1,7 +1,7 @@
 ---
 name: goo-workflow
 description: "Use when the user says '/auto-goo:goo-init', '/auto-goo:goo-brainstorm', '/auto-goo:goo-plan', '/auto-goo:goo-start', '/auto-goo:goo-research', '/auto-goo:goo-daily-report', '/auto-goo:goo-usage', '/auto-goo:goo-usage-analyse', '/auto-goo:goo-observe', '/auto-goo:goo-publish', '找目标', '开始任务', 'run:', '日报', '周报', 'usage', 'token统计', 'token降本', '后台观察', '发布HTML', '自改进', or gives a goal-clear multi-step task that can be decomposed into sub-tasks. Runs Goo workflow: config init, wiki-based brainstorm, wiki recall, DAG planning, subagent execution, research material archiving, status/observe, HTML publishing, optimization, Goo-wiki archiving, usage monitor, usage cost analysis, daily reports, and plugin self-improvement. Compatible with Claude Code and Codex."
-version: 0.4.0
+version: 0.5.1
 tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion, spawn_agent, wait_agent, request_user_input]
 ---
 
@@ -19,8 +19,9 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion, spawn_agent,
 **Codex 关键差异**：
 - `request_user_input` 仅在 Plan mode 可用。Default mode 下用纯文本选项列表 fallback，明确标注 "(fallback)"。
 - `spawn_agent` 无 `isolation` 参数，worktree 隔离不可用，自动走 `mode="none"`。
-- `spawn_agent` 用 `agent_type` 区分 `default` / `explorer` / `worker`，AutoGoo-Plugin role agent 映射：researcher→`explorer`，implementer/optimizer/evaluator→`worker`，reviewer/auditor/recorder→`default`。
-- `spawn_agent` 用 `fork_context: bool` 控制是否继承会话历史（默认 false，需要时设 true）。
+- `spawn_agent` 使用 `task_name`、`message` 和 `fork_turns`；`task_name` 使用稳定的小写任务名，role/task agent 内容合并进 `message`。不要传旧字段 `agent_type` 或 `fork_context`。
+- `fork_turns="none"` 不继承上下文；需要有限上下文时用正整数字符串，需要完整上下文时用 `fork_turns="all"`。默认传最少必要上下文。
+- Codex 并发槽位由当前运行环境决定，根 Agent 也占一个槽位。派发前用 `list_agents`/当前工具状态核对可用容量，不得按固定 6 槽强行派发。
 - Codex 暂不支持 plugin 级 hooks，可通过项目 `AGENTS.md` 实现类似效果。
 
 **命令触发差异**：Claude Code 通过 `/auto-goo:*` slash commands；Codex 通过 skill 名称或 `description` 匹配触发。
@@ -41,6 +42,34 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion, spawn_agent,
 
 **上下文预算**：`SKILL.md` 只保留触发条件、阶段入口和关键铁律。长规则、schema、prompt 变体和检查表放入 `references/`；重复机械操作优先脚本化，并让脚本输出紧凑 packet，避免主会话读取大段 Markdown。完整设计约束见 `references/skill-design.md`。
 
+## 按需调用原则(On-Demand Recall)
+
+**原则**：Subagent 和主 Agent 不得全量读取 wiki/references；按当前 step 的 `description`、`allowed_read_paths` 和 `inputs` 按需取用，受**条目数 + 字符预算 + 超时**三重约束。
+
+规则：
+1. Subagent prompt 必须显式列出本 step 实际需要的 wiki 路径子集(`wiki_paths` glob)，不允许传"读全部 wiki"。
+2. 主 Agent 派发前必须用 `skills/auto-goo/scripts/wiki-graph-assist.py` 生成紧凑 graph packet，而不是让 Subagent 自己读全 vault。
+3. 单次 Read/Grep 调用受字符预算(默认 < 20k 字符)和超时(默认 < 30s)双重约束；超出时优先用 glob+head 而非 Read 全文。
+4. 跨 step 的 wiki 引用通过 `[[Wikilink]]` 表达，Subagent 按需点开；不需要的 wiki 页面不进入上下文。
+5. 长期运行 step 必须用渐进披露：先读入口页 → 读相关 lessons → 读 task 页 → 必要时读 raw；不跳级全量。
+
+## 记忆分层原则(Memory Layering)
+
+**原则**：Subagent prompt、归档笔记和 wiki 页面应显式区分 L0/L1/L2/L3 四层记忆；检索时先 L2/L3 引导，具体事实回退 L1。
+
+层级定义：
+- **L0 — 原始记录**：`.goo/logs/` 下的 step log、原始命令输出、未脱敏的 transcript。**不进入 Subagent 默认上下文**。
+- **L1 — 原子事实**：从 step 产物中提炼的关键决策、指标、命令、错误码；放在 step 报告的 "关键决策" 段。
+- **L2 — 场景知识**：任务页、lessons、references，跨任务可复用的判断和方法。**Subagent 默认读取的层级**。
+- **L3 — 项目画像**：项目入口 `<project-slug>.md`、`wiki/projects/<slug>/lessons/` 高频经验、CLAUDE.md 的项目约定。**主 Agent 启动时读取，Subagent 按 loadout 决定是否读**。
+
+规则：
+1. 归档笔记的 YAML frontmatter 必须含 `memory_layer: L0|L1|L2|L3` 字段，便于检索时按层级过滤。
+2. 检索策略：主 Agent 启动先读 L3 项目入口 → 读 L2 相关任务页/lessons → 必要时回退 L1 step 决策；**Subagent 默认只看 L2，除非 plan 显式要求 L1**。
+3. L0 原始日志只用于 trace/audit，经 recorder 提炼为 L1/L2 后才进入 wiki。
+4. 项目入口 `<project-slug>.md` 显式标注自身为 L3，作为 wiki 的最高抽象层。
+5. Recorder 在归档时必须判断并填写 `memory_layer`，不得留空。
+
 命令模式：
 - `/auto-goo:goo-init --user`：初始化用户级 `~/.auto-goo/config.json`，作为所有项目的默认配置。
 - `/auto-goo:goo-init --project`：初始化当前项目 `.goo/config.json`，覆盖用户级默认配置。
@@ -54,7 +83,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion, spawn_agent,
 - `/auto-goo:goo-observe`：观察 Agent View 入口、当前 thread running step、heartbeat、step log 尾部和 shell 长任务日志模板。
 - `/auto-goo:goo-publish`：无需 config，把 `.goo/` 工作流状态发布成静态多页 HTML，包含活动热力图、头脑风暴、计划、任务流程图、DAG、运行状态和产物索引。
 
-**内容输出归档铁律**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令最终都必须归档到 Goo-wiki。包括 `/auto-goo:goo-brainstorm` 的候选 goals、`/auto-goo:goo-research paper` 的论文资料包和深度笔记、`/auto-goo:goo-usage-analyse` 的降本报告、`/auto-goo:goo-daily-report` 的日报/周报、`/auto-goo:goo-improve` 的改进建议、benchmark/plan/start/continue 的计划与执行经验。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。`goo-brainstorm` 和 `goo-plan` 必须先让用户审阅，用户确认前只写本地 `.goo/brainstorm.json` / `.goo/plan.json` 草案，不急着归档最终知识页。每次任务最终归档完成后，主 Agent 必须用 `AskUserQuestion`（Claude Code）/ `request_user_input`（Codex）复用 `id=post_archive_html_report` 模板询问是否生成任务总结报告页；用户选择生成时，网址必须指向本次任务的最终总结报告（例如模型指标对比、验证结论、关键产物、归档链接和后续建议），不能指向 `/auto-goo:goo-publish` 生成的项目级 `.goo/site/` 工作流状态站点。
+**内容输出归档铁律**：除纯状态查看、纯初始化配置或用户明确要求不归档外，任何产生可复用内容的命令最终都必须归档到 Goo-wiki。包括 `/auto-goo:goo-brainstorm` 的候选 goals、`/auto-goo:goo-research paper` 的论文资料包和深度笔记、`/auto-goo:goo-usage-analyse` 的降本报告、`/auto-goo:goo-daily-report` 的日报/周报、`/auto-goo:goo-improve` 的改进建议、benchmark/plan/start/continue 的计划与执行经验。一般内容在 Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。**论文分析和代码分析是强制 Goo-wiki 类型**：论文解读/深读以及代码库结构、调用链、数据流、架构、实现模式分析必须生成独立 Markdown 正文并实际写入 Goo-wiki，同时更新项目入口和 Goo-wiki `log.md`；fallback 只能防丢失并标记 `pending_wiki_sync`/`failed`，不能算归档完成。`goo-brainstorm` 和 `goo-plan` 必须先让用户审阅，用户确认前只写本地 `.goo/brainstorm.json` / `.goo/plan.json` 草案，不急着归档最终知识页。每次任务最终归档完成后，主 Agent 必须用 `AskUserQuestion`（Claude Code）/ `request_user_input`（Codex）复用 `id=post_archive_html_report` 模板询问是否生成任务总结报告页；用户选择生成时，网址必须指向本次任务的最终总结报告（例如模型指标对比、验证结论、关键产物、归档链接和后续建议），不能指向 `/auto-goo:goo-publish` 生成的项目级 `.goo/site/` 工作流状态站点。
 
 **Thread 任务线**：AutoGoo-Plugin thread 是一条 brainstorm/plan/execution 任务线，保存在 `.goo/threads/<thread_id>/`，包含 `thread.json`、`brainstorm.json`、`plan.json`、`logs/`、`artifacts/` 和 `reports/`。`.goo/current_thread.json` 记录默认 thread；`.goo/plan.json` 是兼容入口，指向或复制当前 thread 的 active plan。用户启动新 plan 时，如果当前 thread/plan 未完成，必须优先用 `AskUserQuestion`（Claude Code）/ `request_user_input`（Codex）复用 `references/interaction-templates.md` 的 `id=thread_action` 模板询问：新建 thread、继续当前 thread、取消。用户未明确选择前，不得覆盖当前 thread 的 plan。每个 plan 顶层必须写入 `thread.id`、`thread.plan_path`、`thread.logs_dir` 和 `thread.artifacts_dir`；每次执行状态变化后必须同步 `.goo/threads/<thread_id>/thread.json.status` 和 `.goo/threads/index.json`。
 
@@ -78,7 +107,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion, spawn_agent,
 
 初始化要求：
 1. 使用主 Agent 交互模式：收到命令后直接开始交互提问，不预先检查环境。主 Agent 必须用 `AskUserQuestion`（Claude Code）/ `request_user_input`（Codex）问清作用域、wiki 路径、是否创建业务项目目录、创建后是否写入目录约定、是否更新项目 `CLAUDE.md`、是否配置远程服务器等，再调用脚本落盘；不得在结构化选择 UI 可用时用普通文本要求用户手打 `1/2` 或 `--project/--user`。不得派发 Subagent 代替初始化，也不得用临时代码写配置。如果结构化选择 UI / AskUserQuestion 不可用、调用失败或按钮没有渲染，才允许降级为明确标注 fallback 的纯文本列表选项，继续收集用户选择。
-2. 最终落盘前必须先解析 AutoGoo-Plugin 根目录：优先读取 Claude Code 安装记录 `$HOME/.claude/plugins/installed_plugins.json` 中 `autogoo-plugin@*` 的 `installPath`。该 `installPath` 通常位于 `$HOME/.claude/plugins/cache/<marketplace>/<plugin>/<version>`，是 Claude Code 实际加载的插件副本。如果 `installPath` 不存在或已 orphaned，再读取 `$HOME/.claude/settings.json`，只有 `enabledPlugins` 中启用了 `autogoo-plugin@<marketplace>`，且 `extraKnownMarketplaces.<marketplace>.source` 是本地 `directory` 时，才使用该本地 marketplace 路径。当前工作目录可能是用户项目，不要假设相对路径存在；不得读取环境变量，不得扫描当前目录、上级目录或源码 checkout 路径来猜插件根目录；不得在根目录变量为空时拼出 `/skills/auto-goo/scripts/goo-init.sh`。安装记录和本地 marketplace 都不可用或目标脚本不存在时，必须 fail-fast 提示用户重新安装/启用 AutoGoo-Plugin 插件。
+2. 最终落盘前必须先通过 `skills/auto-goo/scripts/resolve-root.sh` 的统一规则解析 AutoGoo-Plugin 根目录：Claude Code 读取 installed plugin/local directory marketplace；Codex 读取 `~/.codex/config.toml` 中启用的 plugin id 和 `~/.agents/plugins/marketplace.json` 的本地 source。当前工作目录可能是用户项目，不要假设相对路径存在；不得扫描当前目录或上级目录猜插件根目录；不得在根目录变量为空时拼出 `/skills/auto-goo/scripts/goo-init.sh`。两种平台的安装记录都不可用或目标脚本不存在时，必须 fail-fast 提示用户重新安装/启用插件。
 3. 根据参数或主 Agent 提问选择作用域：`--user` 写 `~/.auto-goo/config.json`，`--project` 写 `.goo/config.json`。如果用户只输入 `/auto-goo:goo-init`，必须先用 `AskUserQuestion`（Claude Code）/ `request_user_input`（Codex）询问作用域，不得默认选择 project；用户选择后必须把 `--user` 或 `--project` 传给脚本。作用域问题必须包含这两个结构化选项：「项目级 --project (Recommended) - 写入当前项目 .goo/config.json」「用户级 --user - 写入 ~/.auto-goo/config.json」。
 4. 必须用 `AskUserQuestion`（Claude Code）/ `request_user_input`（Codex）询问 Goo-wiki 路径，提供默认值 `~/workspace/Goo-wiki`；如果用户不输入路径，就按默认值处理。每个问题至少 2 个选项（推荐默认值 + 备选），如「~/workspace/Goo-wiki (Recommended)」「自定义路径（选择后在下方 Other 输入）」。如果交互控件不可用，使用明确标注 fallback 的纯文本列表选项继续收集路径；用户接受默认值或输入自定义路径后，都必须把 `--wiki-dir <路径>` 传给脚本，不得在未展示默认路径的情况下静默使用默认值。
 5. 项目级初始化时，必须询问是否需要创建业务项目目录结构，且必须实际调用 `AskUserQuestion`（Claude Code）/ `request_user_input`（Codex）复用 `references/interaction-templates.md` 的 `id=project_workspace_create` 模板；默认不创建，用户未选择前不得静默创建目录。用户选择创建后，继续调用 `id=project_workspace_layout` 模板询问目录模板或自定义目录：选择 `standard`/`ml`/`data` 时传 `--project-layout standard|ml|data`；Other 输入为 `docs` 时传 `--project-layout docs`；其他 Other 输入按逗号分隔目录复述确认后传 `--project-dirs src,data/raw,docs,references/papers` 这类列表。内置模板必须包含 `references/` 和 `references/papers/`，用于存放参考资料、规范、paper PDF、arXiv/DOI 元数据和阅读材料；这些是业务项目上下文，不属于 `.goo/` 运行态。AutoGoo-Plugin 自身运行态目录固定在项目 `.goo/`，脚本写入固定 `workspace.paths`，并把业务目录写入 `project_workspace.{layout,dirs}`。如果创建了业务目录，主 Agent 必须只读扫描项目根目录已有内容，排除 `.goo/`、`.git/`、`.claude/`、已创建业务目录、secrets、锁文件和隐藏配置；发现可归类内容时，包括论文、PDF、bib、参考资料和外部规范，必须调用 `id=project_workspace_organize_existing` 模板询问是否生成整理方案，默认不整理。用户选择生成方案后，只能展示源路径、目标路径、归类理由、冲突风险和跳过项；必须再调用 `id=project_workspace_apply_organization` 模板二次确认后才允许移动，且不得覆盖、删除或移动敏感/不确定/目标冲突项。创建业务目录后还必须继续调用 `id=project_workspace_claude_md` 模板询问是否把目录约定写入项目 `CLAUDE.md`。
@@ -260,7 +289,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion, spawn_agent,
       "goal_ids": ["g1"],
       "tier": 2,
       "name": "归档到 Goo-wiki",
-      "description": "将任务目标、计划、关键证据、产物路径、验证结果、决策和可复用经验归档到 Goo-wiki；必须补齐任务页、项目入口 <project-slug>.md、log.md、复用知识页和新增经验页之间的 Wikilink/backlink 关系，防止 Obsidian 连接图谱断裂；Goo-wiki 不可用时写入 .goo/obsidian/ fallback",
+      "description": "将任务目标、计划、关键证据、产物路径、验证结果、决策和可复用经验归档到 Goo-wiki；必须补齐摘要、详细事实记录、证据索引和 Wikilink/backlink；若上游包含论文分析或代码分析，独立 Markdown 分析正文必须实际写入 Goo-wiki，fallback 不能视为完成",
       "depends_on": [1],
       "type": "archive",
       "subagent": "recorder",
@@ -273,7 +302,7 @@ tools: [Read, Write, Edit, Bash, WebSearch, Agent, AskUserQuestion, spawn_agent,
       "outputs": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
       "allowed_read_paths": [".goo/threads/<thread_id>/plan.json", ".goo/threads/<thread_id>/logs/", ".goo/threads/<thread_id>/artifacts/", ".goo/plan.json", ".goo/artifacts/"],
       "allowed_write_paths": ["Goo-wiki/wiki/projects/<project-slug>/ 或 .goo/obsidian/<project-slug>/"],
-      "validation": "归档页或 fallback 笔记存在；任务页链接项目入口、复用的 wiki_context/context_artifacts 和关键概念/问题/指标/历史任务页；项目 <project-slug>.md 与 log.md 反向链接任务页；新增 concept/lessons/metrics 页也链接回任务页或项目入口；记录产物路径、验证结果和可复用经验",
+      "validation": "归档页、execution/record.md 和 execution/evidence-index.md 存在；任务页、项目入口与 log.md 链接完整；论文分析或代码分析的独立正文必须位于 Goo-wiki，只有 fallback 时状态为 pending_wiki_sync/failed",
       "risk_level": "low",
       "requires_user_confirm": false,
       "agent_id": null,
@@ -321,7 +350,7 @@ Markdown 任务输入的完整解析规则也在 `references/task-parsing.md`：
 **权限分层**：AutoGoo-Plugin 不让后台 Subagent 做平凡权限交互。普通读写和低风险命令必须在 plan 的 `allowed_read_paths`、`allowed_write_paths`、`validation`、`requires_user_confirm=false` 与项目命令 allowlist 中提前声明，Subagent 在边界内直接执行。可预见的安装依赖、网络下载、远程执行、长跑任务、端口监听、批量数据改写、跨机器同步或高成本操作，规划阶段必须标记 `requires_user_confirm=true`，由主 Agent 在派发前一次性说明作用域、命令类别、产物位置和风险并取得确认。执行中遇到 `PermissionDenied`、sandbox blocked、approval required、路径越界或命令不在允许范围时，Subagent 不得自行弹窗、不得静默跳过、不得要求主 Agent 直接代做；必须写日志并回写当前 step 为 `blocked`/`needs_user_approval`，说明所需命令、原因、读写路径、风险和建议处理。主 Agent 聚合这些阻塞项后在前台向用户申请许可；用户批准后只在批准范围内重派 Subagent 或执行许可命令，用户拒绝后再标记 failed 或调整 plan。
 
 ```
-MAX_CONCURRENT = 6 (plan.json 顶层可覆盖)
+MAX_CONCURRENT = min(plan.json 配置值或 6, 当前平台实际可用的 Subagent 槽位)
 
 主循环:
   1. 扫描 status=pending 且 depends_on 全 completed → 按优先级排序 → 入队
@@ -347,7 +376,7 @@ MAX_CONCURRENT = 6 (plan.json 顶层可覆盖)
 | 完成 | 100 | `--complete` |
 | 失败 | - | `--fail --error "<reason>"` |
 
-先从 Claude Code 安装记录解析 AutoGoo-Plugin 根目录；不要读取环境变量，也不要自动搜索插件目录。不要在 skill 文档中内联 heredoc / file redirection 的 Python 片段；需要回写 step 时，使用插件内置 `skills/auto-goo/scripts/resolve-root.sh` 或同等无 heredoc 封装来定位 root，再调用 `update-step.py`。
+先用插件内置 `skills/auto-goo/scripts/resolve-root.sh` 按当前平台安装记录解析 AutoGoo-Plugin 根目录；不要自动搜索当前目录或上级目录。不要在 skill 文档中内联 heredoc / file redirection 的 Python 片段；解析成功后再调用 `update-step.py`。
 
 `/auto-goo:goo-status` 必须调用 `skills/auto-goo/scripts/goo-status.py` 渲染进度条和心跳告警。
 
@@ -442,6 +471,7 @@ Subagent prompt 模板（exec / optimize / eval 三种变体）、上下文传�
 
 - 归档路径：优先使用项目 config 中的 `archive.project_dir`，即 `Goo-wiki/wiki/projects/<project-slug>/`；fallback 使用 `archive.fallback_project_dir`
 - 内容输出类命令即使不进入完整执行 DAG，也必须归档到 Goo-wiki 或 fallback。适用范围包括 brainstorm 候选 goals、usage/token 降本分析、日报/周报、改进建议、benchmark 指标、plan 摘要和执行经验；不得只写 `.goo/*.json` 或只在聊天中展示。
+- 论文分析和代码分析必须有独立 Markdown 分析正文并实际写入 Goo-wiki，同时更新项目入口与 Goo-wiki `log.md`。fallback 只能临时防丢失，状态保持 `pending_wiki_sync`/`failed`，不得据此完成 archive step。
 - 内容输出对应的 `.goo/*.json` 产物应包含 `archive` 字段，记录归档路径、fallback 状态和 `log.md` 是否更新。
 - 如果 Goo-wiki vault 不存在且 `.goo/obsidian/` 也不必要（临时项目），跳过归档，仅保留当前 thread 的 `logs/` 日志
 - 如果项目是 Git repo，归档到项目页或任务总览时必须记录 git remote 地址；优先使用 `.goo/config.json.archive.git_remote_url`
@@ -488,7 +518,7 @@ Goo-wiki vault 检测：默认检查 `~/workspace/Goo-wiki/CLAUDE.md`。路径�
 2. 解析 AutoGoo-Plugin 根目录后运行 `skills/auto-goo/scripts/goo-usage.py <参数>`。
 3. 原样展示脚本输出。脚本输出已是完整渲染结果，不要追加任何解释、总结或补充。
 
-不要提示用户手动进入插件目录或直跑内部脚本；用户侧推荐使用 `/auto-goo:goo-usage`，脚本路径由命令从 Claude Code 安装记录的 `installPath` 解析，必要时 fallback 到已启用的本地 directory marketplace。
+不要提示用户手动进入插件目录或直跑内部脚本；用户侧推荐使用 `/auto-goo:goo-usage`，脚本路径通过统一 resolver 从 Claude Code 或 Codex 的已启用本地插件记录解析。
 
 ## Phase 5: 自改进 (Self-Improvement)
 

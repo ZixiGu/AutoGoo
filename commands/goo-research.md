@@ -25,14 +25,14 @@ description: 研究资料归档命令，当前支持 paper 子命令，用于论
 
 1. **模式识别** — 如果第一个参数是 `paper`，进入论文模式；如果用户只输入论文、DOI、arXiv、OpenReview、期刊 URL 或本地 PDF，也可推断为 `paper` 模式。
 2. **AutoGoo-Plugin 配置读取** — 检查 `.goo/config.json`、`.goo/plan.json` 和 `.goo/brainstorm.json`，优先复用现有 `archive.task_archive_root`。
-3. **任务归档根确定** — 同一研究任务沿用同一个 `task_archive_root`；没有现成根时，创建 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-paper-<slug>>/`，Goo-wiki 不可写时降级到 `.goo/obsidian/<project-slug>/tasks/<task-slug>/`。
+3. **任务归档根确定** — 同一研究任务沿用同一个 `task_archive_root`；没有现成根时，创建 `wiki/projects/<project-slug>/tasks/<YYYY-MM-DDTHH-MM-SS-paper-<slug>>/`。论文分析文档必须进入 Goo-wiki；Goo-wiki 不可写时可临时写入 `.goo/obsidian/<project-slug>/tasks/<task-slug>/` 防丢失，但归档状态必须是 `pending_wiki_sync` 或 `failed`，不能视为最终归档。
 4. **资料收集** — 抓取公开可访问的 PDF、HTML、摘要页、元数据、BibTeX、引用、附录、补充材料和项目页；不要绕过付费墙或认证。
 5. **正文抽取** — 从 PDF/HTML 抽取全文、章节结构、图表标题、关键公式、实验表格和参考文献。
 6. **代码与数据搜索** — 主动搜索论文关联代码、项目页、模型、数据集、benchmark 和补充材料，来源包括论文正文、作者主页、GitHub/GitLab、Hugging Face、Papers with Code、OpenReview、arXiv comments、Zenodo、Figshare、OSF、Kaggle 和机构数据门户。
 7. **下载可行性检查** — 对候选代码/数据集区分官方和第三方，记录匹配证据、许可证、体积、登录/审批要求、可下载性、建议命令和失败原因。大文件默认只做可访问性检查和小文件/元数据验证；真正下载前需要确认体积、路径和风险。
 8. **产物落盘** — 小型知识产物写入 `<task_archive_root>/execution/`；PDF、HTML、代码 checkout、数据集样本和大文件放入 `.goo/artifacts/papers/<paper-slug>/` 或用户指定数据目录。
 9. **深度笔记** — 基于证据写中文论文笔记，包含问题、贡献、方法机制、实验、关键数字、局限、复现风险、相关工作定位和后续问题。
-10. **Wiki 归档** — 把 `paper-summary.md`、`manifest.json`、`evidence-index.md`、`downloadability.md` 和关键链接归档到 Goo-wiki/fallback，并更新项目入口或 `log.md`。
+10. **Wiki 归档** — 把 `paper-summary.md` 分析正文、`manifest.json`、`evidence-index.md`、`downloadability.md` 和关键链接归档到 Goo-wiki，并同时更新项目入口和 `log.md`。不得只留下 `.goo/artifacts/`、step log、聊天总结或 fallback；Goo-wiki 页及链接可验证后才可写 `archive.status=completed`。
 
 ## 输出文件
 
@@ -98,6 +98,7 @@ description: 研究资料归档命令，当前支持 paper 子命令，用于论
 最终回复用户时保持简洁，但必须包含：
 
 - 论文笔记路径。
+- Goo-wiki 分析页路径和 `archive.status`；若只是 fallback，明确说明尚未完成 Goo-wiki 归档。
 - Manifest 和下载检查路径。
 - 已确认可下载的代码/数据。
 - 需要登录、申请或用户确认的大文件下载。
@@ -112,3 +113,4 @@ description: 研究资料归档命令，当前支持 paper 子命令，用于论
 - 不自动下载大数据集、大模型权重或大量文件；先说明体积、路径和风险。
 - 不覆盖 `.goo/plan.json`；需要转执行 DAG 时，引导用户使用 `/auto-goo:goo-plan` 或 `/auto-goo:goo-start`。
 - 不删除论文资料、下载物、wiki 笔记或 `.goo` 产物。
+- 不把 `.goo/obsidian/` fallback 当作论文分析的最终归档；恢复写入后必须同步到 Goo-wiki 并补齐项目入口、`log.md` 链接。

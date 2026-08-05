@@ -32,6 +32,32 @@ else
   fail ".claude-plugin/plugin.json 缺失"
 fi
 
+# ── 1b. Cross-platform manifests ──
+echo ""
+echo "── 1b. 三平台清单 ──"
+for manifest in ".codex-plugin/plugin.json" ".pi/extensions/autogoo-plugin/package.json"; do
+  if [[ -f "$ROOT/$manifest" ]] && python3 -c "import json; json.load(open('$ROOT/$manifest'))" 2>/dev/null; then
+    pass "$manifest 格式正确"
+  else
+    fail "$manifest 缺失或格式错误"
+  fi
+done
+
+for agent in researcher implementer optimizer evaluator reviewer auditor recorder; do
+  [[ -f "$ROOT/agents/$agent.md" ]] || fail "Claude Agent 未注册: agents/$agent.md"
+done
+[[ -f "$ROOT/hooks/hooks.json" ]] && pass "Claude SessionStart hook 存在" || fail "hooks/hooks.json 缺失"
+
+if command -v pytest &>/dev/null; then
+  if (cd "$ROOT" && pytest -q tests/test_platform_integrity.py >/dev/null); then
+    pass "三平台 pytest 完整性测试通过"
+  else
+    fail "三平台 pytest 完整性测试失败"
+  fi
+else
+  warn "pytest 不可用，跳过三平台 pytest 完整性测试"
+fi
+
 # ── 2. SKILL ──
 echo ""
 echo "── 2. SKILL 定义 ──"
@@ -86,6 +112,13 @@ PY
     fail "skills/$skill_dir/SKILL.md 缺失"
   fi
 done
+
+if rg -q 'spawn_agent.*task_name|`spawn_agent` 使用 `task_name`' "$ROOT/skills/auto-goo/SKILL.md" \
+  && rg -q '\.codex/config\.toml' "$ROOT/skills/auto-goo/scripts/resolve-root.py"; then
+  pass "Codex spawn_agent 契约和 root resolver 已适配"
+else
+  fail "Codex spawn_agent 契约或 root resolver 仍是旧版"
+fi
 
 # ── 3. Reference 文件 ──
 echo ""
@@ -295,7 +328,7 @@ done
 echo ""
 echo "── 6. 脚本文件 ──"
 
-SCRIPTS=("goo-init.sh" "init-plan.sh" "goo-status.py" "goo-observe.py" "update-step.py" "thread-state.py" "thread-locks.py" "change-requests.py" "brainstorm-validate.py" "wiki-graph-assist.py" "daily-report-sessions.py" "goo-usage.py" "goo-publish.py" "goo-ssh.sh" "remote-resources.py" "check-plugin.sh")
+SCRIPTS=("goo-init.sh" "init-plan.sh" "goo-status.py" "goo-observe.py" "update-step.py" "thread-state.py" "thread-locks.py" "change-requests.py" "brainstorm-validate.py" "wiki-graph-assist.py" "daily-report-sessions.py" "goo-usage.py" "goo-publish.py" "goo-ssh.sh" "remote-resources.py" "resolve-root.sh" "resolve-root.py" "session-start.py" "check-plugin.sh")
 for s in "${SCRIPTS[@]}"; do
   f="$ROOT/skills/auto-goo/scripts/$s"
   if [[ -f "$f" ]]; then
@@ -650,7 +683,10 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-text = (root / "CLAUDE.md").read_text(encoding="utf-8")
+pointer = (root / "CLAUDE.md").read_text(encoding="utf-8")
+text = (root / "goo.md").read_text(encoding="utf-8")
+assert "<!-- AUTOGOO-PLUGIN-POINTER-BEGIN -->" in pointer
+assert "[goo.md](goo.md)" in pointer
 assert "<!-- AUTOGOO-PLUGIN-WIKI-ARCHIVE-BEGIN -->" in text
 assert "## 项目目录约定" in text
 assert "data/raw/" in text
@@ -658,6 +694,11 @@ assert "data/processed/" in text
 assert "references/papers/" in text
 assert "AutoGoo-Plugin 自身状态仍固定写入 `.goo/`" in text
 assert "allowed_read_paths" in text and "allowed_write_paths" in text
+assert "execution/record.md" in text
+assert "execution/evidence-index.md" in text
+assert "不得静默遗漏失败、重试和未验证项" in text
+assert "论文解读/深读以及代码库结构、调用链、数据流、架构、实现模式分析" in text
+assert "pending_wiki_sync" in text
 PY
   then
     pass "  goo-init.sh 创建业务目录后可写入 CLAUDE.md 目录约定"

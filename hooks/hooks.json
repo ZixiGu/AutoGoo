@@ -1,0 +1,16 @@
+{
+  "description": "AutoGoo-Plugin session startup context",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/auto-goo/scripts/session-start.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

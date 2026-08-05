@@ -71,11 +71,11 @@ if matches:
     print(sorted(matches)[-1][1])
 PY
 )"
-if [ -z "$auto_gooroot" ] || [ ! -f "$auto_gooroot/skills/auto-goo/scripts/goo-observe.py" ]; then
+if [ -z "$auto_goo_root" ] || [ ! -f "$auto_goo_root/skills/auto-goo/scripts/goo-observe.py" ]; then
   echo "AutoGoo-Plugin root not configured; install autogoo-plugin or enable a local directory marketplace in ~/.claude/settings.json" >&2
   exit 127
 fi
-python3 "$auto_gooroot/skills/auto-goo/scripts/goo-observe.py" --root .
+python3 "$auto_goo_root/skills/auto-goo/scripts/goo-observe.py" --root .
 ```
 
 如果需要给 Web 或其他工具消费，使用：

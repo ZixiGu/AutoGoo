@@ -110,12 +110,15 @@ Recorder 和归档步骤应优先写入 `archive.project_dir`，Goo-wiki 不可�
 - 规划前先从 Goo-wiki 召回相关项目经验、概念页、周报和 `log.md`
 - `goo-plan` 的 `.goo/plan.json` 最后保留 `归档到 Goo-wiki` 步骤
 - 执行后归档目标、计划、证据、产物路径、验证结果、决策、问题处理和可复用经验
+- 模型摘要只作阅读入口；同时保存 `execution/record.md` 详细事实记录和 `execution/evidence-index.md` 来源覆盖表，小型安全文本证据原样保留，大型/二进制产物记录路径、大小和可取得时的校验值
 - 任何产生可复用内容的命令最终都必须归档到 Goo-wiki 或 `.goo/obsidian/` fallback；不得只写 `.goo/*.json` 或只在聊天中展示。适用内容包括 usage/token 降本分析、日报/周报、改进建议、benchmark 指标和执行经验。brainstorm 候选目标与 plan 摘要必须先给用户审阅，确认后或进入执行前再归档最终版
 - 日报/周报请求通过 `/auto-goo:goo-daily-report` 沉淀到 Goo-wiki `journal/daily/` 并更新 `log.md`；同日日报已存在时只追加新增内容，不整体覆盖已有人工整理
 - 如果项目是 Git repo，将 git remote 地址写入 Goo-wiki 项目页或任务总览笔记
 - Goo-wiki 不可用时写入 `.goo/obsidian/` fallback
 - 归档完成前必须验收 Markdown 连接图谱：任务页链接项目入口、复用知识、上下文材料和关键概念/问题/指标/历史任务页；项目 `<project-slug>.md` 与 `log.md` 反向链接任务页；新增 concept/lessons/metrics 页面链接回任务页或项目入口
+- 归档完成前必须验收来源覆盖：plan、每个 step log、artifacts、reports 和 context artifacts 均已收录、仅索引、标记不可用或明确脱敏，不得静默遗漏失败、重试和未验证项
 - 归档内容必须服务下一次任务复用，而不是只做事后报告
+- 论文分析和代码分析产生的独立 Markdown 分析文档必须实际进入 Goo-wiki，并更新项目入口与 `log.md`；fallback 只作临时防丢失，状态保持 `pending_wiki_sync`/`failed`
 
 该更新是幂等的，只替换 AutoGoo-Plugin marker 内的内容，不覆盖项目已有指引。配置远程服务器时，项目级 init 默认更新 `CLAUDE.md` 中的服务器概要和安全约束；远程 `workdir`、`setup_commands`、数据目录和产物目录细节仍只写 `.goo/config.json`。非交互场景没有远程服务器时默认不写，需传 `--update-claude-md` 明确写入目录约定和归档原则；需要跳过所有 `CLAUDE.md` 更新时传 `--skip-claude-md`。
 

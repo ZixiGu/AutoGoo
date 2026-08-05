@@ -55,7 +55,7 @@ AutoGoo-Plugin 的权限交互由主 Agent 统一处理，后台 Subagent 不做
 { "type": "archive", "subagent": "recorder", "task_agent": "wiki-curator", "available_skills": [] }
 ```
 
-`task_agent` 用于选择 `agents/tasks/` 下的细分 agent 文件和 prompt 重点；它不是 skill 名称，也不写入 `available_skills`。
+`task_agent` 用于选择 `agents/tasks/` 下的细分 agent 文件和 prompt 重点；它不是 skill 名称，也不写入 `available_skills`。Claude Code 使用插件注册的 `autogoo-plugin:<subagent>` 角色并把 task agent 内容合入 prompt；Codex 使用 `spawn_agent({task_name, message, fork_turns})`，把 role 与 task agent 内容合入 `message`。
 
 `available_skills` 是 step 级 skill allowlist，用来告诉主 Agent 在派发 Subagent 时哪些 skill 可以作为本步骤上下文。它不替代 `subagent` 角色，不自动授予额外工具权限，也不允许 Subagent 越过 `allowed_read_paths` / `allowed_write_paths`。
 
@@ -174,7 +174,9 @@ Subagent 之间只通过当前 thread 的 `plan.json`、`logs/`、`artifacts/`�
 新模型：**固定并发槽位 + 动态就绪队列 + 连续下发**。
 
 ```
-MAX_CONCURRENT = 6  (默认，可在 plan.json 顶层覆盖。上限不做硬限制，尽量多)
+MAX_CONCURRENT = min(6 或 plan.json 配置值, 当前平台实际可用的 Subagent 槽位)
+
+Claude Code 可按 Agent 工具容量调度；Codex 的根 Agent 也占一个槽位，必须通过 `list_agents`/工具返回状态核对剩余容量。平台容量小于 plan 配置时以平台容量为准，不得因固定并发值反复触发派发失败。
 
 初始化:
   running = []       # 当前在跑的 agent 槽位
@@ -424,6 +426,15 @@ fi
 - 相关 wiki_context: {relevant_wiki_context}
 - 不要使用其他 Subagent 的未归档草稿作为依据
 
+## 按需读取 wiki(对齐 SKILL.md "按需调用原则")
+- 本 step 的 `wiki_paths` glob(只读这些,不要"读全部 wiki"):
+  {wiki_paths}
+  - 默认 L2 层:`wiki/projects/<project-slug>/{tasks,lessons,references}/**`;L3 项目入口按需。
+  - 主 Agent 已在派发前用 `wiki-graph-assist.py` 生成紧凑 graph packet,路径见 `{wiki_graph_packet_path}`;优先用它代替自行 grep/glob 全量扫描。
+- 单次 Read/Grep 受**字符预算 (< 20k) + 超时 (< 30s)** 双重约束;超出时优先 `Read` + `limit/offset` 或 `Grep -n`,不跳级 Read 全文。
+- `memory_layer` 默认 L2(场景知识);L0 原始日志、L3 项目画像只按 step 显式需要才读。
+- 跨 step 引用用 `[[Wikilink]]` 按需点开;不要 Read 整篇 wiki 笔记。
+
 ## 权限处理
 - 普通读写和低风险命令只能在上述边界内执行。
 - 如果遇到 `PermissionDenied`、sandbox blocked、approval required、命令不在 allowlist、读写路径越界或需要额外权限，不要自行弹窗、不要循环重试、不要让主 Agent 未经许可直接代做。
@@ -434,7 +445,7 @@ fi
 
 **主 Agent 依赖此字段判断你是否存活。不更新 heartbeat 会被误判为僵尸进程并重派。**
 
-先从 Claude Code 安装记录解析 AutoGoo-Plugin 根目录；不要读取环境变量，也不要搜索插件目录。优先来源是 `$HOME/.claude/plugins/installed_plugins.json` 中 `autogoo-plugin@*` 的 `installPath`。如果 `installPath` 不存在或已 orphaned，再读取 `$HOME/.claude/settings.json`，只有 `enabledPlugins` 中启用了 `autogoo-plugin@<marketplace>`，且 `extraKnownMarketplaces.<marketplace>.source` 是本地 `directory` 时，才使用该本地 marketplace 路径。若安装记录和本地 marketplace 都不可用或目标脚本无效，必须 fail-fast 提示用户重新安装/启用 AutoGoo-Plugin 插件。
+通过 `skills/auto-goo/scripts/resolve-root.sh` 的统一规则解析 AutoGoo-Plugin 根目录；不要搜索当前目录或上级目录。Claude Code 使用 installed plugin/local directory marketplace，Codex 使用 `~/.codex/config.toml` 与 `~/.agents/plugins/marketplace.json` 的已启用本地 source。若当前平台安装记录不可用或目标脚本无效，必须 fail-fast 提示用户重新安装/启用插件。
 
 命令模板（替换 `<id>` 和 `<0-100>`）：
 ```bash
@@ -591,7 +602,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
 - 主 Agent 派发前先写第一次 heartbeat_at + progress=5；这一步必须用 `update-step.py --start --progress 5 --agent-id <agent>` 完成
 - Subagent 启动后不要重复 `--start`；从读输入完成开始按里程碑继续更新 `heartbeat_at` + **`progress` (0-100)**
 - 进度估算：agent 在任务开头拆 3-5 个里程碑，每过一个里程碑更新进度
-- 心跳通过解析后的 `auto_goo_root` 调用 `skills/auto-goo/scripts/update-step.py` 更新 plan.json，不要手写临时 JSON 修改代码；`auto_goo_root` 只能来自 Claude Code 安装记录
+- 心跳通过统一 resolver 得到的 `auto_goo_root` 调用 `skills/auto-goo/scripts/update-step.py` 更新 plan.json，不要手写临时 JSON 修改代码
 - 心跳必须前台可见：主 Agent 每次派发批次后、每轮 30s 巡检后、任一 Agent 完成后都运行 `goo-status.py`，至少展示 RUNNING 和 WARNINGS 摘要
 
 ### 进度判断
@@ -703,7 +714,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" \
 |----------|---------|------|
 | `exec` / `optimize` (实现型) | 落盘产物 | `git -C <project> diff --stat HEAD` <br>`ls -lh <step.outputs>` 至少一个非空 <br>`grep -nE "产物路径\|落盘到\|写入" logs/...md` 至少有一条 Subagent 自报的产物路径 |
 | `research` / `eval` / `audit` / `review` (分析型) | 报告 / 笔记 | `ls -lh <step.outputs>` <br>`grep -nE "## 结论\|## 推荐\|## 风险\|## 指标" logs/...md` 至少 1 个结论段 <br>如果产物是 markdown：报告首段非 placeholder，含 ≤ 200 字结构化结论 |
-| `archive` (归档型) | Goo-wiki / fallback | 主 Agent 跑 `wiki-graph-assist.py --validate --task-page <path>` 验证 wikilink；`ls -lh <wiki_dir>/wiki/projects/<slug>/` <br>或 `ls -lh .goo/obsidian/<slug>/tasks/<tid>/` |
+| `archive` (归档型) | Goo-wiki / fallback | 主 Agent 跑 `wiki-graph-assist.py --validate --task-page <path>` 验证 wikilink；检查 `execution/record.md`、`execution/evidence-index.md` 存在，且索引逐项覆盖 plan、全部 step logs、artifacts/reports/context_artifacts 或说明 `仅索引`/`不可用`/`已脱敏`；只存在模型摘要不得通过 <br>`ls -lh <wiki_dir>/wiki/projects/<slug>/` 或 `ls -lh .goo/obsidian/<slug>/tasks/<tid>/` |
 | `optimize` (优化型) | 评测 + 对比 | 上述 exec + eval 两组合并 |
 
 **关键：分析型 Subagent 没有代码改动是合法的。** 不要因为 `git diff` 为空就标 failed；这种 step 必须靠 **日志结构化结论 + 报告文件** 双证据完成留痕。判断"是否完成"看 step type 列出的必查路径，而不是看 git diff 是否变更。

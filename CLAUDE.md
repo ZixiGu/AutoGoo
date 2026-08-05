@@ -54,6 +54,8 @@ AutoGoo-Plugin 不应强行覆盖：
 
 内容输出类命令即使不进入完整执行 DAG，也必须完成归档沉淀。`goo-usage-analyse`、`goo-daily-report`、`goo-improve`、`goo-benchmark` 等只要产出可复用判断、报告、指标、规则或经验，就要写入 Goo-wiki 项目路径并更新项目入口或 `log.md`；Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback，并在对应 `.goo/*.json` 产物记录 `archive` 字段。`goo-brainstorm` 和 `goo-plan` 例外：先写本地草案并让用户审阅，用户可能会修改候选目标或 DAG；确认后或进入执行前，再归档最终版候选目标、计划摘要和关键取舍。
 
+论文分析和代码分析是强制 Goo-wiki 归档类型：只要任务产出论文解读、论文深读笔记、代码库结构分析、调用链/数据流分析、架构分析或代码调研报告，就必须把分析文档写入 Goo-wiki 项目归档根并更新项目入口和 `log.md`；不得只保存在 `.goo/`、Subagent 日志、聊天回复或本地 fallback。Goo-wiki 暂时不可写时可先写 `.goo/obsidian/` 防止信息丢失，但任务归档状态保持 `pending_wiki_sync` 或 `failed`，同步到 Goo-wiki 前不得宣称归档完成。
+
 ## 状态与产物规范
 
 - 当前任务唯一状态源是 `.goo/plan.json`。不得用历史 plan、聊天记忆或临时笔记替代当前 plan。

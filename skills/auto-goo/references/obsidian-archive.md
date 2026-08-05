@@ -7,9 +7,35 @@ AutoGoo-Plugin 以 Goo-wiki 作为项目记忆层：任务开始前读取已有�
 AutoGoo-Plugin 的 wiki 流程分成两段：
 
 1. **执行前召回**：读取相关项目页、概念页、周报和 `log.md`，提取历史决策、已验证命令、数据路径、指标口径、失败经验和后续计划。
-2. **执行后归档**：把本次任务的目标、计划、对话中固化的方案决策、步骤证据、产物、验证结果、指标、问题处理和可复用经验写回 Goo-wiki，并补齐与既有 Markdown 页面之间的 `[[Wikilink]]`，让 Obsidian 关联图谱随任务增长。
+2. **执行后归档**：把本次任务的目标、计划、对话中固化的方案决策、步骤证据、产物、验证结果、指标、问题处理和可复用经验写回 Goo-wiki，并补齐与既有 Markdown 页面之间的 `[[Wikilink]]`，让 Obsidian 关联图谱随任务增长。模型摘要只作为阅读入口，不能成为唯一档案；详细事实和原始证据必须能独立追溯。
 
 归档不是附加项，也不是孤立报告，而是为了让下一次 AutoGoo-Plugin 任务能沿着项目页、概念页、问题页、周报和日志之间的链接继续推进。归档完成的判断不能只看 Markdown 文件是否存在，必须同时验收链接关系是否存在；缺少关键链接时 archive step 不得标记为 `completed`。
+
+## 信息保真与证据分层
+
+最终任务归档必须同时保留三个层次，避免把模型压缩后的结论误当成完整执行历史：
+
+| 层次 | 默认位置 | 内容 | 是否允许只保留摘要 |
+|------|----------|------|--------------------|
+| 阅读摘要 | 任务页或 `execution/summary.md` | 目标、结论、关键产物、验证结果、主要风险、后续项 | 是 |
+| 详细事实记录 | `execution/record.md` | 原始任务、逐步骤输入/状态/时间、精确命令、关键 stdout/stderr、文件改动、指标、决策、失败/重试、未验证项 | 否 |
+| 原始证据 | `execution/evidence-index.md`、`execution/evidence/` | plan、step logs、报告和上游产物的覆盖表；可安全保存的小型文本原件或大型/二进制产物索引 | 否 |
+
+Recorder 在生成摘要前必须先枚举当前 thread 的 `plan.json`、全部 `logs/`、`artifacts/`、`reports/`、兼容入口和明确传入的 `context_artifacts`。`evidence-index.md` 中每项来源都必须使用以下状态之一：
+
+- `已收录`：内容已原样复制到 `execution/evidence/`，记录归档相对路径。
+- `仅索引`：大型、二进制或不适合复制的产物，记录源路径、类型、大小、可取得时的校验值、生成步骤和用途。
+- `不可用`：源文件不存在、权限不足或执行时未产生，记录原因；不得猜测内容。
+- `已脱敏`：证据包含 secret、token、密码或个人敏感信息；使用 `[REDACTED: 原因]` 保留缺口位置和原因，不得无痕删减。
+
+信息保真规则：
+
+- 能从 plan 或 context artifact 取得用户原始任务时，原样放入详细记录；不要只留下模型改写后的目标。
+- 命令保留实际执行形式；输出至少保留影响判断的成功/失败片段、错误文本和指标。截断时必须标明截断范围，并在证据索引中指向完整来源。
+- 最终成功不能覆盖中间失败、反例、重试、回滚、跳过或未验证状态。
+- 小型文本日志、报告和 manifest 优先机械复制，不经过模型改写；大型/二进制产物不强制复制，但必须可定位和校验。
+- 不复制缓存、依赖目录和重复生成物；把排除规则及原因写入证据索引。
+- 不为了“完整”泄漏敏感信息。脱敏是有标记的保真处理，不是静默遗漏。
 
 ## 内容输出命令归档
 
@@ -26,6 +52,17 @@ AutoGoo-Plugin 的 wiki 流程分成两段：
 - `/auto-goo:goo-plan` 经用户确认后的计划摘要、关键约束和可复用规划经验；完整 thread plan 仍保留为本地状态源，`.goo/plan.json` 只是兼容入口。
 
 归档优先写入 `<wiki_dir>/<archive.project_dir>/`，并更新项目入口或 `log.md`。Goo-wiki 不可用时写入 `.goo/obsidian/<project-slug>/` fallback。命令对应的 `.goo/*.json` 产物应包含 `archive` 字段，记录归档路径、fallback 状态和 `log.md` 是否更新。
+
+### 强制 Goo-wiki 分析文档
+
+以下分析文档不能以 fallback、`.goo/` 产物、Subagent 日志或聊天回复作为最终归档：
+
+- 论文解读、论文深读、论文方法/实验/复现分析，默认正文为 `paper-summary.md`。
+- 代码库结构、调用链、数据流、架构、实现模式或专项代码调研，默认正文为 `code-analysis.md`。
+
+这两类任务无论是否进入完整 DAG，都必须把独立 Markdown 分析正文写入 Goo-wiki 项目归档根，并同时满足：任务页或分析页存在、项目入口链接该页面、Goo-wiki `log.md` 有链接记录、证据索引能回指输入论文/代码版本和分析日志。只有这些条件均可验证时 `archive.status` 才能是 `completed`。
+
+Goo-wiki 暂时不可写时，允许先写 `.goo/obsidian/` fallback 防止信息丢失，但状态必须是 `pending_wiki_sync` 或 `failed`，最终回复需明确尚未完成。后续恢复 Goo-wiki 后必须同步正文和链接；不能用 fallback 存在来通过 archive step。
 
 `/auto-goo:goo-publish` 是归档之外的展示层。它无需运行 `goo-init` 或创建 `.goo/config.json`，默认从 `.goo/threads/`、`.goo/current_thread.json`、兼容 `.goo/brainstorm.json`、`.goo/plan.json`、history、当前 thread logs/artifacts/reports、`.goo/change-requests/`、`.goo/obsidian/` 和当前项目 Claude Code usage 日志生成 `.goo/site/` 多页站点。`skills/auto-goo/templates/publish/workflow-shell.html` 是唯一运行时页面外壳，`skills/auto-goo/templates/publish/workflow-theme.css` 是唯一正式视觉主题；脚本填充标题、活动导航、正文、路径和交互脚本，并复制主题到站点目录，不依赖发布后手工注入 CSS。默认生成总览、Threads、计划、活动、头脑风暴、运行状态、代理执行、产物归档和修改请求页面，关键页面标签优先使用中文。Token 格子悬浮时显示消耗明细，点击或聚焦后由下方文本型工作流活动说明所选时间段实际完成的工作；活动记录列表显示对应用户任务摘要，点击记录后展开完整用户任务原文和使用详情，但不发布 assistant 回复或完整对话正文。它默认启动 `127.0.0.1:9877` server、尝试弹出浏览器，同时打印本机 IP 访问地址；端口占用时自动尝试后续端口。server 默认只读已生成 HTML，打开页面时不重新扫描 `.goo/`；需要每次刷新实时重建时再加 `--live`。HTML 发布不替代 Goo-wiki/fallback 归档，不直接修改业务文件、plan 或 brainstorm；Web 表单只新增 `.goo/change-requests/*.json`，后续由主 Agent 纳入 thread plan 并审计。
 
@@ -156,6 +193,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" \
 - 任务页链接到本次复用的 `wiki_context`、`context_artifacts`、关键概念页、问题页、指标页、数据/配置说明页和必要周报。
 - 可复用经验应写入任务页的”可复用经验”小节，必要时链接到独立 lessons 页面；lessons 页面也应链接回代表性任务页和项目入口。
 - `log.md` 的活动日志必须链接到任务页；如果任务改变项目状态，项目入口也要能从正文链接到这条任务记录。
+- 任务页必须链接到 `execution/record.md` 和 `execution/evidence-index.md`；详细记录中的步骤、命令、验证或失败应能回指证据索引中的来源。
 
 **归档完成验收**：
 - 任务页存在，且至少链接到项目入口；有 `wiki_context` / `context_artifacts` 时必须链接到被复用的来源页或上下文页。
@@ -163,6 +201,8 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" \
 - `log.md` 有本次活动记录，并链接到任务页。
 - 如新增 lessons/metrics 页面，任务页必须链接过去；新增页面必须链接回任务页和项目入口。
 - 如果没有可链接的既有知识页，任务页必须显式记录 `wiki_context.found=false` 或”未找到可复用页面”，但仍要链接项目入口和 `log.md`。
+- `execution/record.md` 与 `execution/evidence-index.md` 存在；证据索引覆盖当前 plan、每个 step log、上游 artifacts/reports/context artifacts，或逐项记录 `仅索引`、`不可用`、`已脱敏` 及原因。只生成一个模型总结不能通过验收。
+- 论文分析或代码分析任务的独立分析正文已实际写入 Goo-wiki，项目入口与 Goo-wiki `log.md` 均链接该页面；仅存在 `.goo/`、step log、聊天回复或 fallback 时不得完成归档。
 - 上述归档验收通过后，必须完成一次 `post_archive_html_report` 结构化询问；用户选择生成时，当前任务的 `reports/final-report.html` 或 `reports/final-report.md` 存在，且输出的 URL/路径指向该报告页后，才算收尾完成。
 
 **链接质量约束**：
@@ -227,6 +267,11 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/wiki-graph-assist.py" \
 19. 写入后更新项目入口 `<project-slug>.md`，维护以下小节的双向链接：`## 最近任务`（链接到 tasks/ 下最新任务）、`## 可复用经验`（链接到 lessons/ 或任务页经验小节）、`## 代码结构`（链接到 code-graph/）；项目入口必须包含项目说明（背景、目标、核心功能）
 20. 如新增 concept/lessons/metrics 页面，必须从任务页链接过去，并在新页面链接回 1-3 个代表性任务页或项目入口
 21. 完成前必须做链接验收：任务页、项目入口、log.md、复用知识页/上下文页、新增经验页之间的必要 `[[Wikilink]]` 均存在；缺失时先补链，不得只因为文件已写入就宣布归档完成
+22. 摘要不能作为唯一档案：同时生成 `execution/record.md` 和 `execution/evidence-index.md`，任务页链接二者
+23. 先枚举 plan、全部 step logs、artifacts、reports 和 context_artifacts；证据索引逐项标记 `已收录`、`仅索引`、`不可用` 或 `已脱敏`，不得静默遗漏
+24. 详细记录保留原始任务、精确命令、关键 stdout/stderr、文件改动、指标、决策、失败/重试和未验证项；输出截断时标明并链接完整来源
+25. 小型安全文本证据优先原样复制到 `execution/evidence/`；大型或二进制产物记录源路径、大小、可取得时的校验值、生成步骤和用途；敏感信息用 `[REDACTED: 原因]` 明示
+26. 论文分析和代码分析必须把独立 Markdown 分析正文写入 Goo-wiki，并更新项目入口与 Goo-wiki `log.md`；fallback 只能标记 `pending_wiki_sync`/`failed`，不得宣称完成
 ```
 
 ## log.md 追加格式
