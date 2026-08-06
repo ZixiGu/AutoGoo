@@ -9,7 +9,8 @@
           },
           {
             "type": "command",
-            "command": "cat .goo/plan.json 2>/dev/null && echo '⚠ 发现未完成任务，输入 /auto-goo:goo-continue 可继续执行' || true"
+            "command": "python3 -c 'import json,os;p=json.load(open(\".goo/plan.json\")) if os.path.exists(\".goo/plan.json\") else {};steps=[s for s in p.get(\"steps\",[]) if s.get(\"status\") not in (\"completed\",\"failed\")];print(\"⚠ 发现未完成任务 (%d/%d 步), 输入 /auto-goo:goo-continue 继续\" % (len(steps), len(p.get(\"steps\",[])))) if steps else None'",
+            "timeout": 5
           }
         ]
       }
