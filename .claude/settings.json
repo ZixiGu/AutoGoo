@@ -1,21 +1,4 @@
 {
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "ls ~/workspace/Goo-wiki/CLAUDE.md >/dev/null 2>&1 && echo '✓ Goo-wiki vault ready' || echo '⚠ Goo-wiki not found — 使用 .goo/obsidian/ fallback'"
-          },
-          {
-            "type": "command",
-            "command": "python3 -c 'import json,os;p=json.load(open(\".goo/plan.json\")) if os.path.exists(\".goo/plan.json\") else {};steps=[s for s in p.get(\"steps\",[]) if s.get(\"status\") not in (\"completed\",\"failed\")];print(\"⚠ 发现未完成任务 (%d/%d 步), 输入 /auto-goo:goo-continue 继续\" % (len(steps), len(p.get(\"steps\",[])))) if steps else None'",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  },
   "permissions": {
     "allow": [
       "Bash",
