@@ -126,7 +126,8 @@ export function registerExecutionTools(pi: any, options: { skipDispatch?: boolea
       "heartbeat 必须带 --note 描述进展，空 heartbeat 无效",
     ],
     parameters: Type.Object({
-      stepId: Type.Integer({ description: "步骤 ID" }),
+      // C4 修复：历史 plan 用字符串 id（"s1"），新 plan 用数字，统一 Union 支持两者
+      stepId: Type.Union([Type.Integer({ description: "步骤 ID" }), Type.String({ description: "步骤 ID" })]),
       action: Type.String({
         description: "操作类型",
         enum: ["start", "heartbeat", "complete", "fail", "block", "pending", "confirm"],
@@ -275,7 +276,8 @@ export function registerExecutionTools(pi: any, options: { skipDispatch?: boolea
       "派发完成后 Subagent 的第一动作是调用 auto_goo_update_step --heartbeat --progress 15 --note '<已开工>'",
     ],
     parameters: Type.Object({
-      stepId: Type.Integer({ description: "步骤 ID" }),
+      // C4 修复：stepId 支持 number|string（历史 plan 字符串 id 如 "s1"）
+      stepId: Type.Union([Type.Integer({ description: "步骤 ID" }), Type.String({ description: "步骤 ID" })]),
       role: Type.String({
         description: "Subagent 角色",
         enum: ["researcher", "implementer", "optimizer", "evaluator", "reviewer", "auditor", "recorder"],
@@ -354,7 +356,7 @@ export function registerExecutionTools(pi: any, options: { skipDispatch?: boolea
       // 4. 兕底状态：子进程退出后 step 可能已被 Subagent 调 auto_goo_update_step
       //    标记 complete/fail；若仍 running，根据退出码兕底标记。
       const planAfter = await loadPlan(cwd);
-      const stepAfter = planAfter?.steps.find((s: Step) => s.id === params.stepId);
+      const stepAfter = planAfter?.steps.find((s: Step) => String(s.id) === String(params.stepId));
       let statusNote = "";
       if (stepAfter?.status === "running") {
         const ok = subagentResult.exitCode === 0 && !subagentResult.errorMessage && !subagentResult.timedOut;
@@ -423,7 +425,8 @@ export function registerExecutionTools(pi: any, options: { skipDispatch?: boolea
     description: "为派发 Subagent 做准备：更新 step 状态为 running、写首个 heartbeat、创建 log 骨架。",
     promptSnippet: "为派发 Subagent 做准备：start step + precreate log",
     parameters: Type.Object({
-      stepId: Type.Integer({ description: "步骤 ID" }),
+      // C4 修复：stepId 支持 number|string（历史 plan 字符串 id 如 "s1"）
+      stepId: Type.Union([Type.Integer({ description: "步骤 ID" }), Type.String({ description: "步骤 ID" })]),
       role: Type.String({ description: "Subagent 角色" }),
       agentId: Type.Optional(Type.String({ description: "Agent ID" })),
     }),
@@ -486,12 +489,12 @@ export function registerExecutionTools(pi: any, options: { skipDispatch?: boolea
       }
 
       const completedIds = new Set(
-        plan.steps.filter(s => s.status === "completed").map(s => s.id),
+        plan.steps.filter(s => s.status === "completed").map(s => String(s.id)),
       );
 
       const pending = plan.steps.filter(s => {
         if (s.status !== "pending") return false;
-        return s.depends_on.every(d => completedIds.has(d));
+        return s.depends_on.every(d => completedIds.has(String(d)));
       });
 
       if (pending.length === 0) {

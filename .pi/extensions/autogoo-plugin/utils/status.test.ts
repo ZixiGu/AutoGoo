@@ -13,7 +13,7 @@ import { test } from "node:test";
 import {
   parseThreadTime, truncateTask, buildProgress, buildCounts, buildHealth, composeLine, formatDuration,
   type PlanSnapshot,
-} from "./status.js";
+} from "./status.ts";
 
 // Test 1: formatDuration 边界
 test("formatDuration handles edge cases", () => {

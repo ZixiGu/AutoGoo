@@ -234,6 +234,34 @@ def main() -> int:
         )
 
     plan_path = resolve_plan_path(args.plan)
+
+    # C3 修复：对 plan.json 加进程间写锁（flock），防止并发 update-step 时
+    # 读-改-写竞态（后写覆盖先写）。锁文件为 plan_path.lock；
+    # Windows 无 fcntl 时退化无锁（仅 Linux/mac 生效）。
+    lock_fh = None
+    try:
+        import fcntl
+
+        lock_path = Path(str(plan_path) + ".lock")
+        lock_fh = lock_path.open("w")
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+    except (ImportError, OSError):
+        pass  # 无 fcntl（Windows）或锁失败：退化无锁，保持原有行为
+
+    try:
+        return _main_locked(plan_path, args)
+    finally:
+        if lock_fh is not None:
+            try:
+                import fcntl
+
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+                lock_fh.close()
+            except (ImportError, OSError):
+                pass
+
+
+def _main_locked(plan_path: Path, args: argparse.Namespace) -> int:
     data = load_json(plan_path)
 
     # --precreate-log short-circuits: it is the Main Agent's pre-dispatch hook.

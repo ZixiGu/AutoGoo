@@ -136,7 +136,15 @@ async function getThreadInfo(cwd: string): Promise<{ id: string; task: string } 
     const plan = await getCachedPlan(cwd);
     if (plan?.thread?.id) return { id: plan.thread.id, task: plan.task?.slice(0, 40) || "" };
     const tid = await getCurrentThreadId(cwd);
-    if (tid) { const meta = await loadThreadMeta(cwd, tid); return { id: tid, task: meta?.task?.slice(0, 40) || "" }; }
+    if (tid) {
+      const meta = await loadThreadMeta(cwd, tid);
+      // 修复（2026-08-14）：thread.json 用 title 字段（thread-state.py 写的），
+      // 旧代码只读 meta.task → 拿不到任务名 → 状态栏信息变少。兼容两个字段。
+      const task = meta?.task || meta?.title || plan?.task || "";
+      return { id: tid, task: task.slice(0, 40) };
+    }
+    // 最后兜底：即使没有 thread 元数据，也把当前 plan 的 task 展示出来
+    if (plan?.task) return { id: "", task: plan.task.slice(0, 40) };
     return null;
   } catch { return null; }
 }

@@ -9,3 +9,6 @@ __pycache__/
 
 # Node
 node_modules/
+
+# Lock files (update-step.py flock 锁文件 .goo/plan.json.lock 等)
+*.lock

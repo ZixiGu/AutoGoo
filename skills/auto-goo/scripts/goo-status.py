@@ -298,6 +298,14 @@ def main() -> int:
 
     if waiting:
         print_rule()
+        # C1 修复：依赖失败步骤的 waiting 步骤无法通过重试解锁，显式标注死锁
+        failed_ids = {id_key(s.get("id")) for s in steps if status_of(s) == "failed" and s.get("id") is not None}
+        dep_failed = [s for s in waiting if any(id_key(d) in failed_ids for d in s.get("depends_on", []))]
+        if dep_failed:
+            print(f"⚠️ {len(dep_failed)} 步因依赖失败而无法执行（死锁，需人工处理）：")
+            for step in dep_failed[:8]:
+                print_step_line("💀", step, "依赖失败 " + dep_names(step, steps_by_id))
+            print_rule()
         print(f"WAITING ({len(waiting)})")
         for step in waiting[:8]:
             print_step_line("⏳", step, dep_names(step, steps_by_id))

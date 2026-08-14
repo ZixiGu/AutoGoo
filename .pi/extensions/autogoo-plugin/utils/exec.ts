@@ -38,6 +38,15 @@ export function exec(
 
   try {
     const r = spawnSync(command, args, opts);
+    // C5 修复：输出超 maxBuffer 时 spawnSync 抛 ENOBUFS，status=null；
+    // 把错误详情写入 stderr 返回，避免上层把大输出误判为"无错误失败"。
+    if (r.error && (r.error as any).code === "ENOBUFS") {
+      return {
+        stdout: r.stdout ?? "",
+        stderr: (r.stderr || "") + `\n[exec] output exceeded maxBuffer (${opts.maxBuffer} bytes); result truncated.`,
+        exitCode: 1,
+      };
+    }
     return {
       stdout: r.stdout ?? "",
       stderr: r.stderr ?? "",

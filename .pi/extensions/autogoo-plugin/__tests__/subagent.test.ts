@@ -18,7 +18,7 @@ import {
   getFinalOutput,
   getPiInvocation,
   runSubagent,
-} from "../utils/subagent.js";
+} from "../utils/subagent.ts";
 
 // ── getFinalOutput ──────────────────────────────────────────────────────────
 

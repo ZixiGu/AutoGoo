@@ -22,13 +22,15 @@ export interface Goal {
 }
 
 export interface Step {
-  id: number;
+  // C4 修复：历史 plan 用字符串 id（"s1"），新 plan 用数字。统一放宽为 number|string，
+  // 所有比较/文件名一律 String(step.id)，避免类型标注与真实数据不符。
+  id: number | string;
   goal_id?: string;
   goal_ids?: string[];
   tier: number;
   name: string;
   description: string;
-  depends_on: number[];
+  depends_on: Array<number | string>;
   type: string;
   subagent: string;
   task_agent: string;
@@ -239,22 +241,70 @@ export function validatePlan(plan: Plan): PlanValidationResult {
   if (!plan.steps?.length) issues.push("plan.steps must have at least one step");
 
   // Check step IDs are unique
-  const ids = new Set<number>();
+  const ids = new Set<string>();
   for (const step of plan.steps) {
-    if (ids.has(step.id)) issues.push(`duplicate step id: ${step.id}`);
-    ids.add(step.id);
+    const key = String(step.id);
+    if (ids.has(key)) issues.push(`duplicate step id: ${step.id}`);
+    ids.add(key);
   }
 
   // Check depends_on refer to existing steps
   for (const step of plan.steps) {
     for (const depId of step.depends_on) {
-      if (!ids.has(depId)) {
+      if (!ids.has(String(depId))) {
         issues.push(`step ${step.id} depends on non-existent step ${depId}`);
       }
     }
   }
 
+  // 环检测（修复 C2）：DFS 遍历依赖图，发现环时标记步骤名（不重复报每个成员）
+  const cycleNodes = findCycleNodes(plan);
+  for (const node of cycleNodes) {
+    issues.push(`circular dependency detected: step ${node}`);
+  }
+
   return { valid: issues.length === 0, issues };
+}
+
+/**
+ * 检测依赖图中的环（修复 C2）。返回环上的步骤 id（字符串形式）。
+ * 用三色标记法（0=未访问, 1=访问中, 2=完成），发现回边即环。
+ */
+export function findCycleNodes(plan: Plan): string[] {
+  const steps = plan.steps ?? [];
+  const byId = new Map<string, any>();
+  for (const s of steps) byId.set(String(s.id), s);
+  const color = new Map<string, number>();
+  const inCycle = new Set<string>();
+
+  const visit = (key: string, stack: string[]): boolean => {
+    color.set(key, 1);
+    stack.push(key);
+    const step = byId.get(key);
+    const deps = (step?.depends_on ?? []) as Array<number | string>;
+    for (const dep of deps) {
+      const depKey = String(dep);
+      if (!byId.has(depKey)) continue; // 坏依赖已由 validatePlan 报
+      const c = color.get(depKey) ?? 0;
+      if (c === 1) {
+        // 环：从 depKey 到 stack 尾部都是环成员
+        const idx = stack.indexOf(depKey);
+        if (idx >= 0) for (let i = idx; i < stack.length; i++) inCycle.add(stack[i]);
+        inCycle.add(depKey);
+        continue;
+      }
+      if (c === 0) visit(depKey, stack);
+    }
+    stack.pop();
+    color.set(key, 2);
+    return inCycle.size > 0;
+  };
+
+  for (const s of steps) {
+    const key = String(s.id);
+    if ((color.get(key) ?? 0) === 0) visit(key, []);
+  }
+  return Array.from(inCycle);
 }
 
 // ── Dispatch packet (on-demand wiki + memory layer) ──────────────────────────

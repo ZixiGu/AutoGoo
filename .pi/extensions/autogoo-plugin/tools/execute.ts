@@ -22,6 +22,8 @@ import {
   loadPlan,
   savePlan,
   getCurrentThreadId,
+  validatePlan,
+  findCycleNodes,
   type Plan,
   type Step,
 } from "../utils/plan.js";
@@ -120,6 +122,20 @@ async function runSchedule(
 ): Promise<{ content: any[]; details: any }> {
   const lines: string[] = [];
 
+  // C2 修复：调度前先校验 plan 结构与依赖（坏依赖/重复 id/环），
+  // 否则死锁会静默等待而不是明确报错。
+  const validation = validatePlan(plan);
+  if (!validation.valid) {
+    const cycleNodes = findCycleNodes(plan);
+    const cycleMsg = cycleNodes.length > 0
+      ? `\n循环依赖: #${cycleNodes.join(", #")}（请检查 depends_on 是否存在环）`
+      : "";
+    return {
+      content: [{ type: "text", text: `❌ plan 校验失败:\n${validation.issues.join("\n")}${cycleMsg}\n\n请先修复 plan 再继续调度。` }],
+      details: { error: "plan_invalid", issues: validation.issues, cycleNodes },
+    };
+  }
+
   // P8: failed 步骤自动重试（retry_count < MAX_RETRIES → 转回 pending，下轮可重新派发；
   //     超过则保持 failed 并提示人工处理）。
   let autoRetried = 0;
@@ -137,11 +153,23 @@ async function runSchedule(
     }
   }
 
-  const completedIds = new Set(
-    plan.steps.filter((s) => s.status === "completed").map((s) => s.id),
+  // C1 修复：检测“依赖失败步骤但自身仍 pending”的死锁步骤，显式提示。
+  // 修复 2026-08-14：必须放在 P8 自动重试循环**之后**计算——否则会把
+  // retry_count < MAX_RETRIES、即将自动重试的 failed 依赖步骤误报为
+  // “死锁需人工处理”（实际会自动解锁）。先重试，再基于更新后的 failed 集合计算。
+  const failedIds = new Set(plan.steps.filter((s) => s.status === "failed").map((s) => String(s.id)));
+  const depOnFailed = plan.steps.filter(
+    (s) => s.status === "pending" && (s.depends_on ?? []).some((d) => failedIds.has(String(d))),
   );
-  const running = plan.steps.filter((s) => s.status === "running");
-  const failed = plan.steps.filter((s) => s.status === "failed");
+  if (depOnFailed.length > 0) {
+    lines.push(`💀 ${depOnFailed.length} 步因依赖失败而无法执行: #${depOnFailed.map((s) => s.id).join(", #")}（需人工处理：修复依赖步骤或调整 depends_on）`);
+  }
+
+  let completedIds = new Set(
+    plan.steps.filter((s) => s.status === "completed").map((s) => String(s.id)),
+  );
+  let running = plan.steps.filter((s) => s.status === "running");
+  let failed = plan.steps.filter((s) => s.status === "failed");
 
   if (autoRetried > 0) {
     lines.push(`🔄 自动重试 ${autoRetried} 个 failed 步骤（转回 pending，下轮重新派发）`);
@@ -153,7 +181,7 @@ async function runSchedule(
   // Find ready steps: pending with all dependencies completed
   let ready = plan.steps.filter((s) => {
     if (s.status !== "pending") return false;
-    return s.depends_on.every((d) => completedIds.has(d));
+    return s.depends_on.every((d) => completedIds.has(String(d)));
   });
 
   // P4: requires_user_confirm=true 且尚未确认的步骤 — 前台询问用户（真正弹确认框，
@@ -170,7 +198,7 @@ async function runSchedule(
   );
   const needsConfirm = [
     ...ready.filter((s) => s.requires_user_confirm === true && s.confirmed !== true),
-    ...legacyAwaitingConfirm.filter((b) => !ready.some((r) => r.id === b.id)),
+    ...legacyAwaitingConfirm.filter((b) => !ready.some((r) => String(r.id) === String(b.id))),
   ];
   const declinedIds = new Set<string>();
   for (const step of needsConfirm) {
@@ -216,10 +244,19 @@ async function runSchedule(
   // 确认询问可能改变状态（blocked→pending）：重新加载 plan 并重算 ready，
   // 让新解锁的步骤本轮即可进入派发队列。
   const freshPlan = await loadPlan(cwd, planPath);
-  if (freshPlan) plan = freshPlan;
+  if (freshPlan) {
+    plan = freshPlan;
+    // C6 修复：freshPlan 重载后 completedIds 也必须刷新（旧快照可能含被改动的步骤），
+    // 否则 ready 判定用过期依赖状态。
+    completedIds = new Set(
+      plan.steps.filter((s) => s.status === "completed").map((s) => String(s.id)),
+    );
+    running = plan.steps.filter((s) => s.status === "running");
+    failed = plan.steps.filter((s) => s.status === "failed");
+  }
   ready = plan.steps.filter((s) => {
     if (s.status !== "pending") return false;
-    return s.depends_on.every((d) => completedIds.has(d));
+    return s.depends_on.every((d) => completedIds.has(String(d)));
   });
   const blockedAfterConfirm = plan.steps.filter((s) => s.status === "blocked");
 
@@ -277,10 +314,11 @@ async function runSchedule(
   }
 
   // P6: 为每个 step 只生成一次 agentId（start 与 heartbeat 复用同一值）
-  const agentIds = new Map<number, string>();
+  // C4：Map key 用 String(step.id) 统一（支持数字/字符串 id）
+  const agentIds = new Map<string, string>();
   for (const step of toDispatch) {
     const agentId = `agent-${step.id}-${Date.now()}`;
-    agentIds.set(step.id, agentId);
+    agentIds.set(String(step.id), agentId);
     dispatched.push(step.id);
     execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--start", "--progress", "5", "--agent-id", agentId], cwd, { timeout: 15000 });
     execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--precreate-log", "--note", `Dispatched to ${step.subagent} (${agentId})`], cwd, { timeout: 15000 });
@@ -289,7 +327,7 @@ async function runSchedule(
   // P5: 为每个待派发 step 生成 wiki graph packet（与 auto_goo_dispatch 一致，
   //     失败 fallback 不阻塞）。
   const threadId = (await getCurrentThreadId(cwd)) ?? "current";
-  const packets = new Map<number, WikiPacketResult>();
+  const packets = new Map<string, WikiPacketResult>();
   await Promise.all(
     toDispatch.map(async (step: any) => {
       const res = await generateWikiPacket(
@@ -298,7 +336,7 @@ async function runSchedule(
         step.description || `step ${step.id} dispatch`,
         threadId,
       );
-      packets.set(step.id, res);
+      packets.set(String(step.id), res);
     }),
   );
 
@@ -307,8 +345,8 @@ async function runSchedule(
   //   期间 onTick 每 ~20s 保活心跳防止 STALE 误杀。
   const subagentResults = await Promise.all(
     toDispatch.map(async (step: any) => {
-      const agentId = agentIds.get(step.id) ?? `agent-${step.id}-${Date.now()}`;
-      const { packet, packetGenerated } = packets.get(step.id) ?? {
+      const agentId = agentIds.get(String(step.id)) ?? `agent-${step.id}-${Date.now()}`;
+      const { packet, packetGenerated } = packets.get(String(step.id)) ?? {
         packet: { wiki_paths: [] as string[], wiki_graph_packet_path: "", memory_layer: "L2" },
         packetGenerated: false,
       };
@@ -341,7 +379,7 @@ async function runSchedule(
       });
       // 兕底：子进程退出后 step 若仍 running，按退出码标记
       const planNow = await loadPlan(cwd, planPath);
-      const stepNow = planNow?.steps.find((s: any) => s.id === step.id);
+      const stepNow = planNow?.steps.find((s: any) => String(s.id) === String(step.id));
       if (stepNow?.status === "running") {
         const ok = result.exitCode === 0 && !result.errorMessage && !result.timedOut;
         if (ok) {
@@ -474,7 +512,9 @@ async function runHeartbeatCheck(
     content: [{ type: "text", text: lines.join("\n") }],
     details: {
       stale: staleSteps.length,
-      retried: staleSteps.filter((s) => ((s as any).retry_count ?? 0) <= MAX_RETRIES).length,
+      // C7 修复：retried 只计真正转回 pending 重试的（本批内 retry_count 增加且未失败）；
+      // 原逻辑 `retry_count <= MAX_RETRIES` 会把已达上限转 failed 的步骤也计入 retried。
+      retried: staleSteps.filter((s) => s.status === "pending" && ((s as any).retry_count ?? 0) > 0).length,
       failed: staleSteps.filter((s) => s.status === "failed").length,
     },
   };

@@ -48,7 +48,7 @@ export interface WikiPacketResult {
  */
 export async function generateWikiPacket(
   cwd: string,
-  step: { id: number; type?: string; wiki_paths?: string[]; memory_layer?: string },
+  step: { id: number | string; type?: string; wiki_paths?: string[]; memory_layer?: string },
   query: string,
   threadId: string,
 ): Promise<WikiPacketResult> {
@@ -150,13 +150,13 @@ export function buildSubagentTaskPrompt(o: SubagentPromptOptions): string {
 export async function heartbeatTick(
   cwd: string,
   planPath: string,
-  stepId: number,
+  stepId: number | string, // C4：支持数字/字符串 id（历史 plan 字符串 id 如 "s1"）
   agentId: string,
   note?: string,
 ): Promise<void> {
   try {
     const plan = await loadPlan(cwd, planPath);
-    const step = plan?.steps.find((s) => s.id === stepId);
+    const step = plan?.steps.find((s) => String(s.id) === String(stepId));
     if (!step || step.status !== "running") return;
     execPython(
       UPDATE_STEP_PY,
