@@ -175,17 +175,30 @@ export default function (pi: ExtensionAPI) {
   // Core DAG tools that the LLM calls during execution.
 
   registerExecutionTools(pi);
-  registerExecuteTool(pi);
+  // 子进程模式（AUTOGOO_SUBAGENT=1）：Subagent 在独立 pi 子进程内执行，
+  // 不注册自动调度工具 auto_goo_execute，防止 Subagent 递归调度 DAG。
+  const isSubagent = process.env.AUTOGOO_SUBAGENT === "1";
+  if (!isSubagent) {
+    registerExecuteTool(pi);
+  }
 
   // ── Register SSH remote execution tools ───────────────────────────────────
-  registerSshTools(pi);
+  // 子进程模式跳过：Subagent 不应执行远程服务器操作。
+  if (!isSubagent) {
+    registerSshTools(pi);
+  }
 
   // ── Register worktree isolation tools ─────────────────────────────────────
-  registerWorktreeTools(pi);
+  // 子进程模式跳过：worktree 由主进程管理。
+  if (!isSubagent) {
+    registerWorktreeTools(pi);
+  }
 
   // ── Register utility tools ────────────────────────────────────────────────
 
   // auto_goo_ask_user — 结构化交互（替代 AskUserQuestion）
+  // 子进程模式跳过：Subagent 无法向用户提问（无人应答）。
+  if (!isSubagent) {
   pi.registerTool({
     name: "auto_goo_ask_user",
     label: "Ask User",
@@ -247,6 +260,7 @@ export default function (pi: ExtensionAPI) {
       };
     },
   });
+  } // ── end auto_goo_ask_user (子进程跳过) ──
 
   // auto_goo_shell — 安全执行 shell 命令
   pi.registerTool({

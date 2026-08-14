@@ -202,7 +202,12 @@ Claude Code 可按 Agent 工具容量调度；Codex 的根 Agent 也占一个槽
     2. 填充空槽位
        while len(running) < MAX_CONCURRENT 且 ready_queue 非空:
          step = ready_queue.pop(0)
-         若 step.requires_user_confirm=true 且尚未确认 → 主 Agent 前台询问，确认后再派发
+         若 step.requires_user_confirm=true 且尚未确认 → 调度器直接弹确认框询问用户
+           （pi 扩展用 ctx.ui.confirm，主 Agent 不再靠猜测去问）：
+           确认 → 写 confirmed=true / confirmed_at，正常派发；
+           拒绝 → 标记 blocked（error="user declined confirmation"，后续不再自动重复询问）；
+           历史遗留 blocked（旧版只打文本从未真问，error="requires user confirm"）会被重新询问并解锁。
+         解除 blocked：update-step.py --confirmed（记录确认并把 blocked→pending）或 --status pending
          更新 status="running", progress=0, agent_id, started_at → plan.json
          启动 Agent (run_in_background, 间隔 3-5s 错峰；mode=worktree 且 HEAD 可解析时传 isolation="worktree"，mode=none 不传 isolation)
          若 mode=none 仍返回 Failed to resolve base branch "HEAD"/git rev-parse failed:
@@ -221,7 +226,8 @@ Claude Code 可按 Agent 工具容量调度；Codex 的根 Agent 也占一个槽
 
     4. 心跳与进度巡检
        每 30s 检查 running 中 agent 的 heartbeat_at + progress
-       heartbeat_at 超时 >= 15min（可通过 plan.json `heartbeat_timeout_min` 自定义） → 标记 failed, 释放槽位
+       heartbeat_at 超时 >= 15min（默认；可通过 plan.json `execution.stale_after_seconds`
+       以秒为单位自定义，如 600=10min） → 标记 failed, 释放槽位
        progress 停滞不变超过 3 轮心跳 → 标记为 stuck，发出警告
 
 所有步骤 completed 或无可执行步骤 → 结束
@@ -588,7 +594,7 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/update-step.py" --plan .goo/thre
   4. 心跳巡检（每 30s）
      → 检查 running 中每个 agent 的 heartbeat_at
      → 运行 `goo-status.py`，把 RUNNING 行中的 progress、hb age、log 摘要展示给用户；不得只在后台静默检查
-     → 超时 >= heartbeat_timeout_min（默认 15min）→ 标记 failed，释放槽位
+     → 超时 >= execution.stale_after_seconds（默认 900s=15min，秒数）→ 标记 failed，释放槽位
 ```
 
 ## 心跳机制

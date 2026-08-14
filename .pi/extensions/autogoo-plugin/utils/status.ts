@@ -118,7 +118,7 @@ export function composeLine(snap: PlanSnapshot): string {
   if (snap.currentStepName) {
     const e = snap.currentStepElapsed ? `(${snap.currentStepElapsed})` : "";
     const l = snap.memoryLayer ? `[${snap.memoryLayer}]` : "";
-    const w = snap.wikiPacketGenerated ? "�✓" : "";
+    const w = snap.wikiPacketGenerated ? "📄" : "";
     parts.push(ANSI.cyan(`▶ ${truncateTask(snap.currentStepName, 20)} ${e}${l}${w}`));
   }
   if (snap.etaSeconds !== undefined && snap.etaSeconds > 0) parts.push(`ETA ${formatDuration(snap.etaSeconds * 1000)}`);
@@ -162,7 +162,14 @@ export async function snapshotPlan(cwd: string): Promise<PlanSnapshot | null> {
   const plan = await getCachedPlan(cwd);
   if (!plan?.steps) return null;
   const steps = plan.steps, now = Date.now();
-  const staleSec = plan.execution?.stale_after_seconds ?? 120;
+  // 与 execute.ts runHeartbeatCheck 保持一致：默认 15 分钟（900s），
+  // plan.execution.stale_after_seconds / 顶层 heartbeat_timeout_min(分钟) 可覆盖；
+  // 120s 只用于 goo-continue 跨会话恢复。
+  const execCfg = plan.execution ?? {};
+  const staleSec =
+    execCfg.stale_after_seconds ??
+    (((plan as any).heartbeat_timeout_min ?? 0) > 0 ? (plan as any).heartbeat_timeout_min * 60 : undefined) ??
+    900;
   let stale = 0;
   for (const s of steps) {
     if (s.status === "running" && s.heartbeat_at) {
@@ -183,7 +190,7 @@ export async function snapshotPlan(cwd: string): Promise<PlanSnapshot | null> {
   if (cur) {
     currentStepName = cur.name;
     if (cur.started_at) currentStepElapsed = formatDuration(now - new Date(cur.started_at).getTime());
-    memoryLayer = cur.memory_layer || DEFAULT_MEMORY_LAYER_BY_STEP_TYPE[cur.type] || "L2";
+    memoryLayer = (cur as any).memory_layer || DEFAULT_MEMORY_LAYER_BY_STEP_TYPE[cur.type] || "L2";
     wikiPacketGenerated = await checkWikiPacket(cwd, threadId, cur.id);
   }
   const pending = steps.filter((s) => s.status === "pending").length;

@@ -80,8 +80,8 @@ Agent 交互流程：
      - **服务器类型**：「GPU 服务器 (Recommended)」「CPU 服务器」
      - **服务器名称/别名**：「gpu-a100」「lab-cpu」
      - **SSH host/IP/DNS**：「gpu-a100」「192.168.1.100」
-     - **SSH 端口**：「22 (Recommended)」「2222」
-     - **用户名**：「ubuntu (Recommended)」「root」
+     - **SSH 端口**：「22 (Recommended)」「2222」「自定义端口」
+     - **用户名**：「ubuntu (Recommended)」「root」「自定义用户名」
      - **用途说明**：「模型训练与推理」「数据处理与预处理」
      - **密码**：「稍后手动填入 (Recommended)」「输入密码」— 用户可输入密码，也可选默认跳过。如果跳过，提示用户密码存储在 `<项目级 .goo/secrets.json 或用户级 ~/.auto-goo/secrets.json>`（chmod 600），可稍后编辑该文件补填 `password` 字段。
      - 每台服务器配置完后询问「是否添加另一台服务器？」
@@ -100,7 +100,7 @@ Agent 交互流程：
    - 用户级 `~/.auto-goo/config.json` 的 `wiki_dir`
    - 默认 `~/workspace/Goo-wiki`
 5. **配置业务项目目录结构** — AutoGoo-Plugin 自身状态目录固定为 `.goo/`，配置中的 `workspace.paths` 只描述 AutoGoo-Plugin 运行态路径。项目级初始化时，先询问是否创建业务目录；用户选择创建后，传 `--project-layout standard|ml|data|docs` 或 `--project-dirs <逗号分隔目录>`，脚本创建这些业务目录并写入 `project_workspace.{layout,dirs}`。内置模板包含 `references/` 和 `references/papers/`，用于存放参考资料、规范、paper PDF、arXiv/DOI 元数据和阅读材料；不要把这些外部资料混入 `.goo/` 或普通产出文档。默认 `project_workspace.layout="none"`，不创建业务目录，避免污染已有项目。业务目录创建后，如果项目根目录已有可归类内容，必须通过 `id=project_workspace_organize_existing` 和 `id=project_workspace_apply_organization` 两级 `AskUserQuestion` 流程确认后才允许整理；脚本默认不移动已有内容。随后必须继续询问是否把目录约定写入项目 `CLAUDE.md`。
-6. **配置远程服务器** — Wiki 路径配置后，询问用户是否有远程服务器需要配置；用户确认后逐个交互输入服务器类型（cpu/gpu）、名称/别名、SSH host/IP/DNS、端口（默认 22）、用户名、用途说明、可选默认工作路径、可选环境初始化命令、可选数据目录、可选产物目录和密码处理方式。主 Agent 已通过 `AskUserQuestion` 收集到非敏感参数时，调用脚本必须传 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>,workdir=<远程工作目录>,setup=<命令1;命令2>,data_dir=<远程数据目录>,artifacts_dir=<远程产物目录>'`，可重复传入多台服务器；后四项可省略。密码不得在聊天或命令行中明文传递；脚本会创建独立 secrets 文件占位（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限设为 `chmod 600`，用户稍后手动填入密码。项目级 secrets 文件自动加入 `.gitignore`。config 中记录 `servers[].{name, host, ip?, port, user, type, purpose, defaults?, secrets_file}`，不存储密码。支持配置多个服务器。配置服务器后必须检查本机是否安装 `sshpass`；缺失时提醒用户运行 `sudo apt install sshpass`，但不中断初始化。
+6. **配置远程服务器** — Wiki 路径配置后，询问用户是否有远程服务器需要配置。检测到目标 config 已有服务器（`servers` 或旧字段 `compute_servers`）时，先通过结构化选择询问服务器管理方式：保持已有并新增 (Recommended) / 删除已有服务器 / 替换已有服务器 / 清空全部服务器 / 跳过不修改。删除按名称执行，配置与 secrets 同步移除；替换固定原名称重新收集参数，同名写入即为替换（upsert）。用户确认后逐个交互输入服务器类型（cpu/gpu）、名称/别名、SSH host/IP/DNS、端口（默认 22，可自定义）、用户名、用途说明、可选默认工作路径、可选环境初始化命令、可选数据目录、可选产物目录和密码处理方式。主 Agent 已通过 `AskUserQuestion` 收集到非敏感参数时，调用脚本必须传 `--server 'name=<别名>,host=<ssh-host-or-ip>,user=<user>,port=<port>,type=<cpu|gpu>,purpose=<用途>,workdir=<远程工作目录>,setup=<命令1;命令2>,data_dir=<远程数据目录>,artifacts_dir=<远程产物目录>'`，可重复传入多台服务器；后四项可省略。同名 `--server` 为替换（upsert），不产生重复条目。删除/清空分别传 `--remove-server <名称>`（可重复）和 `--clear-servers`。密码不得在聊天或命令行中明文传递；脚本会创建独立 secrets 文件占位（项目级 `.goo/secrets.json`，用户级 `~/.auto-goo/secrets.json`），文件权限设为 `chmod 600`，用户稍后手动填入密码。项目级 secrets 文件自动加入 `.gitignore`。config 中记录 `servers[].{name, host, ip?, port, user, type, purpose, defaults?, secrets_file}`，不存储密码。支持配置多个服务器。配置服务器后必须检查本机是否安装 `sshpass`；缺失时提醒用户运行 `sudo apt install sshpass`，但不中断初始化。
 7. **确保 Goo-wiki 存在** — 如果用户确认或输入的 `<wiki_dir>` 不存在，自动创建该目录，并补齐 `CLAUDE.md`、`log.md`、`wiki/projects/`、`wiki/concepts/`、`wiki/questions/`、`journal/daily/`、`journal/weekly/` 基础结构；不得因为路径不存在而改用 `.goo/obsidian/` fallback
 8. **确定项目归档根路径** — `--project` 时默认用项目根目录名生成 `project_slug`，也可传 `--project-slug <slug>`；创建 `<wiki_dir>/wiki/projects/<project_slug>/`
 8. **记录 Git 地址** — `--project` 且当前项目是 Git repo 时，读取 `origin` remote（没有 origin 时读取第一个 remote），写入 `.goo/config.json.archive.git_remote_url`，并同步到 Goo-wiki 项目页 `wiki/projects/<project_slug>/<project_slug>.md`

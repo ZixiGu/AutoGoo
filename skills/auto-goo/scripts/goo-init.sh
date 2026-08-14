@@ -20,8 +20,13 @@ Options:
   --server SPEC     Add a remote server without entering the TTY prompts. Repeatable.
                     SPEC uses comma-separated key=value pairs:
                     name=gpu-box,host=HOST,user=USER,port=22,type=gpu,purpose=模型训练
+                    If a server with the same name already exists it is REPLACED (upsert).
                     Passwords are not accepted on the command line; edit the
                     generated secrets file after init and keep chmod 600.
+  --remove-server NAME
+                    Remove an existing remote server by name. Repeatable.
+                    Also removes the matching entry from the secrets file.
+  --clear-servers   Remove ALL existing remote servers (config + secrets).
   --yes             Use defaults for unanswered prompts
   --force           Overwrite existing config without asking
   --update-claude-md
@@ -48,6 +53,8 @@ FORCE=0
 UPDATE_CLAUDE_MD=0
 SKIP_CLAUDE_MD=0
 SERVER_SPECS=()
+REMOVE_SERVERS=()
+CLEAR_SERVERS=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -101,6 +108,18 @@ while [[ $# -gt 0 ]]; do
       fi
       SERVER_SPECS+=("$2")
       shift 2
+      ;;
+    --remove-server)
+      if [[ $# -lt 2 ]]; then
+        echo "error: --remove-server requires a server name" >&2
+        exit 2
+      fi
+      REMOVE_SERVERS+=("$2")
+      shift 2
+      ;;
+    --clear-servers)
+      CLEAR_SERVERS=1
+      shift
       ;;
     --yes|-y)
       YES=1
@@ -404,6 +423,33 @@ PY
   chmod 600 "$secrets_file"
 }
 
+load_existing_servers_json() {
+  local config_file="$1"
+  if [[ ! -f "$config_file" ]]; then
+    printf '[]\n'
+    return
+  fi
+  python3 - "$config_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    config = json.loads(path.read_text(encoding="utf-8"))
+except (json.JSONDecodeError, OSError):
+    print("[]")
+    raise SystemExit(0)
+
+servers = config.get("servers")
+if not servers:
+    servers = config.get("compute_servers")
+if not isinstance(servers, list):
+    servers = []
+print(json.dumps(servers, ensure_ascii=False))
+PY
+}
+
 append_server_json() {
   local current_json="$1"
   local name="$2"
@@ -456,8 +502,57 @@ if defaults:
     server["defaults"] = defaults
 if not name:
     server.pop("name", None)
+# Upsert: replace an existing server with the same name instead of duplicating it
+if name:
+    servers = [s for s in servers if not (isinstance(s, dict) and s.get("name") == name)]
 servers.append(server)
 print(json.dumps(servers, ensure_ascii=False))
+PY
+}
+
+remove_server_json() {
+  local current_json="$1"
+  local name="$2"
+  python3 - "$current_json" "$name" <<'PY'
+import json
+import sys
+
+current_json, name = sys.argv[1:3]
+try:
+    servers = json.loads(current_json)
+except (json.JSONDecodeError, ValueError):
+    servers = []
+if not isinstance(servers, list):
+    servers = []
+servers = [s for s in servers if not (isinstance(s, dict) and s.get("name") == name)]
+print(json.dumps(servers, ensure_ascii=False))
+PY
+}
+
+remove_server_secrets() {
+  local secrets_file="$1"
+  local name="$2"
+  if [[ -z "$name" || ! -f "$secrets_file" ]]; then
+    return 0
+  fi
+  python3 - "$secrets_file" "$name" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+secrets_file = Path(sys.argv[1])
+name = sys.argv[2]
+try:
+    secrets = json.loads(secrets_file.read_text(encoding="utf-8"))
+except (json.JSONDecodeError, ValueError, OSError):
+    raise SystemExit(0)
+if not isinstance(secrets, list):
+    raise SystemExit(0)
+new_secrets = [s for s in secrets if not (isinstance(s, dict) and s.get("name") == name)]
+if len(new_secrets) != len(secrets):
+    secrets_file.write_text(json.dumps(new_secrets, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    chmod = 0o600
+    secrets_file.chmod(chmod)
 PY
 }
 
@@ -604,6 +699,68 @@ fi
 SERVERS_JSON="[]"
 CONFIG_WRITE_SKIPPED=0
 
+# Load existing servers as the base for management (add/remove/replace/clear)
+if [[ -f "$CONFIG_FILE" ]]; then
+  SERVERS_JSON="$(load_existing_servers_json "$CONFIG_FILE")"
+fi
+
+# TTY interactive server management (only when no --server/--remove-server args given)
+if [[ "${#SERVER_SPECS[@]}" -eq 0 && "${#REMOVE_SERVERS[@]}" -eq 0 && "$CLEAR_SERVERS" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
+  if [[ "$SERVERS_JSON" != "[]" ]]; then
+    echo ""
+    echo "Existing remote servers:"
+    python3 - "$SERVERS_JSON" <<'PY'
+import json
+import sys
+
+servers = json.loads(sys.argv[1])
+for i, s in enumerate(servers, 1):
+    if isinstance(s, dict):
+        print(f"  {i}. {s.get('name') or '(unnamed)'} -> {s.get('host') or s.get('ip')}:{s.get('port')} ({s.get('user')}, {s.get('type')})")
+PY
+    if confirm "Remove any of these servers?" "n"; then
+      read -r -p "Names to REMOVE (comma-separated, Enter to skip): " TO_REMOVE
+      if [[ -n "$TO_REMOVE" ]]; then
+        IFS=',' read -r -a REMOVE_SERVERS <<< "$TO_REMOVE"
+      fi
+      if confirm "Remove ALL existing servers?" "n"; then
+        CLEAR_SERVERS=1
+      fi
+    fi
+  fi
+fi
+
+# Apply server changes in order: clear -> remove -> upsert
+if [[ "$CLEAR_SERVERS" -eq 1 ]]; then
+  SERVERS_JSON="[]"
+  if [[ -f "$SECRETS_FILE" ]]; then
+    python3 - "$SECRETS_FILE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+secrets_file = Path(sys.argv[1])
+try:
+    secrets = json.loads(secrets_file.read_text(encoding="utf-8"))
+except (json.JSONDecodeError, ValueError, OSError):
+    raise SystemExit(0)
+if isinstance(secrets, list) and secrets:
+    secrets_file.write_text("[]\n", encoding="utf-8")
+    secrets_file.chmod(0o600)
+PY
+  fi
+  echo "Removed ALL existing servers."
+fi
+for remove_name in "${REMOVE_SERVERS[@]}"; do
+  remove_name_trimmed="$(echo "$remove_name" | xargs)"
+  if [[ -z "$remove_name_trimmed" ]]; then
+    continue
+  fi
+  SERVERS_JSON="$(remove_server_json "$SERVERS_JSON" "$remove_name_trimmed")"
+  remove_server_secrets "$SECRETS_FILE" "$remove_name_trimmed"
+  echo "Removed server: $remove_name_trimmed"
+done
+
 for spec in "${SERVER_SPECS[@]}"; do
   if ! mapfile -t SERVER_FIELDS < <(parse_server_spec "$spec"); then
     exit 2
@@ -628,7 +785,6 @@ done
 
 if [[ "${#SERVER_SPECS[@]}" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
   if confirm "Do you have remote servers to configure?" "n"; then
-    SERVERS_JSON="[]"
     SERVER_INDEX=1
     while true; do
       echo ""
@@ -672,33 +828,6 @@ if [[ "${#SERVER_SPECS[@]}" -eq 0 && -t 0 && "$YES" -ne 1 ]]; then
     done
   fi
 fi
-
-load_existing_servers_json() {
-  local config_file="$1"
-  if [[ ! -f "$config_file" ]]; then
-    printf '[]\n'
-    return
-  fi
-  python3 - "$config_file" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-try:
-    config = json.loads(path.read_text(encoding="utf-8"))
-except (json.JSONDecodeError, OSError):
-    print("[]")
-    raise SystemExit(0)
-
-servers = config.get("servers")
-if not servers:
-    servers = config.get("compute_servers")
-if not isinstance(servers, list):
-    servers = []
-print(json.dumps(servers, ensure_ascii=False))
-PY
-}
 
 if [[ "$SCOPE" == "project" ]]; then
   DEFAULT_PROJECT_SLUG="$(default_project_slug "$ROOT")"
@@ -793,9 +922,6 @@ if [[ -f "$CONFIG_FILE" && "$FORCE" -ne 1 ]]; then
     if [[ "$UPDATE_CLAUDE_MD" -ne 1 && ("$YES" -eq 1 || ! -t 0) ]]; then
       echo "Project goo.md was not updated; rerun with --update-claude-md to add configuration."
       exit 0
-    fi
-    if [[ "$SERVERS_JSON" == "[]" ]]; then
-      SERVERS_JSON="$(load_existing_servers_json "$CONFIG_FILE")"
     fi
   fi
 fi

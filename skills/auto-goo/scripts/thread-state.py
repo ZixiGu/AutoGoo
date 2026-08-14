@@ -227,10 +227,12 @@ def sync_from_plan(
         set_current(goo_dir, resolved)
         sync_compat_plan(goo_dir, plan_path, plan)
         # 当入参是 compat plan 时,把最新 plan 状态同步回 thread plan(真正的源),
-        # 避免 thread plan 的 steps 停留在早期状态
+        # 避免 thread plan 的 steps 停留在早期状态。
+        # 修复(2026-08-14): 原来 `if thread_plan.exists()` 在 thread plan 从未创建时
+        # 不写回 → DAG 状态工具与 plan.json 同步问题(线程内无 plan 快照)。
         if is_compat_plan(goo_dir, plan_path):
             thread_plan = tdir / meta.get("active_plan", "plan.json")
-            if thread_plan.exists() and thread_plan.resolve() != plan_path.resolve():
+            if (not thread_plan.exists() or thread_plan.resolve() != plan_path.resolve()) and plan.get("steps"):
                 dump_json(thread_plan, plan)
     return meta
 

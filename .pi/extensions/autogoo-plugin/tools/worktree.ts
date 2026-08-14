@@ -183,13 +183,15 @@ export function registerWorktreeTools(pi: ExtensionAPI): void {
 
       lines.push(`  Worktree 分支: ${actualBranch}`);
 
-      // Check for changes
-      const diffResult = execShell(
-        `cd "${worktreeDir}" && git diff --stat HEAD 2>&1`,
+      // Check for changes: use git status --porcelain so 未跟踪的新增文件（??）
+      // 也算“有改动”；git diff --stat HEAD 只统计已跟踪文件，会漏掉新产物并
+      // 误报“没有检测到改动” → 合并被跳过 → worktree 清理时新文件静默丢失。
+      const statusResult = execShell(
+        `cd "${worktreeDir}" && git status --porcelain 2>&1`,
         cwd,
         { timeout: 5000 },
       );
-      const hasChanges = diffResult.stdout?.trim().length > 0;
+      const hasChanges = (statusResult.stdout || "").trim().length > 0;
 
       if (!hasChanges) {
         lines.push(`  没有检测到改动，跳过合并。`);

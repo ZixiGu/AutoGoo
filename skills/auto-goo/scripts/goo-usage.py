@@ -334,12 +334,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--host", default="127.0.0.1", help="HTTP host (default: 127.0.0.1)")
     p.add_argument("--port", type=int, default=9876, help="HTTP server port (default: 9876)")
     p.add_argument("--codex", action="store_true",
-                   help="Also read Codex CLI usage from ~/.codex/sessions")
+                   help="Read Codex CLI usage from ~/.codex/sessions (combine with --claude/--pi for multiple sources)")
     p.add_argument("--codex-dir", type=Path,
                    default=Path.home() / ".codex" / "sessions",
                    help="Codex CLI sessions directory (default: ~/.codex/sessions)")
+    p.add_argument("--claude", action="store_true",
+                   help="Read Claude Code usage from --input-dir (default: ~/.claude/projects)")
     p.add_argument("--pi", action="store_true",
-                   help="Read Pi usage from ~/.pi/agent/sessions instead of Claude Code")
+                   help="Read Pi usage from ~/.pi/agent/sessions")
+    p.add_argument("--json", action="store_true",
+                   help="Print a JSON summary (for analysis / automation) and exit")
     return p.parse_args()
 
 
@@ -617,18 +621,36 @@ def iter_pi_records(pi_dir: Path, since: str | None, until: str | None):
 
 def load_records(input_dir: Path, since: str | None, until: str | None,
                  include_synthetic: bool,
+                 use_claude: bool = True,
                  codex_dir: Path | None = None,
                  pi_dir: Path | None = None) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    if use_claude:
+        rows.extend(iter_records(input_dir, since, until))
+    if codex_dir:
+        rows.extend(iter_codex_records(codex_dir, since, until))
     if pi_dir:
-        # Pi mode: only read Pi sessions
-        rows = list(iter_pi_records(pi_dir, since, until))
-    else:
-        rows = list(iter_records(input_dir, since, until))
-        if codex_dir:
-            rows.extend(iter_codex_records(codex_dir, since, until))
+        rows.extend(iter_pi_records(pi_dir, since, until))
     if not include_synthetic:
         rows = [r for r in rows if str(r.get("model") or "") != "<synthetic>"]
     return rows
+
+
+def source_flags(args: argparse.Namespace) -> tuple[bool, Path | None, Path | None]:
+    """Resolve (use_claude, codex_dir, pi_dir) from the CLI args.
+
+    When none of --claude / --codex / --pi is given, ALL sources are enabled
+    (Claude Code + Codex + Pi). When any flag is given, only the selected
+    sources are read; flags can be combined.
+    """
+    want_claude = bool(getattr(args, "claude", False))
+    want_codex = bool(getattr(args, "codex", False))
+    want_pi = bool(getattr(args, "pi", False))
+    if not (want_claude or want_codex or want_pi):
+        want_claude = want_codex = want_pi = True
+    codex_dir = args.codex_dir if want_codex else None
+    pi_dir = Path.home() / ".pi" / "agent" / "sessions" if want_pi else None
+    return want_claude, codex_dir, pi_dir
 
 
 # ── Pricing ──────────────────────────────────────────────────────────────────
@@ -737,9 +759,9 @@ def collect(args: argparse.Namespace, tz: timezone | ZoneInfo) -> tuple[list[dic
     since_dt, until_dt = window_bounds(args, tz)
     since = iso_bound(since_dt)
     until = iso_bound(until_dt)
-    codex_dir = args.codex_dir if getattr(args, "codex", False) else None
-    pi_dir = Path.home() / ".pi" / "agent" / "sessions" if getattr(args, "pi", False) else None
-    rows = load_records(args.input_dir, since, until, args.include_synthetic, codex_dir=codex_dir, pi_dir=pi_dir)
+    use_claude, codex_dir, pi_dir = source_flags(args)
+    rows = load_records(args.input_dir, since, until, args.include_synthetic,
+                        use_claude=use_claude, codex_dir=codex_dir, pi_dir=pi_dir)
     return rows, since, until
 
 
@@ -1068,8 +1090,9 @@ def render_history(args: argparse.Namespace, pricing: dict[str, dict[str, float]
     since_iso = iso_bound(since_dt)
     until_iso = iso_bound(now)
 
-    pi_dir = Path.home() / ".pi" / "agent" / "sessions" if getattr(args, "pi", False) else None
-    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic, pi_dir=pi_dir)
+    use_claude, codex_dir, pi_dir = source_flags(args)
+    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic,
+                            use_claude=use_claude, codex_dir=codex_dir, pi_dir=pi_dir)
     if not all_rows:
         print(c("  No records for this period.", MUTED))
         return 0
@@ -1140,14 +1163,15 @@ def render_history(args: argparse.Namespace, pricing: dict[str, dict[str, float]
 
 def render_table_view(args: argparse.Namespace, pricing: dict[str, dict[str, float]],
                       tz: timezone | ZoneInfo) -> int:
-    pi_dir = Path.home() / ".pi" / "agent" / "sessions" if getattr(args, "pi", False) else None
-    rows = load_records(args.input_dir, args.since, args.until, args.include_synthetic, pi_dir=pi_dir)
+    use_claude, codex_dir, pi_dir = source_flags(args)
+    rows = load_records(args.input_dir, args.since, args.until, args.include_synthetic,
+                        use_claude=use_claude, codex_dir=codex_dir, pi_dir=pi_dir)
     if not rows:
-        print("No Claude Code usage records found.")
+        print("No usage records found.")
         return 0
     items = aggregate_period(rows, args.view, pricing, tz)
     width = max([len(str(i["name"])) for i in items] + [10])
-    print(f"Claude Code Usage — {args.view}")
+    print(f"Usage ({', '.join(_active_sources(args))}) — {args.view}")
     print("─" * 78)
     print(f"{'Period':<{width}}  {'Tokens':>14}  {'Messages':>9}  {'Records':>8}  {'Cost':>10}")
     print("─" * 78)
@@ -1210,11 +1234,19 @@ def _json_safe(obj):
 
 
 def _active_sources(args) -> list[str]:
-    if getattr(args, "pi", False):
-        return ["pi"]
-    srcs = ["claude"]
-    if getattr(args, "codex", False):
+    want_claude = bool(getattr(args, "claude", False))
+    want_codex = bool(getattr(args, "codex", False))
+    want_pi = bool(getattr(args, "pi", False))
+    if not (want_claude or want_codex or want_pi):
+        # Default: all sources
+        want_claude = want_codex = want_pi = True
+    srcs: list[str] = []
+    if want_claude:
+        srcs.append("claude")
+    if want_codex:
         srcs.append("codex")
+    if want_pi:
+        srcs.append("pi")
     return srcs
 
 def api_data(args, pricing, tz):
@@ -1238,9 +1270,9 @@ def api_history(args, pricing, tz, period="7d"):
         since_dt = now - timedelta(days=7)
     since_iso = iso_bound(since_dt)
     until_iso = iso_bound(now)
-    codex_dir = args.codex_dir if getattr(args, "codex", False) else None
-    pi_dir = Path.home() / ".pi" / "agent" / "sessions" if getattr(args, "pi", False) else None
-    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic, codex_dir=codex_dir, pi_dir=pi_dir)
+    use_claude, codex_dir, pi_dir = source_flags(args)
+    all_rows = load_records(args.input_dir, since_iso, until_iso, args.include_synthetic,
+                            use_claude=use_claude, codex_dir=codex_dir, pi_dir=pi_dir)
     return aggregate_period(all_rows, "daily", pricing, tz)
 
 
@@ -1374,6 +1406,12 @@ def main() -> int:
 
     if args.serve:
         return run_serve(args, pricing, tz)
+
+    if getattr(args, "json", False):
+        import json as _json
+        data = api_data(args, pricing, tz)
+        print(_json.dumps(data, ensure_ascii=False, indent=2, default=_json_safe))
+        return 0
 
     if args.once:
         return render(args, pricing=pricing, tz=tz)

@@ -206,6 +206,36 @@
 
 ```json
 {
+  "header": "服务器管理",
+  "id": "server_manage",
+  "question": "检测到已配置的远程服务器。请选择处理方式。",
+  "options": [
+    {
+      "label": "保持已有，仅新增 (Recommended)",
+      "description": "保留现有服务器，继续收集新服务器参数。"
+    },
+    {
+      "label": "删除已有服务器",
+      "description": "按名称选择要删除的服务器，配置与 secrets 同步移除。"
+    },
+    {
+      "label": "替换已有服务器",
+      "description": "选择要替换的服务器，重新输入连接参数。"
+    },
+    {
+      "label": "清空全部服务器",
+      "description": "删除所有已配置的远程服务器。"
+    },
+    {
+      "label": "跳过，不修改服务器",
+      "description": "保持现有服务器配置不变，也不新增。"
+    }
+  ]
+}
+```
+
+```json
+{
   "header": "服务器类型",
   "id": "server_type",
   "question": "请选择服务器类型。",
@@ -270,7 +300,11 @@
     },
     {
       "label": "2222",
-      "description": "使用常见备用 SSH 端口；其他端口通过 Other 输入。"
+      "description": "使用常见备用 SSH 端口。"
+    },
+    {
+      "label": "自定义端口",
+      "description": "通过 Other/输入框输入任意端口号（1-65535）。"
     }
   ]
 }
@@ -288,7 +322,11 @@
     },
     {
       "label": "root",
-      "description": "使用 root 用户；其他用户名通过 Other 输入。"
+      "description": "使用 root 用户。"
+    },
+    {
+      "label": "自定义用户名",
+      "description": "通过 Other/输入框输入任意用户名（如 admin、ec2-user）。"
     }
   ]
 }

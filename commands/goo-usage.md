@@ -176,6 +176,16 @@ python3 "$auto_goo_root/skills/auto-goo/scripts/goo-usage.py" --once
 - `--once` 打印一次后退出（不进入 watch 模式）
 - `--interval N` 设置刷新间隔（默认 30s）
 
+## 数据来源（token 消耗统计范围）
+
+默认**同时统计 Claude Code + Codex + Pi 三个来源**的全部 token 消耗。可用以下参数过滤：
+
+- `--claude`：只看 Claude Code（`--input-dir`，默认 `~/.claude/projects`）
+- `--codex`：只看 Codex CLI（`~/.codex/sessions`）
+- `--pi`：只看 Pi（`~/.pi/agent/sessions`）
+
+多个来源参数可以组合（如 `--codex --pi` 只看这两者）。不传任何来源参数时自动包含全部三个来源。
+
 ## 内置价格
 
 脚本内建常见 Claude 模型的官方定价（USD/1M tokens），无需手动传 `--price`：

@@ -136,6 +136,22 @@ export function userConfigDir(): string {
 
 // ── Config loading ──────────────────────────────────────────────────────────
 
+export interface ServerEntry {
+  name?: string;
+  host?: string;
+  ip?: string;
+  port?: number;
+  user?: string;
+  type?: "cpu" | "gpu";
+  purpose?: string;
+  defaults?: {
+    workdir?: string;
+    setup_commands?: string[];
+    paths?: { data_dir?: string; artifacts_dir?: string };
+  };
+  secrets_file?: string;
+}
+
 export interface AutogooPluginConfig {
   version?: number;
   wiki_dir?: string;
@@ -178,21 +194,19 @@ export interface AutogooPluginConfig {
     prompt_for_scope?: boolean;
     prompt_for_wiki_dir?: boolean;
   };
-  servers?: Array<{
-    name: string;
-    host: string;
-    ip?: string;
-    port: number;
-    user: string;
-    type: "cpu" | "gpu";
-    purpose: string;
-    defaults?: {
-      workdir?: string;
-      setup_commands?: string[];
-      paths?: { data_dir?: string; artifacts_dir?: string };
-    };
-    secrets_file?: string;
-  }>;
+  servers?: ServerEntry[];
+  /** Legacy field name used by older goo-init versions. */
+  compute_servers?: ServerEntry[];
+}
+
+/**
+ * Resolve the configured server list, accepting both the current `servers`
+ * field and the legacy `compute_servers` field used by older configs.
+ */
+export function getServers(config: AutogooPluginConfig | null | undefined): ServerEntry[] {
+  if (!config) return [];
+  const list = (config.servers ?? config.compute_servers) as ServerEntry[] | undefined;
+  return Array.isArray(list) ? list : [];
 }
 
 export async function loadProjectConfig(cwd: string): Promise<AutogooPluginConfig | null> {

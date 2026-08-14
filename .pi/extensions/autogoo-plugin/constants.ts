@@ -94,6 +94,7 @@ export const TEMPLATE_SERVER_PORT: InteractionTemplate = {
   options: [
     { label: "22 (Recommended)", description: "默认 SSH 端口。", value: "22" },
     { label: "2222", description: "替代 SSH 端口。", value: "2222" },
+    { label: "自定义端口", description: "通过输入框输入任意端口号（1-65535）。", value: "__custom__" },
   ],
 };
 
@@ -105,6 +106,21 @@ export const TEMPLATE_SERVER_USER: InteractionTemplate = {
   options: [
     { label: "ubuntu (Recommended)", description: "Ubuntu/Debian 系统默认用户。", value: "ubuntu" },
     { label: "root", description: "root 用户。", value: "root" },
+    { label: "自定义用户名", description: "通过输入框输入任意用户名（如 admin、ec2-user、azureuser）。", value: "__custom__" },
+  ],
+};
+
+/** goo-init: remote server management (existing servers detected) */
+export const TEMPLATE_SERVER_MANAGE: InteractionTemplate = {
+  header: "服务器管理",
+  id: "server_manage",
+  question: "检测到已配置的远程服务器。请选择处理方式。",
+  options: [
+    { label: "保持已有，仅新增 (Recommended)", description: "保留现有服务器，继续收集新服务器参数。", value: "keep_add" },
+    { label: "删除已有服务器", description: "按名称选择要删除的服务器，配置与 secrets 同步移除。", value: "remove" },
+    { label: "替换已有服务器", description: "选择要替换的服务器，重新输入连接参数。", value: "replace" },
+    { label: "清空全部服务器", description: "删除所有已配置的远程服务器。", value: "clear" },
+    { label: "跳过，不修改服务器", description: "保持现有服务器配置不变，也不新增。", value: "skip" },
   ],
 };
 
@@ -115,7 +131,7 @@ export const TEMPLATE_SERVER_PASSWORD: InteractionTemplate = {
   question: "请设置服务器密码。",
   options: [
     { label: "稍后手动填入 (Recommended)", description: "密码存储在 .goo/secrets.json（chmod 600），可稍后编辑该文件补填 password 字段。", value: "__skip__" },
-    { label: "输入密码", description: "在当前输入框输入密码（不会显示在聊天中）。", value: "__input__" },
+    { label: "输入密码", description: "仅支持安全输入的环境可用；Pi 终端不支持掩码，选此项会提示稍后手动填入 secrets 文件。", value: "__input__" },
   ],
 };
 
