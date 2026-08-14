@@ -35,11 +35,15 @@ import {
   RESOLVE_ROOT_SH,
   REMOTE_RESOURCES_PY,
   WIKI_GRAPH_ASSIST_PY,
+  getServers,
+  type AutogooPluginConfig,
   projectPlanPath,
   projectBrainstormPath,
   projectThreadsDir,
   projectThreadDir,
+  resolveWikiDir,
 } from "../utils/paths.js";
+import { resolveProjectSlug } from "../utils/dispatch.js";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile, readFile, copyFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -221,7 +225,17 @@ async function recallWiki(cwd: string, task: string, ctx: ExtensionContext): Pro
   }
 
   try {
-    const result = execPython(wikiScript, ["--compact", "--query", task], cwd);
+    // P14：传 --wiki-dir（config wiki_dir / env 覆盖）与 --project-slug
+    // （config archive.project_slug fallback basename），避免全库搜索且绕过
+    // config wiki_dir 的问题。
+    const wikiDir = await resolveWikiDir(cwd);
+    const projectSlug = await resolveProjectSlug(cwd);
+    const result = execPython(
+      wikiScript,
+      ["--compact", "--query", task, "--wiki-dir", wikiDir, "--project-slug", projectSlug],
+      cwd,
+      { timeout: 30000 },
+    );
     const lines = result.stdout?.split("\n").filter(Boolean) || [];
     return {
       found: lines.length > 2,
@@ -400,8 +414,9 @@ async function checkRemoteResources(cwd: string, plan: Plan, ctx: ExtensionConte
 
   try {
     const raw = await readFile(configPath, "utf-8");
-    const config = JSON.parse(raw);
-    if (!config.servers?.length) return;
+    const config = JSON.parse(raw) as AutogooPluginConfig;
+    const servers = getServers(config);
+    if (!servers.length) return;
 
     // Probe remote resources
     const probeScript = join(REPO_ROOT, "skills/auto-goo/scripts/remote-resources.py");
@@ -413,7 +428,7 @@ async function checkRemoteResources(cwd: string, plan: Plan, ctx: ExtensionConte
       } catch {}
     }
 
-    ctx.ui.notify(`检测到远程服务器: ${config.servers.map((s: any) => s.name).join(", ")}`, "info");
+    ctx.ui.notify(`检测到远程服务器: ${servers.map((s) => s.name).join(", ")}`, "info");
     if (probeResult) ctx.ui.notify(probeResult.slice(0, 300), "info");
 
     const choice = await uiSelect(ctx, TEMPLATE_REMOTE_RESOURCE_USAGE.header, TEMPLATE_REMOTE_RESOURCE_USAGE.options);
@@ -422,7 +437,7 @@ async function checkRemoteResources(cwd: string, plan: Plan, ctx: ExtensionConte
       for (const step of plan.steps) {
         if (step.type === "exec" || step.type === "optimize") {
           step.execution_target = "remote";
-          step.remote_server = config.servers[0]?.name;
+          step.remote_server = servers[0]?.name;
           step.remote_reason = "user confirmed remote execution";
           step.requires_user_confirm = true;
         }

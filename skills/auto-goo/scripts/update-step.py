@@ -205,6 +205,15 @@ def main() -> int:
     parser.add_argument("--fail", action="store_true", help="set status=failed, completed_at, optional error")
     parser.add_argument("--block", action="store_true", help="set status=blocked, optional approval/error summary")
     parser.add_argument(
+        "--confirmed",
+        action="store_true",
+        help=(
+            "record user confirmation for a requires_user_confirm step: sets"
+            " confirmed=true + confirmed_at, clears blocked_at/error, and if"
+            " currently blocked, unblocks back to pending."
+        ),
+    )
+    parser.add_argument(
         "--precreate-log",
         action="store_true",
         help=(
@@ -218,10 +227,10 @@ def main() -> int:
     args = parser.parse_args()
 
     # Mutually exclusive action flags
-    _action_flags = [args.start, args.complete, args.fail, args.block]
+    _action_flags = [args.start, args.complete, args.fail, args.block, args.confirmed]
     if sum(bool(f) for f in _action_flags) > 1:
         raise SystemExit(
-            "only one of --start, --complete, --fail, --block may be used at a time"
+            "only one of --start, --complete, --fail, --block, --confirmed may be used at a time"
         )
 
     plan_path = resolve_plan_path(args.plan)
@@ -279,8 +288,27 @@ def main() -> int:
         if args.error:
             target["error"] = args.error
 
+    if args.confirmed:
+        target["confirmed"] = True
+        target["confirmed_at"] = stamp
+        target["blocked_at"] = None
+        target["error"] = None
+        # 确认即解除阻塞：blocked（等待确认）→ pending（可派发）
+        if target.get("status") == "blocked":
+            target["status"] = "pending"
+            target["progress"] = 0
+            target["heartbeat_at"] = None
+            target["agent_id"] = None
+
     if args.status:
         target["status"] = args.status
+        if args.status == "pending":
+            # P15: 状态回退到 pending（失败自动重试/心跳超时重试）时，清除心跳时间、
+            # agent_id、error 与 progress 残留，保证 plan.json 与调度器内存状态一致。
+            target["heartbeat_at"] = None
+            target["agent_id"] = None
+            target["error"] = None
+            target["progress"] = 0
     if args.progress is not None:
         target["progress"] = max(0, min(100, args.progress))
     if args.agent_id:
@@ -303,6 +331,8 @@ def main() -> int:
         actions.append("fail")
     if args.block:
         actions.append("block")
+    if args.confirmed:
+        actions.append("confirm")
     if args.status and args.status not in actions:
         actions.append(f"status:{args.status}")
     if args.note and not actions:

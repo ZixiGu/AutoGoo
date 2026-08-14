@@ -15,13 +15,22 @@
 import { Type } from "typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execPython, execShell } from "../utils/exec.js";
+import { runSubagent } from "../utils/subagent.js";
+import { getRolePrompt, getTaskAgentPrompt } from "../utils/prompts.js";
 import { updateStatusBar, formatStatusLine, snapshotPlan } from "../utils/status.js";
 import {
   loadPlan,
   savePlan,
+  getCurrentThreadId,
   type Plan,
   type Step,
 } from "../utils/plan.js";
+import {
+  generateWikiPacket,
+  buildSubagentTaskPrompt,
+  heartbeatTick,
+  type WikiPacketResult,
+} from "../utils/dispatch.js";
 import {
   UPDATE_STEP_PY,
   GOO_STATUS_PY,
@@ -38,6 +47,8 @@ export function registerExecuteTool(pi: ExtensionAPI): void {
     promptGuidelines: [
       "使用 auto_goo_execute 自动调度 DAG。第一次调用会执行一轮调度，应持续调用直到所有步骤完成。",
       "在调度循环中，使用 auto_goo_dag_status 查看进度，auto_goo_pending_steps 查看就绪步骤。",
+      "requires_user_confirm=true 的就绪步骤由调度器直接弹确认框询问用户；确认后自动派发，拒绝则 blocked。",
+      "已 blocked（用户拒绝或需确认）的步骤，确认后可调用 auto_goo_update_step --confirm / --pending 解除并继续调度。",
     ],
     parameters: Type.Object({
       action: Type.String({
@@ -49,7 +60,7 @@ export function registerExecuteTool(pi: ExtensionAPI): void {
     async execute(
       _toolCallId: string,
       params: any,
-      _signal: any,
+      signal: any,
       _onUpdate: any,
       ctx: any,
     ) {
@@ -73,11 +84,11 @@ export function registerExecuteTool(pi: ExtensionAPI): void {
 
       switch (params.action) {
         case "schedule":
-          return await runSchedule(cwd, plan, planPath, ctx);
+          return await runSchedule(pi, cwd, plan, planPath, ctx, signal);
         case "heartbeat_check":
           return await runHeartbeatCheck(cwd, plan, planPath, ctx);
         case "full_cycle":
-          return await runFullCycle(cwd, plan, planPath, ctx);
+          return await runFullCycle(pi, cwd, plan, planPath, ctx, signal);
         default:
           return {
             content: [{ type: "text", text: `未知操作: ${params.action}` }],
@@ -90,61 +101,284 @@ export function registerExecuteTool(pi: ExtensionAPI): void {
 
 // ── Scheduling constants ────────────────────────────────────────────────────
 
-const MAX_CONCURRENT = 6;
-const STALE_SECONDS = 120;
+const MAX_CONCURRENT_DEFAULT = 6;
+// 运行中超时默认 15 分钟（与 execution-engine.md 规范一致；plan.json
+// execution.stale_after_seconds 可覆盖）。120s 只用于跨会话恢复（goo-continue）
+// 的僵尸判断，不得用作运行中失败阈值。
+const STALE_SECONDS_DEFAULT = 900;
 const MAX_RETRIES = 1;
 
 // ── Core scheduling logic ───────────────────────────────────────────────────
 
 async function runSchedule(
+  pi: ExtensionAPI,
   cwd: string,
   plan: Plan,
   planPath: string,
   ctx?: any,
+  signal?: AbortSignal, // P12：透传用户中断信号，防止子进程成孤儿
 ): Promise<{ content: any[]; details: any }> {
+  const lines: string[] = [];
+
+  // P8: failed 步骤自动重试（retry_count < MAX_RETRIES → 转回 pending，下轮可重新派发；
+  //     超过则保持 failed 并提示人工处理）。
+  let autoRetried = 0;
+  for (const step of plan.steps) {
+    if (step.status !== "failed") continue;
+    const retryCount = ((step as any).retry_count ?? 0) as number;
+    if (retryCount < MAX_RETRIES) {
+      (step as any).retry_count = retryCount + 1;
+      step.status = "pending";
+      step.progress = 0;
+      step.agent_id = null;
+      step.error = undefined;
+      autoRetried++;
+      execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--status", "pending", "--note", `Auto-retry #${retryCount + 1}`], cwd, { timeout: 10000 });
+    }
+  }
+
   const completedIds = new Set(
     plan.steps.filter((s) => s.status === "completed").map((s) => s.id),
   );
   const running = plan.steps.filter((s) => s.status === "running");
-  const blocked = plan.steps.filter((s) => s.status === "blocked");
   const failed = plan.steps.filter((s) => s.status === "failed");
 
+  if (autoRetried > 0) {
+    lines.push(`🔄 自动重试 ${autoRetried} 个 failed 步骤（转回 pending，下轮重新派发）`);
+  }
+  if (failed.length > 0) {
+    lines.push(`💀 ${failed.length} 步失败(超过最大重试 ${MAX_RETRIES}): #${failed.map((s) => s.id).join(", #")}，请人工处理`);
+  }
+
   // Find ready steps: pending with all dependencies completed
-  const ready = plan.steps.filter((s) => {
+  let ready = plan.steps.filter((s) => {
     if (s.status !== "pending") return false;
     return s.depends_on.every((d) => completedIds.has(d));
   });
 
-  const availableSlots = Math.max(0, MAX_CONCURRENT - running.length);
+  // P4: requires_user_confirm=true 且尚未确认的步骤 — 前台询问用户（真正弹确认框，
+  //     而不是只打一行文本等主 Agent 猜）。确认 → 记录 confirmed 并解锁/继续派发；
+  //     拒绝 → 保持 blocked（后续不再自动重复询问）。
+  //     额外纳入“旧版本只标记 blocked、从未真正询问过”的步骤（error 带
+  //     requires user confirm / no interactive ui），让历史遗留阻塞也能本轮解锁。
+  const legacyAwaitingConfirm = plan.steps.filter(
+    (s) =>
+      s.status === "blocked" &&
+      s.requires_user_confirm === true &&
+      s.confirmed !== true &&
+      (s.error === "requires user confirm" || (s.error || "").includes("no interactive ui")),
+  );
+  const needsConfirm = [
+    ...ready.filter((s) => s.requires_user_confirm === true && s.confirmed !== true),
+    ...legacyAwaitingConfirm.filter((b) => !ready.some((r) => r.id === b.id)),
+  ];
+  const declinedIds = new Set<string>();
+  for (const step of needsConfirm) {
+    // 非交互上下文（无 ctx.ui）：不能弹框，安全默认标记 blocked 等人工处理
+    if (!ctx?.ui?.confirm) {
+      declinedIds.add(String(step.id));
+      step.status = "blocked";
+      step.error = "requires user confirm (no interactive ui)";
+      execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--block", "--error", "requires user confirm (no interactive ui)"], cwd, { timeout: 10000 });
+      lines.push(`🚧 #${step.id} 需用户确认，但当前无可交互 UI，已标记 blocked`);
+      continue;
+    }
+    let answer = false;
+    try {
+      answer = await ctx.ui.confirm(
+        `确认执行步骤 #${step.id}？`,
+        `步骤: ${step.name}\n\n${step.description || ""}\n\n` +
+          `此步骤在规划时标记为需用户确认（requires_user_confirm，高风险/远程/成本类操作）。\n` +
+          `确认后继续派发执行；拒绝则保持 blocked。`,
+      );
+    } catch (e: any) {
+      console.warn(`[AutoGoo-Plugin] confirm #${step.id} 失败，默认拒绝:`, e?.message ?? String(e));
+      answer = false;
+    }
+    if (answer) {
+      execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--confirmed", "--note", "user confirmed via scheduler"], cwd, { timeout: 10000 });
+      step.confirmed = true;
+      step.confirmed_at = new Date().toISOString();
+      if (step.status === "blocked") {
+        step.status = "pending";
+        step.progress = 0;
+      }
+      lines.push(`✅ #${step.id} 用户已确认，继续派发`);
+    } else {
+      declinedIds.add(String(step.id));
+      step.status = "blocked";
+      step.error = "user declined confirmation";
+      execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--block", "--error", "user declined confirmation"], cwd, { timeout: 10000 });
+      lines.push(`🚧 #${step.id} 用户拒绝确认，已标记 blocked（后续不再自动询问）`);
+    }
+  }
 
-  const toDispatch = ready.slice(0, availableSlots);
-  const lines: string[] = [];
+  // 确认询问可能改变状态（blocked→pending）：重新加载 plan 并重算 ready，
+  // 让新解锁的步骤本轮即可进入派发队列。
+  const freshPlan = await loadPlan(cwd, planPath);
+  if (freshPlan) plan = freshPlan;
+  ready = plan.steps.filter((s) => {
+    if (s.status !== "pending") return false;
+    return s.depends_on.every((d) => completedIds.has(d));
+  });
+  const blockedAfterConfirm = plan.steps.filter((s) => s.status === "blocked");
+
+  // P4: execution_target==='remote' — 跳过本地派发，提示用 auto_goo_ssh_exec 远程执行
+  const remoteSteps = ready.filter((s) => s.execution_target === "remote" && !declinedIds.has(String(s.id)));
+  for (const step of remoteSteps) {
+    lines.push(`🖥️ #${step.id} 远程执行(server=${step.remote_server || "?"}): 请用 auto_goo_ssh_exec 在远程执行`);
+  }
+
+  const maxConcurrent = plan.execution?.max_concurrent ?? MAX_CONCURRENT_DEFAULT;
+  const availableSlots = Math.max(0, maxConcurrent - running.length);
+
+  const toDispatch = ready
+    .filter((s) => !declinedIds.has(String(s.id)))
+    .filter((s) => s.execution_target !== "remote")
+    .slice(0, availableSlots);
   const dispatched: number[] = [];
 
   if (toDispatch.length === 0) {
-    if (ready.length === 0 && running.length === 0) {
+    if (completedIds.size === plan.steps.length) {
       plan.status = "completed";
       plan.completed_at = new Date().toISOString();
       await savePlan(cwd, plan, planPath);
       lines.push(`✅ DAG 全部完成！${completedIds.size}/${plan.steps.length} 步`);
+    } else if (blockedAfterConfirm.length > 0) {
+      lines.push(`🚧 ${blockedAfterConfirm.length} 步阻塞: #${blockedAfterConfirm.map((s) => s.id).join(", #")}`);
+    } else if (failed.length > 0) {
+      lines.push(`💀 ${failed.length} 步失败: #${failed.map((s) => s.id).join(", #")}`);
     } else if (ready.length > 0) {
-      lines.push(`⏳ ${ready.length} 步就绪但无空槽 (${running.length}/${MAX_CONCURRENT})`);
+      // 区分“无空槽”与“就绪但被排除本地派发”（远程执行 / 需用户确认 / 用户拒绝），
+      // 避免把 remote/confirm 步骤误报成“槽位已满”。
+      const remoteReady = ready.filter((s) => s.execution_target === "remote" && s.status === "pending");
+      const confirmReady = ready.filter((s) => s.requires_user_confirm === true && s.status === "pending" && s.confirmed !== true);
+      const declinedReady = ready.filter((s) => declinedIds.has(String(s.id)));
+      const reasons: string[] = [];
+      if (running.length >= maxConcurrent) {
+        reasons.push(`并发槽位已满 (${running.length}/${maxConcurrent})`);
+      }
+      if (remoteReady.length > 0) {
+        reasons.push(`#${remoteReady.map((s) => s.id).join(", #")} 为远程执行(execution_target=remote)，请用 auto_goo_ssh_exec 执行`);
+      }
+      if (confirmReady.length > 0) {
+        reasons.push(`#${confirmReady.map((s) => s.id).join(", #")} 需用户确认(requires_user_confirm)`);
+      }
+      if (declinedReady.length > 0) {
+        reasons.push(`#${declinedReady.map((s) => s.id).join(", #")} 用户已拒绝，保持 blocked`);
+      }
+      if (reasons.length === 0) {
+        reasons.push(`等待派发 (空槽 ${maxConcurrent - running.length}/${maxConcurrent})`);
+      }
+      lines.push(`ℹ️ ${ready.length} 步就绪但未本地派发 (空槽 ${maxConcurrent - running.length}/${maxConcurrent}): ${reasons.join("；")}`);
     } else {
       lines.push(`⏳ 等待运行中步骤完成 (${running.length} 运行中)`);
     }
   }
 
-  // Dispatch each ready step
+  // P6: 为每个 step 只生成一次 agentId（start 与 heartbeat 复用同一值）
+  const agentIds = new Map<number, string>();
   for (const step of toDispatch) {
     const agentId = `agent-${step.id}-${Date.now()}`;
+    agentIds.set(step.id, agentId);
     dispatched.push(step.id);
-
     execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--start", "--progress", "5", "--agent-id", agentId], cwd, { timeout: 15000 });
     execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--precreate-log", "--note", `Dispatched to ${step.subagent} (${agentId})`], cwd, { timeout: 15000 });
   }
 
+  // P5: 为每个待派发 step 生成 wiki graph packet（与 auto_goo_dispatch 一致，
+  //     失败 fallback 不阻塞）。
+  const threadId = (await getCurrentThreadId(cwd)) ?? "current";
+  const packets = new Map<number, WikiPacketResult>();
+  await Promise.all(
+    toDispatch.map(async (step: any) => {
+      const res = await generateWikiPacket(
+        cwd,
+        { id: step.id, type: step.type, wiki_paths: step.wiki_paths, memory_layer: step.memory_layer },
+        step.description || `step ${step.id} dispatch`,
+        threadId,
+      );
+      packets.set(step.id, res);
+    }),
+  );
+
+  // ★ 并发子进程派发（pi 子进程模式，2026-08-10 迁移；替代 sendUserMessage + terminate）：
+  //   隔离上下文 / 可靠投递 / 并行 / usage 统计。阻塞直到本批全部完成，
+  //   期间 onTick 每 ~20s 保活心跳防止 STALE 误杀。
+  const subagentResults = await Promise.all(
+    toDispatch.map(async (step: any) => {
+      const agentId = agentIds.get(step.id) ?? `agent-${step.id}-${Date.now()}`;
+      const { packet, packetGenerated } = packets.get(step.id) ?? {
+        packet: { wiki_paths: [] as string[], wiki_graph_packet_path: "", memory_layer: "L2" },
+        packetGenerated: false,
+      };
+      const stepContract = [
+        `- step_id: ${step.id}`,
+        `- name: ${step.name}`,
+        `- type: ${step.type || "exec"}`,
+        `- task_agent: ${step.task_agent || "document-analyst"}`,
+        `- 输入产物: ${(step.inputs || []).join(", ") || "无"}`,
+        `- 必须产出: ${(step.outputs || []).join(", ") || "声明产物"}`,
+        `- 读取边界: ${(step.allowed_read_paths || []).join(", ") || "项目根"}`,
+        `- 写入边界: ${(step.allowed_write_paths || []).join(", ") || "无"}`,
+        `- 验收标准: ${step.validation || "报告结构化结果"}`,
+      ];
+      const result = await runSubagent({
+        systemPrompt: [getRolePrompt(step.subagent || "researcher"), getTaskAgentPrompt(step.task_agent || "")].filter(Boolean).join("\n"),
+        task: buildSubagentTaskPrompt({
+          role: step.subagent || "researcher",
+          task: step.description || `执行 step #${step.id}: ${step.name}`,
+          wiki_paths: packet.wiki_paths,
+          wiki_graph_packet_path: packet.wiki_graph_packet_path,
+          packetGenerated,
+          memory_layer: packet.memory_layer,
+          stepContract,
+        }),
+        cwd,
+        signal, // P12：透传用户中断信号，防止子进程成孤儿
+        onTick: () => void heartbeatTick(cwd, planPath, step.id, agentId),
+        timeoutMs: 30 * 60 * 1000,
+      });
+      // 兕底：子进程退出后 step 若仍 running，按退出码标记
+      const planNow = await loadPlan(cwd, planPath);
+      const stepNow = planNow?.steps.find((s: any) => s.id === step.id);
+      if (stepNow?.status === "running") {
+        const ok = result.exitCode === 0 && !result.errorMessage && !result.timedOut;
+        if (ok) {
+          execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--complete", "--note", `Subagent exit 0（兕底标记完成）`], cwd, { timeout: 10000 });
+        } else {
+          execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--fail", "--error", result.errorMessage || `subagent exit ${result.exitCode}${result.timedOut ? "（超时）" : ""}`], cwd, { timeout: 10000 });
+        }
+      }
+      return { stepId: step.id, status: stepNow?.status, result };
+    }),
+  );
+
+  for (const { stepId, status, result } of subagentResults) {
+    const usage = result.usage;
+    const usageStr = usage.turns > 0 ? ` · ${usage.turns}t ↑${usage.input} ↓${usage.output} $${usage.cost.toFixed(4)}` : "";
+    lines.push(`  #${stepId}: exit=${result.exitCode}${result.timedOut ? " ⏱超时" : ""}${result.errorMessage ? ` ❌${result.errorMessage.slice(0, 80)}` : ""}${status === "failed" ? " step=failed" : ""}${usageStr}`);
+  }
+
   if (dispatched.length > 0) {
-    lines.push(`▶️ 派发 ${dispatched.length} 步: #${dispatched.join(", #")}`);
+    lines.push(`▶️ 派发 ${dispatched.length} 步并等待子进程完成: #${dispatched.join(", #")}`);
+  }
+
+  // P13: 派发完成后重新加载 plan，用最新状态判断是否全部完成
+  //     （dispatch 前的 completedIds 是旧快照，本批完成后会漏判 → plan.status
+  //       不立即置 completed）。
+  let freshCompleted = completedIds.size;
+  if (dispatched.length > 0) {
+    const freshPlan = await loadPlan(cwd, planPath);
+    if (freshPlan) {
+      freshCompleted = freshPlan.steps.filter((s) => s.status === "completed").length;
+      if (freshPlan.steps.length > 0 && freshCompleted === freshPlan.steps.length) {
+        freshPlan.status = "completed";
+        freshPlan.completed_at = freshPlan.completed_at || new Date().toISOString();
+        await savePlan(cwd, freshPlan, planPath);
+        lines.push(`✅ DAG 全部完成！${freshCompleted}/${freshPlan.steps.length} 步`);
+      }
+    }
   }
 
   // Update status bar
@@ -154,13 +388,26 @@ async function runSchedule(
     content: [{ type: "text", text: lines.join("\n") }],
     details: {
       total: plan.steps.length,
-      completed: completedIds.size,
+      completed: freshCompleted,
       running: running.length,
       ready: ready.length,
       dispatched: toDispatch.map((s) => s.id),
-      blocked: blocked.length,
+      blocked: blockedAfterConfirm.length,
       failed: failed.length,
+      autoRetried,
+      subagents: subagentResults.map(({ stepId, status, result }) => ({
+        stepId,
+        status,
+        exitCode: result.exitCode,
+        timedOut: result.timedOut ?? false,
+        stopReason: result.stopReason,
+        errorMessage: result.errorMessage,
+        usage: result.usage,
+        model: result.model,
+      })),
     },
+    // 子进程模式：无 followUp 队列依赖，无需 terminate。
+    // 主 Agent 可在本工具返回后继续调用 execute 调度下一批。
   };
 }
 
@@ -175,6 +422,13 @@ async function runHeartbeatCheck(
   const now = Date.now();
   const lines: string[] = [];
   const staleSteps: Step[] = [];
+  // 优先用 plan.execution.stale_after_seconds（与 status.ts 健康指示一致），
+  // 兼容文档 schema 的顶层 heartbeat_timeout_min（分钟）；都缺省时用 900s 默认。
+  const execCfg = plan.execution ?? {};
+  const staleSeconds =
+    execCfg.stale_after_seconds ??
+    (((plan as any).heartbeat_timeout_min ?? 0) > 0 ? (plan as any).heartbeat_timeout_min * 60 : undefined) ??
+    STALE_SECONDS_DEFAULT;
 
   for (const step of plan.steps) {
     if (step.status !== "running") continue;
@@ -182,21 +436,21 @@ async function runHeartbeatCheck(
 
     const hbTime = new Date(step.heartbeat_at).getTime();
     const age = Math.round((now - hbTime) / 1000);
-    if (age > STALE_SECONDS) staleSteps.push(step);
+    if (age > staleSeconds) staleSteps.push(step);
   }
 
   // Mark stale steps as failed or retry
   for (const step of staleSteps) {
-    if ((step as any).retry_count ?? 0 < MAX_RETRIES) {
+    if (((step as any).retry_count ?? 0) < MAX_RETRIES) {
       (step as any).retry_count = ((step as any).retry_count ?? 0) + 1;
       step.status = "pending";
       step.progress = 0;
       step.agent_id = null;
       lines.push(`🔄 #${step.id} 重试 (#${(step as any).retry_count})`);
-      execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--status", "pending", "--note", `Auto-retry #${(step as any).retry_count}`], cwd, { timeout: 10000 });
+      execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--status", "pending", "--progress", "0", "--note", `Auto-retry #${(step as any).retry_count}`], cwd, { timeout: 10000 });
     } else {
       step.status = "failed";
-      step.error = `Heartbeat timeout > ${STALE_SECONDS}s`;
+      step.error = `Heartbeat timeout > ${staleSeconds}s`;
       lines.push(`💀 #${step.id} 心跳超时`);
       execPython(UPDATE_STEP_PY, ["--plan", planPath, "--step-id", String(step.id), "--fail", "--error", step.error], cwd, { timeout: 10000 });
     }
@@ -220,7 +474,7 @@ async function runHeartbeatCheck(
     content: [{ type: "text", text: lines.join("\n") }],
     details: {
       stale: staleSteps.length,
-      retried: staleSteps.filter((s) => (s as any).retry_count ?? 0 <= MAX_RETRIES).length,
+      retried: staleSteps.filter((s) => ((s as any).retry_count ?? 0) <= MAX_RETRIES).length,
       failed: staleSteps.filter((s) => s.status === "failed").length,
     },
   };
@@ -229,10 +483,12 @@ async function runHeartbeatCheck(
 // ── Full cycle: schedule + heartbeat check ──────────────────────────────────
 
 async function runFullCycle(
+  pi: ExtensionAPI,
   cwd: string,
   plan: Plan,
   planPath: string,
   ctx?: any,
+  signal?: AbortSignal, // P12：透传给 runSchedule → runSubagent
 ): Promise<{ content: any[]; details: any }> {
   // 1. Heartbeat check first
   const hbResult = await runHeartbeatCheck(cwd, plan, planPath, ctx);
@@ -247,7 +503,7 @@ async function runFullCycle(
   }
 
   // 2. Schedule new steps
-  const schedResult = await runSchedule(cwd, updatedPlan, planPath, ctx);
+  const schedResult = await runSchedule(pi, cwd, updatedPlan, planPath, ctx, signal);
 
   // Update status bar
   if (ctx) updateStatusBar(ctx);
@@ -263,5 +519,6 @@ async function runFullCycle(
       heartbeat: hbResult.details,
       schedule: schedResult.details,
     },
+    // 子进程模式：无需 terminate（无 followUp 依赖）
   };
 }

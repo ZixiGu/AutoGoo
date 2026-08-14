@@ -2,7 +2,7 @@
  * AutoGoo-Plugin Plan operations — load, save, validate, and manipulate plan.json.
  */
 
-import { readFile, writeFile, access, mkdir, copyFile } from "node:fs/promises";
+import { readFile, writeFile, access, mkdir, copyFile, rename } from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { projectPlanPath, projectCurrentThreadPath, projectThreadsDir, projectThreadDir } from "./paths.js";
@@ -43,6 +43,9 @@ export interface Step {
   validation: string;
   risk_level: string;
   requires_user_confirm: boolean;
+  confirmed?: boolean;
+  confirmed_at?: string;
+  blocked_at?: string;
   agent_id?: string | null;
   heartbeat_at?: string | null;
   started_at?: string | null;
@@ -114,11 +117,13 @@ export async function loadPlan(cwd: string, planPath?: string): Promise<Plan | n
 export async function savePlan(cwd: string, plan: Plan, planPath?: string): Promise<string> {
   const p = planPath ?? projectPlanPath(cwd);
   await mkdir(dirname(p), { recursive: true });
-  // Atomic write: write to .tmp then rename
+  // Atomic write: write to .tmp then rename（P3）
+  // rename 同文件系统内原子替换：崩溃时 plan.json 要么是旧版要么是新版，
+  // 不会损坏；也不会残留 .tmp 覆盖失败。
   const tmp = p + ".tmp";
-  await writeFile(tmp, JSON.stringify(plan, null, 2) + "\n", "utf-8");
-  // rename is atomic on same filesystem
-  await writeFile(p, JSON.stringify(plan, null, 2) + "\n", "utf-8");
+  const data = JSON.stringify(plan, null, 2) + "\n";
+  await writeFile(tmp, data, "utf-8");
+  await rename(tmp, p);
   return p;
 }
 
@@ -149,7 +154,10 @@ export async function getCurrentThreadId(cwd: string): Promise<string | null> {
     await access(p);
     const raw = await readFile(p, "utf-8");
     const data = JSON.parse(raw);
-    return data.current_thread_id ?? null;
+    // 兼容两种 schema（修复 2026-08-14）：
+    //   Python thread-state.py set_current 写 {"thread_id": ...}
+    //   旧 TS 版本写 {"current_thread_id": ...}
+    return data.current_thread_id ?? data.thread_id ?? null;
   } catch {
     return null;
   }
@@ -158,7 +166,8 @@ export async function getCurrentThreadId(cwd: string): Promise<string | null> {
 export async function setCurrentThreadId(cwd: string, threadId: string): Promise<void> {
   const p = projectCurrentThreadPath(cwd);
   await mkdir(dirname(p), { recursive: true });
-  await writeFile(p, JSON.stringify({ current_thread_id: threadId }), "utf-8");
+  // 同时写两个字段，保证 TS/Python 两侧都能读到（修复 2026-08-14）
+  await writeFile(p, JSON.stringify({ current_thread_id: threadId, thread_id: threadId }), "utf-8");
 }
 
 export async function loadThreadMeta(cwd: string, threadId: string): Promise<ThreadMeta | null> {

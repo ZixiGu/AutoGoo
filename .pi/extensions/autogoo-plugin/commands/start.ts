@@ -8,13 +8,15 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { TEMPLATE_CONTEXT_SYNC_CONFIRM, TEMPLATE_WORKTREE } from "../constants.js";
-import { loadPlan, savePlan, getCurrentThreadId, buildDispatchPacket, type Plan, type Step } from "../utils/plan.js";
-import { REPO_ROOT, UPDATE_STEP_PY, GOO_STATUS_PY, WIKI_GRAPH_ASSIST_PY, projectPlanPath, projectThreadDir, resolveWikiDir } from "../utils/paths.js";
+import { loadPlan, savePlan, getCurrentThreadId, archiveOldPlan, type Plan, type Step } from "../utils/plan.js";
+import { UPDATE_STEP_PY, GOO_STATUS_PY, projectPlanPath } from "../utils/paths.js";
 import { execPython } from "../utils/exec.js";
-import { uiSelect, uiConfirm, uiInput } from "../utils/ui.js";
+import { runSubagent } from "../utils/subagent.js";
+import { getRolePrompt, getTaskAgentPrompt } from "../utils/prompts.js";
+import { uiSelect, uiInput } from "../utils/ui.js";
 import { updateStatusBar } from "../utils/status.js";
+import { generateWikiPacket, buildSubagentTaskPrompt, heartbeatTick } from "../utils/dispatch.js";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 
 // ── Global pi reference, set by setPi() from index.ts ───────────────────────
 let _pi: ExtensionAPI | null = null;
@@ -52,6 +54,8 @@ export async function handleGooStart(args: string, ctx: ExtensionContext): Promi
     // Allow user to add context updates
     const updates = await uiInput(ctx, "新增的上下文（方案、约束、验收标准等，可选）", "");
     if (updates?.trim()) {
+      // P7：savePlan 前先归档旧 plan（在 context_digest 变更前对旧版本做快照）
+      await archiveOldPlan(cwd, plan);
       plan.context_digest = plan.context_digest || { found: true, decisions: [], constraints: [], acceptance_criteria: [], open_questions: [] };
       plan.context_digest.decisions.push(`[${new Date().toISOString()}] ${updates}`);
       await savePlan(cwd, plan);
@@ -64,7 +68,8 @@ export async function handleGooStart(args: string, ctx: ExtensionContext): Promi
   ctx.ui.notify(`开始执行！共 ${pendingSteps.length} 个待执行步骤`, "info");
 
   // Send execution prompt to LLM with the registered tools
-  if (_pi) {
+  // （子进程模式跳过：Subagent 不应启动新的 DAG 执行）
+  if (_pi && process.env.AUTOGOO_SUBAGENT !== "1") {
     const pendingList = plan.steps
       .filter(s => s.status === "pending")
       .map(s => `  #${s.id} [${s.subagent}] ${s.name} — ${s.description.slice(0, 60)}`)
@@ -107,7 +112,9 @@ async function showStatus(cwd: string, ctx: ExtensionContext): Promise<void> {
 
 // ── Custom tools registration ───────────────────────────────────────────────
 
-export function registerExecutionTools(pi: any): void {
+export function registerExecutionTools(pi: any, options: { skipDispatch?: boolean } = {}): void {
+  // 子进程模式（AUTOGOO_SUBAGENT=1）跳过派发/调度工具，防止 Subagent 递归调度 DAG
+  const skipDispatch = options.skipDispatch || process.env.AUTOGOO_SUBAGENT === "1";
   // Tool: auto_goo_update_step
   pi.registerTool({
     name: "auto_goo_update_step",
@@ -115,14 +122,14 @@ export function registerExecutionTools(pi: any): void {
     description: "更新 DAG 步骤状态、进度、心跳。Subagent 和主 Agent 都可通过此工具更新步骤状态。",
     promptSnippet: "更新 DAG 步骤状态、进度和心跳",
     promptGuidelines: [
-      "使用 auto_goo_update_step 更新步骤状态：--start 开始步骤，--heartbeat 更新进度，--complete 完成，--fail 标记失败",
+      "使用 auto_goo_update_step 更新步骤状态：--start 开始步骤，--heartbeat 更新进度，--complete 完成，--fail 标记失败，--pending 解除阻塞，--confirm 记录用户确认",
       "heartbeat 必须带 --note 描述进展，空 heartbeat 无效",
     ],
     parameters: Type.Object({
       stepId: Type.Integer({ description: "步骤 ID" }),
       action: Type.String({
         description: "操作类型",
-        enum: ["start", "heartbeat", "complete", "fail", "block"],
+        enum: ["start", "heartbeat", "complete", "fail", "block", "pending", "confirm"],
       }),
       progress: Type.Optional(Type.Integer({ description: "进度 0-100" })),
       note: Type.Optional(Type.String({ description: "进展描述（heartbeat 必填）" })),
@@ -159,11 +166,64 @@ export function registerExecutionTools(pi: any): void {
           args.push("--block");
           if (params.error) { args.push("--error", params.error); }
           break;
+        case "pending":
+          // 解除 blocked（用户确认或其他原因恢复可派发）
+          args.push("--status", "pending");
+          break;
+        case "confirm":
+          // 记录用户确认（requires_user_confirm 步骤），blocked → pending 自动解锁
+          args.push("--confirmed");
+          if (params.note) { args.push("--note", params.note); }
+          break;
       }
 
       try {
         const result = execPython(args[0], args.slice(1), cwd, { timeout: 30000 });
         await updateStatusBar(ctx);
+
+        // ★ 检查 update-step.py 是否真正成功（修复 2026-08-10）：
+        //   之前不检查 exitCode，step id 不匹配（如数字 2 vs 字符串 "s2"）时
+        //   update 失败仍发"step X 已完成"唤醒消息 → 用户看到"声称完成但状态没更新"。
+        if (result.exitCode !== 0) {
+          const errMsg = (result.stderr || result.stdout || "update-step.py 失败").trim().slice(0, 200);
+          console.warn(`[AutoGoo-Plugin] update_step ${params.action} 失败: ${errMsg}`);
+          return {
+            content: [{ type: "text", text: `❌ 步骤更新失败 (exit=${result.exitCode}): ${errMsg}` }],
+            details: { stepId: params.stepId, action: params.action, error: errMsg },
+            isError: true,
+          };
+        }
+
+        // ★ Subagent 完成任务后唤醒主 Agent 继续调度（修复 2026-08-06）：
+        //   主 Agent 通过 auto_goo_dispatch 派发时返回 terminate:true 让当前 turn 结束、
+        //   followUp 队列被消费（Subagent 任务执行）。Subagent 完成本步后，
+        //   若 plan 中仍有 pending/running 步骤，必须 sendUserMessage 唤醒主 Agent
+        //   继续调度循环；否则 agent 会停在空闲状态，DAG 不再推进。
+        //   ★ 子进程模式（2026-08-10）：Subagent 在独立 pi 子进程内执行，
+        //   完成由父进程 runSubagent 的 close 事件感知，无需也**不应**在子进程内唤醒
+        //   （否则子进程 agent 会尝试自己调度 DAG → 递归）。
+        if ((params.action === "complete" || params.action === "fail" || params.action === "block" || params.action === "pending" || params.action === "confirm") && process.env.AUTOGOO_SUBAGENT !== "1") {
+          try {
+            const plan = await loadPlan(cwd);
+            const hasRemaining = plan?.steps?.some(
+              (s: any) => s.status === "pending" || s.status === "running",
+            ) ?? false;
+            if (hasRemaining && _pi) {
+              const remaining = plan.steps
+                .filter((s: any) => s.status === "pending")
+                .map((s: any) => `#${s.id}`)
+                .join(", ");
+              _pi.sendUserMessage(
+                `[AutoGoo-Plugin] step ${params.stepId} 已${params.action === "complete" ? "完成" : params.action}。` +
+                `还有待执行步骤（${remaining || "无 pending"}）。请调用 auto_goo_execute 继续调度 DAG。`,
+                { deliverAs: "followUp" }
+              );
+            }
+          } catch (e: any) {
+            console.warn("[AutoGoo-Plugin] update_step 唤醒主 Agent 失败:", e?.message ?? String(e));
+          }
+        }
+
         return {
           content: [{ type: "text", text: result.stdout || "步骤已更新" }],
           details: { stepId: params.stepId, action: params.action },
@@ -204,6 +264,7 @@ export function registerExecutionTools(pi: any): void {
   });
 
   // Tool: auto_goo_dispatch
+  if (!skipDispatch) {
   pi.registerTool({
     name: "auto_goo_dispatch",
     label: "Dispatch Subagent",
@@ -247,95 +308,115 @@ export function registerExecutionTools(pi: any): void {
       const rolePrompt = getRolePrompt(params.role);
       const taskPrompt = params.taskAgent ? getTaskAgentPrompt(params.taskAgent) : "";
 
-      // 2.1 Compute dispatch packet (on-demand wiki + memory layer)
-      //    镜像 Claude Code execution-engine.md 的 wiki_paths 注入逻辑。
-      //    主 Agent 调用本工具时,wiki_graph_packet_path 还没生成;
-      //    本函数只计算路径,实际生成由主 Agent 派发前用 wiki-graph-assist.py 完成。
-      const activeThreadId = await getCurrentThreadId(cwd);
-      const projectSlug =
-        (await getCurrentThreadId(cwd))  // touch to ensure no dead-code warning
-          ? require("node:path").basename(cwd) || "autogoo-plugin"
-          : "autogoo-plugin";
-      // 简化:sl 直接走 cwd basename;若 plan 提供 override 可再扩展
-      const packet = buildDispatchPacket(
+      // 2.1+2.2 Compute dispatch packet + generate wiki graph packet（共享逻辑）
+      //     P1：project slug 用 config archive.project_slug（fallback basename），
+      //     wiki_paths 的 {slug} 与 wiki-graph-assist.py --project-slug 用同一值，
+      //     否则 glob 匹配不到真实 wiki/projects/{slug}/ 目录。
+      const activeThreadId = (await getCurrentThreadId(cwd)) ?? "current";
+      const { packet, packetGenerated } = await generateWikiPacket(
+        cwd,
         { id: params.stepId, type: params.stepType || "exec" },
-        projectSlug,
-        activeThreadId || "current",
+        params.task || `step ${params.stepId} dispatch`,
+        activeThreadId,
       );
 
-      // 2.2 Generate wiki graph packet (实际调用 wiki-graph-assist.py)
-      //     失败 fallback:只传 path,不阻塞 dispatch。
-      let packetGenerated = false;
-      try {
-        const wikiDir = await resolveWikiDir(cwd);
-        const searchPathArgs = packet.wiki_paths.flatMap((p: string) => ["--search-path", p]);
-        const r = execPython(
-          WIKI_GRAPH_ASSIST_PY,
-          [
-            "--wiki-dir", wikiDir,
-            "--project-slug", projectSlug,
-            "--query", params.task || `step ${params.stepId} dispatch`,
-            "--title", `step-${params.stepId}-dispatch`,
-            ...searchPathArgs,
-            "--max-pages", "12",
-            "--format", "md",
-          ],
-          cwd,
-          { timeout: 30000 },  // < 30s 双重约束
-        );
-        if (r.exitCode === 0 && r.stdout) {
-          const fs = await import("node:fs/promises");
-          const fullPath = join(cwd, packet.wiki_graph_packet_path);
-          await fs.mkdir(join(fullPath, ".."), { recursive: true });
-          await fs.writeFile(fullPath, r.stdout);
-          packetGenerated = true;
+      const prompt = buildSubagentTaskPrompt({
+        role: params.role,
+        task: params.task,
+        rolePrompt,
+        taskPrompt,
+        wiki_paths: packet.wiki_paths,
+        wiki_graph_packet_path: packet.wiki_graph_packet_path,
+        packetGenerated,
+        memory_layer: packet.memory_layer,
+      });
+
+      // 3. Spawn 独立 pi 子进程执行 Subagent 任务（pi 子进程模式，2026-08-10 迁移）。
+      //    替代旧方案 sendUserMessage(followUp) + terminate：
+      //    - 上下文隔离（--no-session）
+      //    - 不依赖 followUp 队列（根治调度循环饥饿）
+      //    - usage 统计（解析 message_end 事件）
+      const planPath = projectPlanPath(cwd);
+      const agentId = `agent-${params.stepId}-${Date.now()}`;
+
+      // 保活心跳（P2/P16，共享 heartbeatTick）：
+      // - 不传 --progress：避免把 Subagent 已更新的 progress 覆盖回 0
+      // - 写前 loadPlan 检查 step.status === 'running'，非 running 直接跳过
+      const subagentResult = await runSubagent({
+        systemPrompt: [rolePrompt, taskPrompt].filter(Boolean).join("\n"),
+        task: prompt,
+        cwd,
+        signal: _signal,
+        onTick: () => void heartbeatTick(cwd, planPath, params.stepId, agentId),
+        timeoutMs: (params as any).timeoutMs ?? 30 * 60 * 1000,
+      });
+
+      // 4. 兕底状态：子进程退出后 step 可能已被 Subagent 调 auto_goo_update_step
+      //    标记 complete/fail；若仍 running，根据退出码兕底标记。
+      const planAfter = await loadPlan(cwd);
+      const stepAfter = planAfter?.steps.find((s: Step) => s.id === params.stepId);
+      let statusNote = "";
+      if (stepAfter?.status === "running") {
+        const ok = subagentResult.exitCode === 0 && !subagentResult.errorMessage && !subagentResult.timedOut;
+        if (ok) {
+          execPython(
+            UPDATE_STEP_PY,
+            ["--plan", planPath, "--step-id", String(params.stepId), "--complete", "--note", `Subagent exit 0（兜底标记完成）`],
+            cwd,
+            { timeout: 10000 },
+          );
+          statusNote = "（兜底完成）";
         } else {
-          console.warn(`[AutoGoo-Plugin] wiki-graph-assist.py 失败 (exit=${r.exitCode}): ${(r.stderr || "").slice(0, 200)}`);
+          execPython(
+            UPDATE_STEP_PY,
+            ["--plan", planPath, "--step-id", String(params.stepId), "--fail", "--error", subagentResult.errorMessage || `subagent exit ${subagentResult.exitCode}${subagentResult.timedOut ? "（超时）" : ""}`],
+            cwd,
+            { timeout: 10000 },
+          );
+          statusNote = "（兜底失败）";
         }
-      } catch (e: any) {
-        console.warn(`[AutoGoo-Plugin] wiki-graph-assist.py 异常: ${(e?.message ?? String(e)).slice(0, 200)}`);
       }
 
-      const prompt = [
-        `## AutoGoo-Plugin Subagent: ${params.role}`,
-        ``,
-        rolePrompt,
-        taskPrompt ? `\n${taskPrompt}\n` : "",
-        `## 任务`,
-        ``,
-        params.task,
-        ``,
-        `## 按需读取 wiki(对齐 SKILL.md "按需调用原则")`,
-        `- 本 step 的 wiki_paths glob(只读这些,不要"读全部 wiki"):`,
-        `  ${packet.wiki_paths.join("\n  ")}`,
-        packetGenerated
-          ? `- 紧凑 graph packet 已生成在 ${packet.wiki_graph_packet_path};优先 Read 它代替自行 grep/glob 全量扫描`
-          : `- ⚠️ graph packet 生成失败(超时或 wiki-graph-assist.py 错误),fallback 到按 wiki_paths glob 自行 Read(遵守字符预算 < 20k)`,
-        `- 单次 Read/Grep 受字符预算 (< 20k) + 超时 (< 30s) 双重约束;超出时用 Read + limit/offset 或 Grep -n`,
-        `- memory_layer 默认 ${packet.memory_layer};L0 原始日志、L3 项目画像只按 step 显式需要才读`,
-        `- 跨 step 引用用 [[Wikilink]] 按需点开;不要 Read 整篇 wiki 笔记`,
-        ``,
-        `## 执行要求`,
-        `1. 第一件事：调用 auto_goo_update_step --heartbeat --progress 15 --note "已开工"`,
-        `2. 每完成一个里程碑调用 auto_goo_update_step --heartbeat 更新进度`,
-        `3. 完成后调用 auto_goo_update_step --complete`,
-        `4. 失败时调用 auto_goo_update_step --fail --error "<原因>"`,
-        `5. 在 step log 中记录关键决策、产物路径和验证结果`,
-        `6. 不要扩大范围：只完成当前步骤的任务`,
-      ].filter(Boolean).join("\n");
-
-      // 3. Send user message to trigger agent
-      pi.sendUserMessage(prompt, { deliverAs: "followUp" });
       await updateStatusBar(ctx);
 
+      const usage = subagentResult.usage;
+      const usageLine =
+        usage.turns > 0
+          ? ` · usage: ${usage.turns}t ↑${usage.input} ↓${usage.output} $${usage.cost.toFixed(4)}`
+          : "";
+      const output = subagentResult.output.trim();
+      const outputLine = output
+        ? `\n\n输出: ${output.slice(0, 500)}${output.length > 500 ? "…" : ""}`
+        : "";
+
       return {
-        content: [{ type: "text", text: `已派发 step ${params.stepId} 给 ${params.role}${params.taskAgent ? ` (${params.taskAgent})` : ""}` }],
-        details: { stepId: params.stepId, role: params.role, taskAgent: params.taskAgent },
+        content: [
+          {
+            type: "text",
+            text: `✅ step ${params.stepId} 子进程执行完成${statusNote} (exit=${subagentResult.exitCode}, ${subagentResult.model ?? "default"})${usageLine}${outputLine}`,
+          },
+        ],
+        details: {
+          stepId: params.stepId,
+          role: params.role,
+          taskAgent: params.taskAgent,
+          subagent: {
+            exitCode: subagentResult.exitCode,
+            timedOut: subagentResult.timedOut ?? false,
+            stopReason: subagentResult.stopReason,
+            errorMessage: subagentResult.errorMessage,
+            usage: subagentResult.usage,
+            model: subagentResult.model,
+          },
+        },
       };
     },
   });
 
+  } // ── end auto_goo_dispatch (skipDispatch) ──
+
   // Tool: auto_goo_prepare_dispatch
+  if (!skipDispatch) {
   pi.registerTool({
     name: "auto_goo_prepare_dispatch",
     label: "Prepare Dispatch",
@@ -388,6 +469,8 @@ export function registerExecutionTools(pi: any): void {
     },
   });
 
+  } // ── end auto_goo_prepare_dispatch (skipDispatch) ──
+
   // Tool: auto_goo_pending_steps
   pi.registerTool({
     name: "auto_goo_pending_steps",
@@ -425,60 +508,3 @@ export function registerExecutionTools(pi: any): void {
     },
   });
 }
-
-// ── Prompt helpers ──────────────────────────────────────────────────────────
-
-function getRolePrompt(role: string): string {
-  const prompts: Record<string, string> = {
-    researcher: `你是 AutoGoo-Plugin Researcher。你的任务是深入调研和资料收集。
-- 搜索相关文档、论文、代码库和最佳实践
-- 整理调研结果，形成结构化报告
-- 标注信息来源和可信度
-- 提出可行的技术方案和建议`,
-    implementer: `你是 AutoGoo-Plugin Implementer。你的任务是编码实现。
-- 严格按照 step 描述和验收标准实现
-- 编写可读、可测试、可维护的代码
-- 遵循项目已有的代码风格和架构约定
-- 实现完成后运行验证命令确认正确性`,
-    optimizer: `你是 AutoGoo-Plugin Optimizer。你的任务是性能优化。
-- 先建立指标和基线，再做改动
-- 使用 profiler 定位瓶颈
-- 每次优化后对比基线，记录提升幅度
-- 达到目标或边际收益过低时停止`,
-    evaluator: `你是 AutoGoo-Plugin Evaluator。你的任务是评测和验证。
-- 定义评测指标和数据集
-- 运行评测并记录结果
-- 与基线对比，生成评测报告
-- 分析失败案例，提出改进建议`,
-    reviewer: `你是 AutoGoo-Plugin Reviewer。你的任务是代码审查。
-- 检查代码正确性、安全性和性能
-- 验证是否满足验收标准
-- 指出潜在问题并给出改进建议
-- 输出审查报告`,
-    auditor: `你是 AutoGoo-Plugin Auditor。你的任务是证据审计。
-- 检查步骤产物是否完整
-- 验证日志、产物路径和验收结果的一致性
-- 检查是否遵循了项目约束和规范
-- 输出审计报告`,
-    recorder: `你是 AutoGoo-Plugin Recorder。你的任务是归档和知识沉淀。
-- 将任务目标、计划、关键证据和产物归档到 Goo-wiki
-- 补充 Wikilink/backlink 关系
-- 记录可复用的经验、命令、路径和决策
-- 更新 log.md 和项目入口页`,
-  };
-  return prompts[role] || `你是 AutoGoo-Plugin ${role}。请按照步骤描述完成任务。`;
-}
-
-function getTaskAgentPrompt(taskAgent: string): string {
-  const prompts: Record<string, string> = {
-    "document-analyst": `你擅长分析文档、论文和结构化文本。提取关键信息、约束和验收标准。`,
-    "feature-builder": `你擅长从零开始构建新功能模块。编写完整的实现代码并添加必要的测试。`,
-    "test-runner": `你擅长运行测试和验证功能正确性。分析失败原因并补充测试用例。`,
-    "code-reviewer": `你擅长审查代码质量和安全。检查常见安全漏洞和性能问题。`,
-    "evidence-auditor": `你擅长审计和验证执行证据。检查产物的完整性和一致性。`,
-    "wiki-curator": `你擅长 Obsidian 知识库的维护和归档。创建符合规范的归档页面并维护链接关系。`,
-  };
-  return prompts[taskAgent] || "";
-}
-
-

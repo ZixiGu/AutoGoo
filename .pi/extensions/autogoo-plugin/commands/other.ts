@@ -96,8 +96,9 @@ export async function handleGooUsage(args: string, ctx: ExtensionContext): Promi
     return;
   }
 
-  // Quick one-shot summary
-  const scriptArgs = ["--once", "--pi"];
+  // Quick one-shot summary (default: all sources — claude + codex + pi)
+  // Pass --pi / --codex / --claude in args to filter by source.
+  const scriptArgs = ["--once"];
   if (args.trim()) {
     const parsed: string[] = [];
     let current = "";
@@ -234,8 +235,6 @@ export async function handleGooContinue(args: string, ctx: ExtensionContext): Pr
   }
 
   const resumeMsg = `恢复执行: ${runningSteps.length} 运行中, ${pendingSteps.length} 待执行, ${blockedSteps.length} 阻塞`;
-  ctx.ui.notify(resumeMsg, "info");
-
   ctx.ui.notify(resumeMsg, "info");
 
   if (_pi) {
