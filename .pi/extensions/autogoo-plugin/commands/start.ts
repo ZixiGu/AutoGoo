@@ -292,7 +292,7 @@ export function registerExecutionTools(pi: any, options: { skipDispatch?: boolea
         enum: ["research", "exec", "optimize", "eval", "review", "audit", "archive"],
       })),
     }),
-    async execute(_toolCallId: string, params: any, _signal: any, _onUpdate: any, ctx: any) {
+    async execute(_toolCallId: string, params: any, _signal: any, onUpdate: any, ctx: any) {
       const cwd = ctx.cwd;
 
       // 1. Pre-create log skeleton via update-step.py
@@ -350,6 +350,28 @@ export function registerExecutionTools(pi: any, options: { skipDispatch?: boolea
         cwd,
         signal: _signal,
         onTick: () => void heartbeatTick(cwd, planPath, params.stepId, agentId),
+        // pi 流式观察（2026-08-14）：Subagent 子进程 JSON 流 → 工具 onUpdate → TUI 实时显示
+        onMessage: (message: any) => {
+          if (!onUpdate) return;
+          try {
+            const role = message?.role;
+            let text = "";
+            if (role === "assistant" && Array.isArray(message.content)) {
+              text = message.content
+                .map((p: any) => (p?.type === "text" ? p.text : p?.type === "toolCall" ? `⟦${p.name}(...⟧` : ""))
+                .filter(Boolean)
+                .join("\n");
+            } else if (message?.type === "tool_result_end" || message?.role === "tool") {
+              const c = message.content?.[0]?.text || "";
+              text = `⟦tool result⟧ ${String(c).slice(0, 200)}`;
+            }
+            if (text) {
+              onUpdate({ content: [{ type: "text", text: `  #${params.stepId} ▶ ${text.slice(0, 300)}` }] });
+            }
+          } catch {
+            /* 流式转发失败不阻塞 */
+          }
+        },
         timeoutMs: (params as any).timeoutMs ?? 30 * 60 * 1000,
       });
 

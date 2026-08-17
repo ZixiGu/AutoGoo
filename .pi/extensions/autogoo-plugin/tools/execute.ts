@@ -63,7 +63,7 @@ export function registerExecuteTool(pi: ExtensionAPI): void {
       _toolCallId: string,
       params: any,
       signal: any,
-      _onUpdate: any,
+      onUpdate: any, // pi 流式观察：Subagent 执行过程转发到 TUI
       ctx: any,
     ) {
       const cwd = ctx.cwd;
@@ -86,11 +86,11 @@ export function registerExecuteTool(pi: ExtensionAPI): void {
 
       switch (params.action) {
         case "schedule":
-          return await runSchedule(pi, cwd, plan, planPath, ctx, signal);
+          return await runSchedule(pi, cwd, plan, planPath, ctx, signal, onUpdate);
         case "heartbeat_check":
           return await runHeartbeatCheck(cwd, plan, planPath, ctx);
         case "full_cycle":
-          return await runFullCycle(pi, cwd, plan, planPath, ctx, signal);
+          return await runFullCycle(pi, cwd, plan, planPath, ctx, signal, onUpdate);
         default:
           return {
             content: [{ type: "text", text: `未知操作: ${params.action}` }],
@@ -119,6 +119,7 @@ async function runSchedule(
   planPath: string,
   ctx?: any,
   signal?: AbortSignal, // P12：透传用户中断信号，防止子进程成孤儿
+  onUpdate?: any, // pi 流式观察：Subagent 执行过程转发到 TUI
 ): Promise<{ content: any[]; details: any }> {
   const lines: string[] = [];
 
@@ -375,6 +376,30 @@ async function runSchedule(
         cwd,
         signal, // P12：透传用户中断信号，防止子进程成孤儿
         onTick: () => void heartbeatTick(cwd, planPath, step.id, agentId),
+        // pi 流式观察（2026-08-14）：把 Subagent 子进程的 JSON 流消息
+        // （assistant 文本 / tool call / tool result）桥接到工具 onUpdate，
+        // TUI 实时显示执行过程。之前未接线 → pi 版看不到 Subagent 内部。
+        onMessage: (message: any) => {
+          if (!onUpdate) return;
+          try {
+            const role = message?.role;
+            let text = "";
+            if (role === "assistant" && Array.isArray(message.content)) {
+              text = message.content
+                .map((p: any) => (p?.type === "text" ? p.text : p?.type === "toolCall" ? `⟦${p.name}(...⟧` : ""))
+                .filter(Boolean)
+                .join("\n");
+            } else if (message?.type === "tool_result_end" || message?.role === "tool") {
+              const c = message.content?.[0]?.text || "";
+              text = `⟦tool result⟧ ${String(c).slice(0, 200)}`;
+            }
+            if (text) {
+              onUpdate({ content: [{ type: "text", text: `  #${step.id} ▶ ${text.slice(0, 300)}` }] });
+            }
+          } catch {
+            /* 流式转发失败不阻塞 */
+          }
+        },
         timeoutMs: 30 * 60 * 1000,
       });
       // 兕底：子进程退出后 step 若仍 running，按退出码标记
@@ -529,6 +554,7 @@ async function runFullCycle(
   planPath: string,
   ctx?: any,
   signal?: AbortSignal, // P12：透传给 runSchedule → runSubagent
+  onUpdate?: any, // pi 流式观察：透传给 runSchedule
 ): Promise<{ content: any[]; details: any }> {
   // 1. Heartbeat check first
   const hbResult = await runHeartbeatCheck(cwd, plan, planPath, ctx);
@@ -543,7 +569,7 @@ async function runFullCycle(
   }
 
   // 2. Schedule new steps
-  const schedResult = await runSchedule(pi, cwd, updatedPlan, planPath, ctx, signal);
+  const schedResult = await runSchedule(pi, cwd, updatedPlan, planPath, ctx, signal, onUpdate);
 
   // Update status bar
   if (ctx) updateStatusBar(ctx);
