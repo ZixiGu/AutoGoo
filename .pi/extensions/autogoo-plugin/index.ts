@@ -38,6 +38,15 @@ import {
   handleGooContinue,
   setPi as setOtherPi,
 } from "./commands/other.js";
+import {
+  handleGooChat,
+  handleGooPair,
+  handleGooUnpair,
+  handleGooChatList,
+  handleGooChatRead,
+  handleGooAlias,
+  setPi as setChatPi,
+} from "./commands/chat.js";
 
 // Tools
 import { registerExecuteTool } from "./tools/execute.js";
@@ -112,6 +121,30 @@ const COMMANDS: Record<string, CommandEntry> = {
     description: "启动性能评测与优化迭代",
     handler: handleGooBenchmark,
   },
+  "goo-chat": {
+    description: "跨 session 发送消息（先配对：同 thread 自动 / /goo-pair 显式）",
+    handler: handleGooChat,
+  },
+  "goo-chat-read": {
+    description: "拉取未读消息并注入（可选 [target] 只拉取指定 session 的）",
+    handler: handleGooChatRead,
+  },
+  "goo-pair": {
+    description: "显式配对两个 session（可用别名互发消息）",
+    handler: handleGooPair,
+  },
+  "goo-unpair": {
+    description: "解除两个 session 的显式配对",
+    handler: handleGooUnpair,
+  },
+  "goo-chat-list": {
+    description: "列出会话注册表、配对和本会话未读消息",
+    handler: handleGooChatList,
+  },
+  "goo-alias": {
+    description: "自定义本 session 别名",
+    handler: handleGooAlias,
+  },
 };
 
 // ── Extension Entry Point ───────────────────────────────────────────────────
@@ -120,6 +153,7 @@ export default function (pi: ExtensionAPI) {
   // ── Share pi reference with command handlers ──────────────────────────────
   setStartPi(pi);
   setOtherPi(pi);
+  setChatPi(pi);
 
   // ── Validate AutoGoo-Plugin repo ─────────────────────────────────────────────────
   if (!isRepoValid()) {
@@ -304,6 +338,31 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     // Detect uncompleted AutoGoo-Plugin plan
     try {
+      // ── 跨 session 对话：注册本会话 + 未读通知（内容不自动注入，按需拉取） ──
+      // 失败不阻断启动（catch 包裹）
+      try {
+        const { registerSession, countUnread, peekMailbox } = await import("./utils/chat.js");
+        const sessionId = ctx.sessionManager.getSessionId();
+        const sessionFile = ctx.sessionManager.getSessionFile() ?? null;
+        await registerSession(ctx.cwd, sessionId, sessionFile);
+        const unread = await countUnread(ctx.cwd, sessionId);
+        if (unread > 0) {
+          // 只通知数量 + 来源列表，内容绝不注入 LLM 上下文
+          const msgs = await peekMailbox(ctx.cwd, sessionId);
+          const sources = [
+            ...new Set(msgs.map((m) => `${m.fromAlias || m.from.slice(0, 8)}@${m.fromProject || ""}`)),
+          ];
+          const listed = sources.slice(0, 3).join(", ");
+          const more = sources.length > 3 ? ` 等 ${sources.length} 个会话` : "";
+          ctx.ui.notify(
+            `[AutoGoo-Plugin] 📨 你有 ${unread} 条未读消息（来自 ${listed}${more}），用 /goo-chat-list 查看、/goo-chat-read 拉取`,
+            "info",
+          );
+        }
+      } catch (e) {
+        console.error("[AutoGoo-Plugin] session_start chat hook error:", e);
+      }
+
       const { loadPlan } = await import("./utils/plan.js");
       const plan = await loadPlan(ctx.cwd);
       if (plan) {
